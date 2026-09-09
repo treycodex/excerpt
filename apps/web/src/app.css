@@ -41,3 +41,45 @@
   text-transform: uppercase; color: var(--faint);
 }
 .hud b { color: var(--ink); font-weight: 400; }
+
+/* --- Notes ---------------------------------------------------------------- */
+.notes { max-width: 780px; margin: 0 auto; padding: 64px 28px 120px; }
+.notes h1 { font: 400 34px/1.15 var(--serif); margin: 0 0 24px; letter-spacing: -0.01em; }
+.notes h2 {
+  font: var(--label); letter-spacing: var(--label-track); text-transform: uppercase;
+  color: var(--dim); margin: 48px 0 16px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.notes .empty { font: var(--label); color: var(--faint); letter-spacing: 0.04em; }
+
+.actions { margin-top: 26px; display: flex; gap: 10px; }
+.actions button {
+  font: var(--label); letter-spacing: var(--label-track); text-transform: uppercase;
+  background: transparent; color: var(--ink); border: 1px solid var(--line);
+  padding: 11px 16px; cursor: pointer; transition: border-color .15s, color .15s;
+}
+.actions button:hover { border-color: var(--ember); color: var(--ember); }
+
+.item { padding: 20px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.item .state {
+  font: var(--label); letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--faint); margin-bottom: 8px;
+}
+/* The accent has exactly one meaning: settled. */
+.item.decided .state { color: var(--ember); }
+.item .title { font: 400 19px/1.4 var(--sans); margin-bottom: 12px; }
+.item blockquote {
+  margin: 0; padding-left: 16px; border-left: 1px solid var(--line-strong);
+  font: 400 17px/1.5 var(--serif); color: var(--dim);
+}
+.item blockquote cite {
+  display: block; margin-top: 8px; font: var(--label); font-style: normal;
+  letter-spacing: var(--label-track); text-transform: uppercase; color: var(--faint);
+}
+
+.line-row { display: flex; gap: 16px; padding: 7px 10px; margin: 0 -10px; border-radius: 2px; }
+.line-row .meta {
+  flex: 0 0 128px; font: var(--label); letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--faint);
+}
+.line-row.focused { background: rgba(255, 77, 15, 0.09); box-shadow: inset 2px 0 0 var(--ember); }
