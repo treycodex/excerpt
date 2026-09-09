@@ -1,0 +1,43 @@
+/* Motif 1 — The Subtitle. No box, no pill, no scrim by default. */
+.stage {
+  position: relative;
+  height: 100vh;
+  background: var(--ground);
+  overflow: hidden;
+}
+.stage::after {                       /* Motif: grain. Felt, never seen. */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  opacity: var(--grain);
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/></filter>\
+<rect width='120' height='120' filter='url(%23n)' opacity='.5'/></svg>");
+}
+
+.caption {
+  position: absolute; left: 0; right: 0;
+  top: var(--cap-bottom); transform: translateY(-50%);
+  padding: 0 8%; text-align: center;
+}
+.caption .who {
+  font: var(--label); letter-spacing: 0.28em; text-transform: uppercase;
+  color: var(--dim); margin-bottom: 12px;
+}
+.caption .line {
+  font-family: var(--sans);
+  font-size: var(--cap-size);
+  line-height: var(--cap-leading);
+  letter-spacing: var(--cap-tracking);
+  color: #fff;
+  text-shadow: var(--cap-shadow);
+  background: var(--cap-backdrop, transparent);
+}
+.caption .fade { opacity: 0; transition: opacity var(--cap-fade) ease; }
+.caption .fade.in { opacity: 1; }
+
+.hud {
+  position: absolute; top: 26px; left: 28px;
+  font: var(--label); letter-spacing: var(--label-track);
+  text-transform: uppercase; color: var(--faint);
+}
+.hud b { color: var(--ink); font-weight: 400; }

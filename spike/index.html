@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Excerpt — Day 0 Spike</title>
+<style>
+  :root{
+    --ground:#0A0A0A; --raise:#141414; --line:#242424;
+    --ink:#F2F2F2; --dim:#8A8A8A; --faint:#5A5A5A;
+    --ember:#FF4D0F; --ok:#5BD08A; --bad:#FF4D4D; --warn:#E8C77A;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.5 var(--sans);
+       padding:32px 28px 80px;max-width:1100px}
+  h1{font:400 13px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;
+     color:var(--dim);margin:0 0 4px}
+  h1 b{color:var(--ink);font-weight:400}
+  .sub{font:400 11px/1 var(--mono);letter-spacing:.14em;color:var(--faint);
+       text-transform:uppercase;margin-bottom:28px}
+  h2{font:400 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;
+     color:var(--dim);margin:32px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  .credits{display:grid;grid-template-columns:200px 1fr;gap:6px 20px;
+           font:400 11px/1.6 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+  .credits dt{color:var(--faint)} .credits dd{margin:0;color:var(--ink)}
+  .yes{color:var(--ok)} .no{color:var(--bad)} .maybe{color:var(--warn)}
+  button{font:400 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+    background:transparent;color:var(--ink);border:1px solid var(--line);
+    padding:11px 16px;cursor:pointer;margin:0 8px 8px 0;transition:border-color .15s,color .15s}
+  button:hover:not(:disabled){border-color:var(--ember);color:var(--ember)}
+  button:disabled{opacity:.32;cursor:not-allowed}
+  button.primary{border-color:var(--ember);color:var(--ember)}
+  table{width:100%;border-collapse:collapse;font:400 11px/1.5 var(--mono);letter-spacing:.05em}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  td:first-child{width:52px;color:var(--faint)}
+  td:nth-child(2){width:270px;text-transform:uppercase}
+  .st{width:96px;font-weight:400}
+  .st[data-s="pending"]{color:var(--faint)} .st[data-s="running"]{color:var(--warn)}
+  .st[data-s="pass"]{color:var(--ok)} .st[data-s="fail"]{color:var(--bad)}
+  .detail{color:var(--dim);text-transform:none;letter-spacing:0;font-size:11px}
+  #stage{position:relative;height:230px;margin-top:14px;border:1px solid var(--line);
+         background:#000;overflow:hidden}
+  #stage .marks{position:absolute;inset:0;pointer-events:none}
+  #stage .marks i{position:absolute;width:9px;height:9px;border:1px solid #2A2A2A}
+  .cap{position:absolute;left:0;right:0;top:74%;transform:translateY(-50%);
+       text-align:center;padding:0 8%}
+  .cap .who{font:400 9px/1 var(--mono);letter-spacing:.28em;color:#9A9A9A;
+            text-transform:uppercase;margin-bottom:10px;opacity:.85}
+  .cap .line{font:400 25px/1.45 var(--sans);color:#fff;letter-spacing:.005em;
+    text-shadow:0 1px 2px rgba(0,0,0,.9),0 2px 14px rgba(0,0,0,.75)}
+  .cap.two .line{display:block}
+  .fade{opacity:0;transition:opacity .18s ease} .fade.in{opacity:1}
+  @media (prefers-reduced-motion:reduce){.fade{transition:none}}
+  #log{background:#080808;border:1px solid var(--line);padding:12px 14px;height:220px;
+    overflow:auto;font:400 11px/1.7 var(--mono);color:var(--dim);white-space:pre-wrap}
+  #log b{color:var(--ink);font-weight:400} #log .e{color:var(--bad)} #log .g{color:var(--ok)}
+  .row{display:flex;gap:26px;flex-wrap:wrap;font:400 11px/1.6 var(--mono);
+       letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:12px}
+  .row b{color:var(--ink);font-weight:400}
+  .note{font:400 11px/1.6 var(--mono);color:var(--faint);letter-spacing:.06em;
+        margin:10px 0 0;max-width:70ch}
+</style>
+</head>
+<body>
+
+<h1>Excerpt · <b>Day 0 Spike</b></h1>
+<div class="sub">Hard gate — nothing else is built until this passes</div>
+
+<div id="preflight"></div>
+<h2>Environment</h2>
+<dl class="credits" id="env"></dl>
+
+<h2>Tests</h2>
+<table id="tests"></table>
+
+<h2>Run</h2>
+<div>
+  <button id="bCap" class="primary">1 · Capture tab audio</button>
+  <button id="bMic" disabled>2 · Add microphone</button>
+  <button id="bRec" disabled>3 · Start recognition</button>
+  <button id="bPip" disabled>8 · Open PiP captions</button>
+  <button id="bBg" disabled>7 · Background test (5 min)</button>
+  <button id="bStop" disabled>Stop</button>
+  <button id="bDeny">6 · Permission-denial checks</button>
+  <button id="bSelf" class="primary">0 · Self-test (synthetic speech)</button>
+  <button id="bStag" class="primary">0b · Self-test, TAB first (4s stagger)</button>
+  <button id="bExport">Export results</button>
+</div>
+<p class="note">Order matters. Share the <b>Meet tab</b> and tick “Also share tab audio”.
+To exercise test 1b deliberately, run capture once with that box <b>un</b>ticked.</p>
+
+<div class="row">
+  <span>Tab finals <b id="nTab">0</b></span>
+  <span>Mic finals <b id="nMic">0</b></span>
+  <span>Restarts <b id="nRes">0</b></span>
+  <span>Interim p50 <b id="lInt">—</b></span>
+  <span>Final p50 <b id="lFin">—</b></span>
+  <span>Processing <b id="mode">—</b></span>
+  <span>Tab level <b id="vTab">—</b></span>
+  <span>Mic level <b id="vMic">—</b></span>
+</div>
+
+<div id="stage">
+  <div class="marks"></div>
+  <div class="cap" id="cap"></div>
+</div>
+
+<h2>Log</h2>
+<div id="log"></div>
+
+<script type="module">
+import { splitIntoSubtitleLines } from './lines.js';
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const $  = s => document.querySelector(s);
+const now = () => performance.now();
+
+/* ---------- test registry ---------- */
+const TESTS = [
+  ['1',  'Tab audio capture',            'audible tab audio present in the track'],
+  ['1b', 'Missing "share tab audio"',    'detected immediately, clear recovery'],
+  ['2',  'Microphone simultaneously',    'both tracks live at once'],
+  ['2b', 'Two concurrent recognizers',   'no contention on the main thread'],
+  ['3',  'start(track) + processLocally','on-device recognition confirmed'],
+  ['3b', 'Language pack install',        'install() path resolves'],
+  ['4',  'Latency',                      'interim < 1s, finals < 3s, stable 5 min'],
+  ['5',  'Recognizer restart',           'end mid-utterance recovers, no dupes'],
+  ['6',  'Denied permissions',           'mic + screen denial degrade gracefully'],
+  ['7',  'Background behaviour',         'recognition survives; PiP rAF unthrottled'],
+  ['8',  'PiP caption rendering',        'two-line fading subtitles in PiP window'],
+];
+const results = {};
+const tbody = $('#tests');
+for (const [id, name, crit] of TESTS) {
+  results[id] = { status:'pending', detail:'' };
+  tbody.insertAdjacentHTML('beforeend',
+    `<tr><td>${id}</td><td>${name}</td>
+     <td class="st" data-s="pending" id="s-${id}">pending</td>
+     <td class="detail" id="d-${id}">${crit}</td></tr>`);
+}
+function set(id, status, detail) {
+  results[id] = { status, detail: detail ?? results[id].detail };
+  const s = $(`#s-${id}`); s.dataset.s = status; s.textContent = status;
+  if (detail) $(`#d-${id}`).textContent = detail;
+}
+function log(msg, cls='') {
+  const t = new Date().toISOString().slice(11,23);
+  $('#log').insertAdjacentHTML('beforeend',
+    `<span class="${cls}">${t}  ${msg}</span>\n`);
+  $('#log').scrollTop = 1e9;
+}
+
+/* ---------- environment ---------- */
+const env = {
+  'Chrome':            navigator.userAgentData?.brands?.map(b=>`${b.brand} ${b.version}`).join(', ') || navigator.userAgent.slice(0,60),
+  'Platform':          navigator.userAgentData?.platform || navigator.platform,
+  'SpeechRecognition': !!SR,
+  'start(audioTrack)': !!SR && 'not feature-detectable — proven by self-test',
+  'processLocally':    !!SR && 'processLocally' in SR.prototype,
+  'install()':         !!SR && typeof SR.install === 'function',
+  'available()':       !!SR && typeof SR.available === 'function',
+  'getDisplayMedia':   !!navigator.mediaDevices?.getDisplayMedia,
+  'Document PiP':      'documentPictureInPicture' in window,
+  'Secure context':    window.isSecureContext,
+};
+$('#env').innerHTML = Object.entries(env).map(([k,v]) => {
+  const val = typeof v === 'boolean' ? (v ? 'yes' : 'no') : v;
+  const cls = typeof v === 'boolean' ? (v ? 'yes' : 'no') : '';
+  return `<dt>${k}</dt><dd class="${cls}">${val}</dd>`;
+}).join('');
+
+/* ---------- state ---------- */
+const S = {
+  display:null, mic:null, recs:[], active:false,
+  counts:{tab:0, mic:0}, restarts:0,
+  interim:[], final:[], lastFinal:{tab:'',mic:''},
+  recent:{}, pip:null, pipTicks:0, mainTicks:0, bg:null,
+};
+
+/* ---------- captions ---------- */
+function paint(target) {
+  const fresh = Object.entries(S.recent)
+    .filter(([,v]) => now() - v.t < 2600)
+    .sort((a,b) => a[1].t - b[1].t);
+  if (!fresh.length) { target.innerHTML=''; return; }
+
+  let html;
+  if (fresh.length > 1) {                                   // dash convention
+    html = fresh.map(([,v]) =>
+      `<div class="line">– ${splitIntoSubtitleLines(v.text, 40).join(' ')}</div>`).join('');
+  } else {
+    const [who, v] = fresh[0];
+    const lines = splitIntoSubtitleLines(v.text, 42);
+    html = `<div class="who">${who}</div>` +
+           lines.map(l => `<div class="line">${l}</div>`).join('');
+  }
+  const box = document.createElement('div');
+  box.className = 'fade';
+  box.innerHTML = html;
+  target.innerHTML = '';
+  target.appendChild(box);
+  requestAnimationFrame(() => box.classList.add('in'));
+}
+function render() {
+  paint($('#cap'));
+  if (S.pip && !S.pip.closed) {
+    const c = S.pip.document.getElementById('cap');
+    if (c) paint.call(null, c);
+  }
+}
+
+/* ---------- recognition ---------- */
+function attach(track, tag) {
+  const rec = new SR();
+  rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true;
+  try { rec.processLocally = true; } catch { log(`${tag}: processLocally unsettable`, 'e'); }
+
+  let speechStart = 0, sawInterim = false, speechEnd = 0, lastInterimAt = 0;
+
+  const EV = (S.events ??= []);
+  const rt0 = now();
+  const trace = (k, x='') => EV.push(`${String(Math.round(now()-rt0)).padStart(6)}ms ${tag.padEnd(4)} ${k}${x}`);
+  for (const k of ['start','audiostart','soundstart','speechstart','speechend','soundend','audioend','end','nomatch'])
+    rec.addEventListener(k, () => trace(k));
+  rec.addEventListener('error', e => trace('ERROR ', e.error));
+  rec.addEventListener('result', e => { const r = e.results[e.results.length-1];
+    trace(r.isFinal ? 'FINAL  ' : 'interim', ' «' + r[0].transcript.trim().slice(0,42) + '»'); });
+
+  rec.onstart       = () => log(`${tag}: started`, 'g');
+  rec.onaudiostart  = () => log(`${tag}: audio in`);
+  rec.onspeechstart = () => { speechStart = now(); sawInterim = false; };
+  rec.onspeechend   = () => { speechEnd = now(); };
+
+  rec.onresult = e => {
+    const r = e.results[e.results.length - 1];
+    const text = r[0].transcript.trim();
+    if (!text) return;
+
+    if (!r.isFinal) {
+      const m = S.meters[tag];
+      if (m?.awaiting) { m.awaiting = false; m.lags.push(now() - m.onsetAt); }
+      if (!sawInterim) {
+        sawInterim = true;
+        const lag = m?.lags.length ? m.lags[m.lags.length - 1] : (speechStart ? now() - speechStart : null);
+        if (lag != null) { S.interim.push(lag); stats(); }
+      }
+      lastInterimAt = now();
+      S.recent[tag === 'tab' ? 'SPEAKER' : 'YOU'] = { text, t: now() };
+      render();
+      return;
+    }
+
+    if (speechEnd) { S.final.push(now() - speechEnd); speechEnd = 0; stats(); }
+    else if (lastInterimAt) { S.final.push(now() - lastInterimAt); stats(); }
+    lastInterimAt = 0;
+    S.counts[tag]++;
+    $(tag === 'tab' ? '#nTab' : '#nMic').textContent = S.counts[tag];
+
+    const dupe = text === S.lastFinal[tag] && (now() - (S.lastFinalAt?.[tag] ?? -1e9)) < 5000;
+    (S.lastFinalAt ??= {})[tag] = now();
+    if (dupe) {
+      set('5','fail',`duplicate final after restart: "${text.slice(0,44)}"`);
+      log(`${tag}: DUPLICATE final — "${text}"`, 'e');
+    }
+    S.lastFinal[tag] = text;
+    S.recent[tag === 'tab' ? 'SPEAKER' : 'YOU'] = { text, t: now() };
+    render();
+
+    if (results['3'].status !== 'pass') {
+      set('3','pass', `on-device recognition producing finals (${$('#mode').textContent})`);
+    }
+    if (S.counts.tab > 0 && S.counts.mic > 0 && results['2b'].status !== 'pass') {
+      set('2b','pass','both recognizers produced finals concurrently');
+    }
+    if (S.bg?.hidden) S.bg.finalsWhileHidden++;
+  };
+
+  rec.onerror = e => {
+    const fatal = ['not-allowed','service-not-allowed','language-not-supported'];
+    log(`${tag}: error ${e.error}`, fatal.includes(e.error) ? 'e' : '');
+    if (e.error === 'language-not-supported') {
+      set('3','fail','on-device language pack unavailable — consent prompt path required');
+    }
+    if (fatal.includes(e.error)) S.active = false;
+  };
+
+  rec.onend = () => {
+    if (!S.active || rec.__stopping || track.readyState !== 'live') {
+      log(`${tag}: ended` + (track.readyState !== 'live' ? ' (track no longer live)' : ''));
+      return;
+    }
+    S.restarts++; $('#nRes').textContent = S.restarts;
+    log(`${tag}: ended — restarting (#${S.restarts})`);
+    setTimeout(() => { try { rec.start(track); } catch (err) { log(`${tag}: restart failed ${err}`,'e'); } }, 120);
+    if (S.restarts >= 1 && results['5'].status === 'pending') {
+      set('5','running',`${S.restarts} restart(s), watching for duplicate finals`);
+    }
+  };
+
+  rec.start(track);
+  return rec;
+}
+
+function stats() {
+  const p50 = a => a.length ? Math.round([...a].sort((x,y)=>x-y)[Math.floor(a.length/2)]) : null;
+  const i = p50(S.interim), f = p50(S.final);
+  if (i !== null) $('#lInt').textContent = i + 'ms';
+  if (f !== null) $('#lFin').textContent = f + 'ms';
+  if (S.synthetic) {
+    set('4','running','synthetic audio is pre-buffered — not a valid latency measure; needs a live call');
+    return;
+  }
+  if (i !== null && f !== null && S.interim.length >= 4) {
+    const ok = i < 1000 && f < 3000;
+    set('4', ok ? 'pass' : 'fail',
+      `interim p50 ${i}ms · final p50 ${f}ms · n=${S.interim.length}`);
+  }
+}
+
+
+/* ---------- audio level meters ----------------------------------------------
+   Without these, "0 finals" is ambiguous: silent source, or starved recognizer?
+   The onset detector also gives a REAL end-to-end latency measure (energy onset
+   -> first interim), and is the same RMS VAD the mixed-graph fallback needs.   */
+S.meters = {};
+function meter(stream, tag) {
+  S.ac ??= new AudioContext();
+  const an = S.ac.createAnalyser(); an.fftSize = 512;
+  S.ac.createMediaStreamSource(stream).connect(an);
+  const buf = new Float32Array(an.fftSize);
+  const st = S.meters[tag] = { rms:0, peak:0, voiced:false, voicedMs:0, awaiting:false, lags:[] };
+  let last = now();
+  (function loop() {
+    an.getFloatTimeDomainData(buf);
+    let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+    const rms = Math.sqrt(s / buf.length);
+    const t = now(), dt = t - last; last = t;
+    st.rms = rms; st.peak = Math.max(st.peak, rms);
+    const voiced = rms > 0.01;
+    if (voiced) st.voicedMs += dt;
+    if (voiced && !st.voiced) { st.onsetAt = t; st.awaiting = true; }
+    st.voiced = voiced;
+    requestAnimationFrame(loop);
+  })();
+}
+setInterval(() => {
+  for (const [tag, st] of Object.entries(S.meters)) {
+    const el = $(tag === 'tab' ? '#vTab' : '#vMic'); if (!el) continue;
+    const db = st.rms > 0 ? (20 * Math.log10(st.rms)).toFixed(0) : '-inf';
+    el.textContent = `${db}dB ${st.voiced ? '●' : '·'} ${(st.voicedMs/1000).toFixed(0)}s`;
+    el.style.color = st.voiced ? 'var(--ember)' : '';
+  }
+}, 200);
+
+/* verdict for 2b that accounts for whether the source was ever audible */
+function verdict2b() {
+  const tab = S.meters.tab, mic = S.meters.mic;
+  if (!tab) return;
+  const tabHeard = (tab.voicedMs ?? 0) > 1500, micHeard = (mic?.voicedMs ?? 0) > 1500;
+  const f = S.counts;
+  if (tabHeard && micHeard && f.tab > 0 && f.mic > 0)
+    set('2b','pass',`both sides audible and both produced finals (${f.tab}/${f.mic})`);
+  else if (tabHeard && f.tab === 0 && f.mic > 0)
+    set('2b','fail',`tab had ${(tab.voicedMs/1000).toFixed(0)}s of audio but 0 finals while mic got ${f.mic} — single-session contention`);
+  else if (!tabHeard)
+    set('2b','running',`inconclusive — only ${(tab.voicedMs/1000).toFixed(1)}s of audio on the tab. Play sound in the shared tab.`);
+}
+setInterval(verdict2b, 3000);
+
+/* ---------- actions ---------- */
+$('#bCap').onclick = async () => {
+  try {
+    set('1','running');
+    S.display = await navigator.mediaDevices.getDisplayMedia({
+      video:true, audio:true, systemAudio:'include', selfBrowserSurface:'exclude'
+    });
+    const a = S.display.getAudioTracks();
+    if (!a.length) {
+      set('1','fail','no audio track — "share tab audio" was not ticked');
+      set('1b','pass','absence detected synchronously; recovery UI can prompt a re-share');
+      log('No audio track in display stream. This is the 1b path.', 'e');
+      S.display.getTracks().forEach(t => t.stop()); S.display = null;
+      return;
+    }
+    set('1','pass',`audio track: ${a[0].label || 'unlabelled'}`);
+    if (results['1b'].status === 'pending')
+      set('1b','running','re-run capture WITHOUT ticking tab audio to confirm');
+    log(`Display audio captured — ${a[0].label}`, 'g');
+    meter(S.display, 'tab');
+    a[0].onended = () => {
+      log('Display audio track ended (share stopped)', 'e');
+      stopAll();
+      S.display = null; S.mic = null;
+      $('#bRec').disabled = true; $('#bMic').disabled = true;
+      $('#preflight').innerHTML =
+        `<div style="border:1px solid var(--ember);padding:14px 16px;margin:0 0 22px;
+                     font:400 11px/1.7 var(--mono);letter-spacing:.06em">
+           <b style="color:var(--ember)">SCREEN SHARE ENDED</b> — capture stopped.
+           Press <b>1 · Capture tab audio</b> to re-share. In the product this is a
+           first-class recoverable state, not an error.</div>`;
+    };
+    $('#bMic').disabled = false;
+  } catch (err) {
+    set('1','fail',`${err.name}: ${err.message}`);
+    log(`getDisplayMedia failed — ${err}`, 'e');
+  }
+};
+
+$('#bMic').onclick = async () => {
+  try {
+    set('2','running');
+    S.mic = await navigator.mediaDevices.getUserMedia({
+      audio:{ echoCancellation:true, noiseSuppression:true }
+    });
+    const live = S.display?.getAudioTracks()[0]?.readyState === 'live'
+              && S.mic.getAudioTracks()[0].readyState === 'live';
+    set('2', live ? 'pass' : 'fail',
+      live ? 'display + mic tracks both live' : 'one track not live');
+    log('Microphone captured', 'g');
+    meter(S.mic, 'mic');
+    $('#bRec').disabled = false;
+  } catch (err) {
+    set('2','fail',`${err.name}: ${err.message}`);
+    log(`getUserMedia failed — ${err}`, 'e');
+  }
+};
+
+$('#bRec').onclick = async () => {
+  if (!SR) { set('3','fail','SpeechRecognition unavailable'); return; }
+  const dt = S.display?.getAudioTracks()[0], mt = S.mic?.getAudioTracks()[0];
+  if (dt?.readyState !== 'live' || mt?.readyState !== 'live') {
+    log('Cannot start: a track is no longer live. Re-run capture first.', 'e');
+    return;
+  }
+  set('3','running'); set('3b','running');
+
+  // Never call available() — Chromium 444393111 makes it lie on macOS.
+  const t0 = now();
+  try {
+    const r = await SR.install({ langs:['en-US'], processLocally:true });
+    const ms = Math.round(now() - t0);
+    set('3b','pass',`install() resolved ${JSON.stringify(r)} in ${ms}ms`);
+    log(`install() → ${JSON.stringify(r)} (${ms}ms)`, 'g');
+  } catch (err) {
+    set('3b','fail',`install() threw: ${err.name} ${err.message}`);
+    log(`install() failed — ${err}`, 'e');
+  }
+  $('#mode').textContent = 'on-device (requested)';
+
+  S.active = true;
+  try {
+    S.recs.push(attach(S.display.getAudioTracks()[0], 'tab'));
+    S.recs.push(attach(S.mic.getAudioTracks()[0], 'mic'));
+    set('2b','running','both recognizers started — speak on each side');
+  } catch (err) {
+    set('2b','fail',`${err.name}: ${err.message}`);
+    log(`recognizer start failed — ${err}`, 'e');
+  }
+  $('#bStop').disabled = false; $('#bPip').disabled = false; $('#bBg').disabled = false;
+};
+
+$('#bPip').onclick = async () => {
+  if (!('documentPictureInPicture' in window)) {
+    set('8','fail','Document PiP unsupported'); return;
+  }
+  try {
+    set('8','running');
+    S.pip = await documentPictureInPicture.requestWindow({ width:760, height:210 });
+    const d = S.pip.document;
+    d.body.style.cssText = 'margin:0;background:#000;overflow:hidden;height:100vh';
+    const st = d.createElement('style');
+    st.textContent = document.querySelector('style').textContent;
+    d.head.appendChild(st);
+    const c = d.createElement('div');
+    c.className = 'cap'; c.id = 'cap'; c.style.top = '50%';
+    d.body.appendChild(c);
+
+    const tick = () => { S.pipTicks++; if (S.pip && !S.pip.closed) S.pip.requestAnimationFrame(tick); };
+    S.pip.requestAnimationFrame(tick);
+    S.pip.addEventListener('pagehide', () => { log('PiP closed'); S.pip = null; });
+
+    set('8','pass','PiP window open, captions rendering with fades');
+    log('Document PiP opened', 'g');
+    render();
+  } catch (err) {
+    set('8','fail',`${err.name}: ${err.message}`);
+    log(`PiP failed — ${err}`, 'e');
+  }
+};
+
+$('#bBg').onclick = () => {
+  if (S.bg?.running) { log('Background test already running — ignoring', 'e'); return; }
+  if (!S.active) { log('Start recognition (3) first, and keep audio playing in the shared tab.', 'e');
+                   set('7','running','needs an active recognition session — press 3 first'); return; }
+
+  const DUR = 90000;                       // 90s is ample to expose throttling
+  const t0 = now();
+  S.bg = { running:true, t0, finalsWhileHidden:0, hidden:document.hidden,
+           hiddenMs:0, pip0:S.pipTicks, main0:S.mainTicks, last:now() };
+  $('#bBg').disabled = true;
+  set('7','running','switch away from this tab now — 90s');
+  log('Background test started — switch tabs now. Keep tab audio playing.', 'g');
+
+  const onVis = () => {
+    const t = now();
+    if (S.bg.hidden) S.bg.hiddenMs += t - S.bg.last;   // credit the interval just ended
+    S.bg.last = t; S.bg.hidden = document.hidden;
+    log(`visibility → ${document.hidden ? 'hidden' : 'visible'}`);
+  };
+  document.addEventListener('visibilitychange', onVis);
+
+  const countdown = setInterval(() => {
+    const left = Math.ceil((DUR - (now() - t0)) / 1000);
+    if (left > 0) set('7','running',
+      `${left}s left · hidden so far ${((S.bg.hiddenMs + (S.bg.hidden ? now()-S.bg.last : 0))/1000).toFixed(0)}s`);
+  }, 1000);
+
+  setTimeout(() => {
+    clearInterval(countdown);
+    document.removeEventListener('visibilitychange', onVis);
+    if (S.bg.hidden) S.bg.hiddenMs += now() - S.bg.last;
+    S.bg.running = false; $('#bBg').disabled = false;
+
+    const elapsed = (now() - t0) / 1000;            // measure, never assume
+    const hidden  = S.bg.hiddenMs / 1000;
+    const pipFps  = (S.pipTicks  - S.bg.pip0)  / elapsed;
+    const mainFps = (S.mainTicks - S.bg.main0) / elapsed;
+    const detail  = `hidden ${hidden.toFixed(0)}s of ${elapsed.toFixed(0)}s · ` +
+                    `finals while hidden ${S.bg.finalsWhileHidden} · ` +
+                    `PiP ${pipFps.toFixed(1)}fps · main ${mainFps.toFixed(1)}fps`;
+
+    if (hidden < 30) set('7','running', `INCONCLUSIVE — tab was hidden only ${hidden.toFixed(0)}s. Rerun and stay away. (${detail})`);
+    else if (S.bg.finalsWhileHidden > 0) set('7','pass', detail);
+    else set('7','fail', `no finals arrived while hidden — recognition does not survive backgrounding. ${detail}`);
+    log(`Background test complete — ${detail}`, S.bg.finalsWhileHidden ? 'g' : 'e');
+  }, DUR);
+};
+
+$('#bDeny').onclick = async () => {
+  set('6','running');
+  S.deny ??= { mic:false, screen:false };
+  const out = [];
+
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio:true });
+    s.getTracks().forEach(t => t.stop());
+    out.push('mic: STILL GRANTED — block it via the (i) icon, then reload');
+  } catch (e) {
+    S.deny.mic = true;
+    out.push(`mic: ${e.name} handled cleanly`);
+  }
+
+  try {
+    const s = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:true });
+    s.getTracks().forEach(t => t.stop());
+    out.push('screen: granted — press Cancel on the picker to test denial');
+  } catch (e) {
+    S.deny.screen = true;
+    out.push(`screen: ${e.name} handled cleanly`);
+  }
+
+  // Each half is remembered across clicks, so they can be tested separately.
+  const done = [S.deny.mic && 'mic', S.deny.screen && 'screen'].filter(Boolean);
+  const todo = [!S.deny.mic && 'mic', !S.deny.screen && 'screen'].filter(Boolean);
+  set('6', done.length === 2 ? 'pass' : 'running',
+      done.length === 2
+        ? 'both denials handled without throwing uncaught'
+        : `${out.join(' · ')} — still to test: ${todo.join(', ')}`);
+  out.forEach(o => log(o));
+};
+
+function stopAll() {
+  S.active = false;
+  S.recs.forEach(r => { try { r.stop(); } catch {} });
+  S.recs = [];
+  S.display?.getTracks().forEach(t => t.stop());
+  S.mic?.getTracks().forEach(t => t.stop());
+  $('#bStop').disabled = true;
+  log('Stopped');
+}
+$('#bStop').onclick = stopAll;
+
+$('#bExport').onclick = () => {
+  const blob = new Blob([JSON.stringify({
+    ranAt:new Date().toISOString(), env, results,
+    counts:S.counts, restarts:S.restarts,
+    meters:Object.fromEntries(Object.entries(S.meters).map(([k,v]) =>
+      [k, { peak:v.peak, voicedSeconds:+(v.voicedMs/1000).toFixed(1), onsetLags:v.lags }])),
+    latency:{ interim:S.interim, final:S.final },
+  }, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `excerpt-spike-${Date.now()}.json`;
+  a.click();
+};
+
+/* main-thread rAF baseline for the background comparison */
+(function tick(){ S.mainTicks++; requestAnimationFrame(tick); })();
+
+/* decorative registration marks — Motif 3, even in a throwaway */
+const m = document.querySelector('#stage .marks');
+[[12,12,'nw'],[12,12,'ne'],[12,12,'sw'],[12,12,'se']].forEach(([x,y],i)=>{
+  const el = document.createElement('i');
+  el.style[i<2?'top':'bottom'] = y+'px';
+  el.style[i%2?'right':'left'] = x+'px';
+  el.style.borderWidth = i<2 ? (i%2?'1px 1px 0 0':'1px 0 0 1px')
+                             : (i%2?'0 1px 1px 0':'0 0 1px 1px');
+  m.appendChild(el);
+});
+
+
+/* pre-flight: on-device provisioning is the thing most likely to be missing */
+(async () => {
+  if (!SR) return;
+  let a = 'n/a';
+  try { a = await SR.available({ langs:['en-US'], processLocally:true }); } catch (e) { a = 'threw ' + e.name; }
+  let c = 'n/a';
+  try { c = await SR.available({ langs:['en-US'], processLocally:false }); } catch (e) { c = 'threw ' + e.name; }
+  log(`available(on-device)=${a}  available(any)=${c}`);
+  if (a !== 'available') {
+    $('#preflight').innerHTML =
+      `<div style="border:1px solid var(--ember);padding:14px 16px;margin:0 0 22px;
+                   font:400 11px/1.7 var(--mono);letter-spacing:.06em">
+         <b style="color:var(--ember)">ON-DEVICE SPEECH NOT PROVISIONED</b> — available(on-device) = ${a}<br><br>
+         SODA (the on-device engine) ships with Chrome's Live Caption subsystem and is
+         downloaded on demand. To provision it:<br>
+         1 · open <b>chrome://settings/captions</b> &nbsp; 2 · turn on <b>Live Caption</b>
+         &nbsp; 3 · wait for the English pack to download &nbsp; 4 · reload this page.<br><br>
+         Until then, on-device is unavailable and Excerpt's ladder falls to the
+         <b>explicit consent prompt</b> — which is exactly the behaviour Part 1 specifies,
+         so this is a valid outcome to test, not only a blocker.
+       </div>`;
+  }
+})();
+
+log('Spike harness ready. Run tests in order.', 'g');
+log('Chrome Live Caption can stay OFF now — SODA remains installed once downloaded.');
+log('This page must run in a FOREGROUND window. A background tab throttles rAF, blocks input, and can fail component downloads.', 'e');
+if (!SR) log('WARNING: no SpeechRecognition on this browser', 'e');
+</script>
+</body>
+</html>

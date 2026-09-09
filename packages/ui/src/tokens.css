@@ -1,0 +1,99 @@
+/* Excerpt design tokens — Part 0 of the plan, in one place.
+   Motif 5 (The Ground): near-black, a narrow grey ramp, and ONE accent whose
+   only meaning is "settled". If --ember appears more than a few times on a
+   screen, it is being misused. */
+
+@layer tokens {
+  :root {
+    /* Ground */
+    --ground:      #0A0A0A;
+    --raise:       #131313;
+    --line:        #232323;
+    --line-strong: #333333;
+
+    /* Ink */
+    --ink:   #F4F3F1;
+    --dim:   #8C8C8C;
+    --faint: #5A5A5A;
+
+    /* The one accent. DECIDED · playhead · active frame. Nothing else. */
+    --ember:      #FF4D0F;
+    --ember-dim:  #7A2408;
+
+    /* State (used sparingly, never as decoration) */
+    --ok:   #5BD08A;
+    --warn: #E8C77A;
+    --bad:  #FF4D4D;
+
+    /* Type — Motif 1 and 4 */
+    --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+    --sans:  "Switzer", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    /* Chrome is mono, uppercase, letter-spaced. Human speech never is. */
+    --label:       400 11px/1.6 var(--mono);
+    --label-track: 0.14em;
+
+    /* Subtitle — the caption is a film subtitle, not a conferencing caption */
+    --cap-size:      clamp(20px, 2.4vw, 30px);
+    --cap-leading:   1.45;
+    --cap-tracking:  0.005em;
+    --cap-max-lines: 2;
+    --cap-max-chars: 42;
+    --cap-bottom:    78%;
+    --cap-shadow:    0 1px 2px rgba(0,0,0,.9), 0 2px 14px rgba(0,0,0,.75);
+    --cap-fade:      180ms;
+
+    /* Motif 3 — selection is four corner brackets, never a border */
+    --frame-size:  9px;
+    --frame-inset: 10px;
+
+    --grain: 0.03;
+  }
+
+  /* Accessibility overrides the aesthetic. The no-box subtitle is a default,
+     never a constraint on legibility. */
+  @media (prefers-contrast: more) {
+    :root { --cap-backdrop: rgba(0,0,0,.82); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root { --cap-fade: 0ms; }
+  }
+}
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Motif 4 — The Credits */
+  .credits {
+    display: grid;
+    grid-template-columns: minmax(140px, 220px) 1fr;
+    gap: 6px 24px;
+    font: var(--label);
+    letter-spacing: var(--label-track);
+    text-transform: uppercase;
+  }
+  .credits dt { color: var(--faint); }
+  .credits dd { margin: 0; color: var(--ink); }
+
+  /* Motif 3 — The Frame */
+  .framed { position: relative; }
+  .framed::before, .framed::after,
+  .framed > .frame-b::before, .framed > .frame-b::after {
+    content: ""; position: absolute;
+    width: var(--frame-size); height: var(--frame-size);
+    border: 1px solid var(--ember); pointer-events: none;
+  }
+  .framed::before { top: var(--frame-inset); left:  var(--frame-inset); border-width: 1px 0 0 1px; }
+  .framed::after  { top: var(--frame-inset); right: var(--frame-inset); border-width: 1px 1px 0 0; }
+  .framed > .frame-b::before { bottom: var(--frame-inset); left:  var(--frame-inset); border-width: 0 0 1px 1px; }
+  .framed > .frame-b::after  { bottom: var(--frame-inset); right: var(--frame-inset); border-width: 0 1px 1px 0; }
+}
