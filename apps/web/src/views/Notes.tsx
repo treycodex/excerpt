@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
-import { saveMeeting, toMarkdown } from '@excerpt/core';
+import { matchedBoosts, orderCategories, saveMeeting, toMarkdown } from '@excerpt/core';
 import { Frame, Strip } from '@excerpt/ui';
 import type { StripMark } from '@excerpt/ui';
-import type { Category, Item, Meeting } from '@excerpt/types';
+import type { Category, Item, Meeting, Preferences as Prefs } from '@excerpt/types';
 
 const clock = (ms: number) => {
   const t = Math.max(0, Math.round(ms / 1000));
@@ -17,7 +17,8 @@ const HEADING: Record<Category, string> = {
 };
 const ORDER: Category[] = ['decision', 'action', 'deadline', 'question'];
 
-export function Notes({ meeting: initial, onReplay }: { meeting: Meeting; onReplay?: () => void }) {
+export function Notes({ meeting: initial, prefs, onReplay }:
+  { meeting: Meeting; prefs?: Prefs | null; onReplay?: () => void }) {
   const [meeting, setMeeting] = useState(initial);
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [focusedEvent, setFocusedEvent] = useState<string | null>(null);
@@ -42,9 +43,12 @@ export function Notes({ meeting: initial, onReplay }: { meeting: Meeting; onRepl
   const review = live.filter((i) => i.category === 'action' && i.assignee === 'unassigned');
   const dismissed = meeting.items.filter((i) => i.dismissed);
 
+  // Sections follow the user's stated order; ordering never hides anything.
+  const sectionOrder = prefs ? orderCategories(prefs) : ORDER;
   const grouped = useMemo(
-    () => ORDER.map((c) => [c, live.filter((i) => i.category === c)] as const).filter(([, g]) => g.length),
-    [live],
+    () => sectionOrder.map((c) => [c, live.filter((i) => i.category === c)] as const)
+      .filter(([, g]) => g.length),
+    [live, sectionOrder.join(',')],
   );
 
   const marks: StripMark[] = live.map((i) => ({
@@ -123,6 +127,14 @@ export function Notes({ meeting: initial, onReplay }: { meeting: Meeting; onRepl
           measured when text arrived, not from audio.
         </p>
 
+        {(!prefs || !prefs.instruction) && (
+          <p className="rubric nudge">
+            These are in default order. <a href="#/preferences">Tell Excerpt what you
+            care about</a> and it will rank them your way — and show you exactly which
+            of your words did the ranking.
+          </p>
+        )}
+
         <div className="actions">
           <button onClick={copy}>{copied ? 'Copied' : 'Copy Markdown'}</button>
           <button onClick={download}>Download .md</button>
@@ -138,6 +150,7 @@ export function Notes({ meeting: initial, onReplay }: { meeting: Meeting; onRepl
               <ItemCard
                 item={item}
                 active={activeItem === item.id}
+                boosts={prefs ? matchedBoosts(item, prefs) : []}
                 onEvidence={revealEvidence}
                 onUpdate={update}
               />
@@ -176,10 +189,11 @@ export function Notes({ meeting: initial, onReplay }: { meeting: Meeting; onRepl
 }
 
 function ItemCard({
-  item, active, onEvidence, onUpdate,
+  item, active, boosts, onEvidence, onUpdate,
 }: {
   item: Item;
   active: boolean;
+  boosts: string[];
   onEvidence: (itemId: string, eventId: string, at: number) => void;
   onUpdate: (id: string, patch: Partial<Item>) => void;
 }) {
@@ -204,6 +218,9 @@ function ItemCard({
           )}
           {item.due && <span className="due">due {item.due}</span>}
           {item.userEdited && <span className="edited">edited</span>}
+          {/* Show which of the user's own terms lifted this item, so the ranking
+              is inspectable rather than mysterious. */}
+          {boosts.length > 0 && <span className="boosted">matches {boosts.join(', ')}</span>}
         </div>
 
         {editing ? (

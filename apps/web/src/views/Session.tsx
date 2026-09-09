@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DemoTranscriptAdapter } from '@excerpt/core';
 import { Strip } from '@excerpt/ui';
 import type { TranscriptEvent } from '@excerpt/types';
 import { DEMO_SCRIPT } from '../demo/script';
-import { CallFrame } from './CallFrame';
+import { CallFrame, Captions } from './CallFrame';
 import type { Spoken } from './CallFrame';
+import { openCaptionWindow, supportsPiP } from '../pip';
 
 const LINGER = 3200;
 
@@ -15,6 +17,8 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
   const [spoken, setSpoken] = useState<Record<string, Spoken>>({});
   const [elapsed, setElapsed] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [pip, setPip] = useState<Document | null>(null);
+  const [contrast, setContrast] = useState(false);
   const collected = useRef<TranscriptEvent[]>([]);
   const base = useRef({ at: performance.now(), offset: 0 });
 
@@ -84,6 +88,8 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
     <div className="session">
       <CallFrame fresh={fresh} elapsed={elapsed} />
 
+      {pip && createPortal(<Captions fresh={fresh} standalone />, pip.body)}
+
       <div className="transport">
         <button className="play" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? 'Pause' : 'Play'}
@@ -91,6 +97,27 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
         <div className="transport-strip">
           <Strip duration={duration} position={elapsed} onScrub={seek} />
         </div>
+        <button
+          className="contrast"
+          aria-pressed={contrast}
+          onClick={() => { setContrast(!contrast); document.documentElement.classList.toggle('caption-contrast'); }}
+        >
+          {contrast ? 'Plain captions' : 'High contrast'}
+        </button>
+        {supportsPiP() && (
+          <button
+            className="pip"
+            onClick={async () => {
+              if (pip) { pip.defaultView?.close(); setPip(null); return; }
+              const doc = await openCaptionWindow();
+              if (!doc) return;
+              doc.defaultView?.addEventListener('pagehide', () => setPip(null));
+              setPip(doc);
+            }}
+          >
+            {pip ? 'Close float' : 'Float captions'}
+          </button>
+        )}
         <button className="skip" onClick={finish}>Skip to notes</button>
       </div>
     </div>

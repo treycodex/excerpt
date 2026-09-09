@@ -7,3 +7,7 @@ export { extractItems, classify, extractDecisions, toSentences } from './extract
 export type { Sentence } from './extract';
 export { saveMeeting, loadMeeting, listMeetings, deleteMeeting } from './store/meetings';
 export { toMarkdown } from './export/markdown';
+export {
+  DEFAULT_PREFERENCES, applyPreferences, deriveBoosts, matchedBoosts, scoreItem,
+  loadPreferences, savePreferences, orderCategories,
+} from './preferences';

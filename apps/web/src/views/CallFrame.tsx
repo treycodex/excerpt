@@ -12,7 +12,6 @@ export interface Spoken { text: string; at: number; label: string }
  */
 export function CallFrame({ fresh, elapsed }: { fresh: Spoken[]; elapsed: number }) {
   const speaking = new Set(fresh.map((f) => f.label));
-  const overlapping = fresh.length > 1;
 
   return (
     <div className="call">
@@ -21,23 +20,42 @@ export function CallFrame({ fresh, elapsed }: { fresh: Spoken[]; elapsed: number
         <Tile name="You" role="YOU" live={speaking.has('YOU')} />
       </div>
 
-      {fresh.length > 0 && (
-        <div className="caption" key={fresh.map((f) => f.text).join('|')}>
-          <div className="fade in">
-            {!overlapping && fresh[0] && <div className="who">{fresh[0].label}</div>}
-            {fresh.flatMap((s, i) => {
-              const lines = splitIntoSubtitleLines(s.text, { maxChars: overlapping ? 40 : 42 });
-              return overlapping
-                ? [<div className="line" key={i}>– {lines.join(' ')}</div>]
-                : lines.map((l, j) => <div className="line" key={`${i}-${j}`}>{l}</div>);
-            })}
-          </div>
-        </div>
-      )}
+      <Captions fresh={fresh} />
 
       <div className="call-chrome">
         <span className="rec"><i /> Excerpt is listening</span>
         <span className="elapsed">{stamp(elapsed)}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The subtitle itself, so the same component renders inside the call and inside
+ * the always-on-top PiP window.
+ *
+ * aria-live is polite and the region is labelled: a screen reader should hear the
+ * caption settle, not every interim keystroke of it.
+ */
+export function Captions({ fresh, standalone }: { fresh: Spoken[]; standalone?: boolean }) {
+  if (!fresh.length) return null;
+  const overlapping = fresh.length > 1;
+  return (
+    <div
+      className={standalone ? 'caption standalone' : 'caption'}
+      key={fresh.map((f) => f.text).join('|')}
+      role="region"
+      aria-label="Live captions"
+      aria-live="polite"
+    >
+      <div className="fade in">
+        {!overlapping && fresh[0] && <div className="who">{fresh[0].label}</div>}
+        {fresh.flatMap((s, i) => {
+          const lines = splitIntoSubtitleLines(s.text, { maxChars: overlapping ? 40 : 42 });
+          return overlapping
+            ? [<div className="line" key={i}>– {lines.join(' ')}</div>]
+            : lines.map((l, j) => <div className="line" key={`${i}-${j}`}>{l}</div>);
+        })}
       </div>
     </div>
   );
