@@ -1,5 +1,6 @@
 import type { Item, ItemState } from '@excerpt/types';
 import type { Sentence } from './types';
+import { normalise } from './sentences';
 
 /** Commitment: something is being settled, not floated. */
 const COMMIT = [
@@ -45,7 +46,7 @@ export interface Detection {
 
 /** Classify one sentence. Exported for tests — the guards are the product. */
 export function classify(sentence: Sentence): Detection | null {
-  const text = sentence.text;
+  const text = sentence.norm;
 
   // A question is never a decision, whatever cues it contains.
   if (/\?\s*$/.test(text)) {
@@ -76,7 +77,7 @@ const CONFIRMATION = [
 ];
 
 export function isBareConfirmation(text: string): boolean {
-  const bare = text.replace(/^\s*(okay|ok|so|right|well|alright)[,.]?\s+/i, '').trim();
+  const bare = normalise(text).replace(/^\s*(okay|ok|so|right|well|alright)[,.]?\s+/i, '').trim();
   return CONFIRMATION.some((r) => r.test(bare));
 }
 

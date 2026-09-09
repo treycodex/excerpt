@@ -49,12 +49,19 @@ export function Strip({ duration, position, marks = [], onScrub, onSelect }: Str
     return out;
   }, [duration, minor, major]);
 
-  const pct = (ms: number) => `${Math.min(100, Math.max(0, (ms / duration) * 100))}%`;
+  const pct = (ms: number) => {
+    if (!Number.isFinite(ms) || duration <= 0) return '0%';
+    return `${Math.min(100, Math.max(0, (ms / duration) * 100))}%`;
+  };
 
   const scrub = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!onScrub || !rail.current) return;
     const box = rail.current.getBoundingClientRect();
-    onScrub(((e.clientX - box.left) / box.width) * duration);
+    // A zero-width rail (initial layout, a collapsed pane, a resize to nothing)
+    // would divide by zero and hand callers NaN.
+    if (box.width <= 0) return;
+    const ms = ((e.clientX - box.left) / box.width) * duration;
+    if (Number.isFinite(ms)) onScrub(ms);
   };
 
   return (

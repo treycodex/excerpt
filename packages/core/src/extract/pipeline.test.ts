@@ -160,3 +160,46 @@ describe('deadlines are not fabricated', () => {
     expect(items.every((i) => !i.due)).toBe(true);
   });
 });
+
+describe('typographic punctuation', () => {
+  // Speech recognition emits straight quotes; pasted transcripts do not. A cue
+  // pattern written with ' silently fails on ’, which once wiped out every
+  // decision and every assignment in the demo script.
+  it('detects a decision written with a curly apostrophe', () => {
+    const items = extractItems([ev('Okay. Let’s move the launch to October.', 'remote', 0)], REF);
+    expect(items.some((i) => i.state === 'decided')).toBe(true);
+  });
+
+  it('assigns a self-commitment written with a curly apostrophe', () => {
+    const items = extractItems([ev('I’ll take the revised deck.', 'you', 0)], REF);
+    expect(items[0]?.category).toBe('action');
+    expect(items[0]?.assignee).toBe('you');
+  });
+
+  it('keeps evidence verbatim, curly punctuation and all', () => {
+    const raw = 'Okay. Let’s move the launch to October.';
+    const items = extractItems([ev(raw, 'remote', 0)], REF);
+    expect(items[0]?.evidence[0]?.quote).toContain('’');
+  });
+});
+
+describe('a question is closed only by its own reply', () => {
+  it('is not closed by a yes answering a later question', () => {
+    const items = extractItems([
+      ev('Do we still need the out-of-home buy?', 'remote', 0),
+      ev('I am not sure the out-of-home spend is justified yet.', 'you', 4000),
+      ev('Fair. Let us park that for now.', 'remote', 9000),
+      ev('Same time next week?', 'remote', 14000),
+      ev('Yes, works for me.', 'you', 18000),
+    ], REF);
+    expect(items.some((i) => i.category === 'question' && i.title.startsWith('Do we still'))).toBe(true);
+  });
+
+  it('closes a question its immediate reply actually answers', () => {
+    const items = extractItems([
+      ev('How did the hero film perform?', 'remote', 0),
+      ev('Strong. Completion is up eleven points week on week.', 'you', 4000),
+    ], REF);
+    expect(items.some((i) => i.category === 'question')).toBe(false);
+  });
+});

@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { TranscriptEvent } from '@excerpt/types';
 import { extractItems } from './index';
 import { classify } from './decisions';
-import { toSentences } from './sentences';
+import { normalise, toSentences } from './sentences';
 
 const ev = (text: string, i = 0): TranscriptEvent => ({
   id: `e${i}`, sessionId: 's', role: 'remote', speakerLabel: 'SPEAKER',
   text, isFinal: true, tArrived: i * 1000,
 });
-const state = (text: string) => classify({ text, event: ev(text), index: 0 })?.state ?? null;
+const state = (text: string) =>
+  classify({ text, norm: normalise(text), event: ev(text), index: 0 })?.state ?? null;
 
 describe('decision classification', () => {
   it('detects a plain decision', () => {

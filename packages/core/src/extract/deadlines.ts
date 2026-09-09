@@ -14,7 +14,7 @@ const PREPOSITION = /\b(by|before|due|until|no later than|ahead of|in time for)\
 export interface Deadline { iso: string; text: string }
 
 export function findDeadline(sentence: Sentence, reference: Date): Deadline | null {
-  const text = sentence.text;
+  const text = sentence.norm;
   const results = chrono.parse(text, reference, { forwardDate: true });
 
   for (const r of results) {

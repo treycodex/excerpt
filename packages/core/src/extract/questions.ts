@@ -23,17 +23,30 @@ const WINDOW_MS = 30_000;
  * whole reason a user wants this list.
  */
 export function isOpenQuestion(sentence: Sentence, all: Sentence[]): boolean {
-  if (!/\?\s*$/.test(sentence.text)) return false;
-  if (NOT_A_QUESTION.some((r) => r.test(sentence.text))) return false;
+  if (!/\?\s*$/.test(sentence.norm)) return false;
+  if (NOT_A_QUESTION.some((r) => r.test(sentence.norm))) return false;
 
+  // Only the first reply TURN from the other side counts.
+  //
+  // A turn, not a sentence: "Strong. Completion is up eleven points." is one reply,
+  // and judging it on "Strong." alone would call an answered question open. And a
+  // window sweep is wrong in the other direction — it let a "Yes, works for me"
+  // answering a later question close an earlier, unrelated one.
+  const turn: string[] = [];
   for (let i = sentence.index + 1; i < all.length; i++) {
     const next = all[i];
     if (!next) break;
     if (next.event.tArrived - sentence.event.tArrived > WINDOW_MS) break;
-    if (next.event.role === sentence.event.role) continue;  // the asker restating
-    if (HEDGE.test(next.text)) continue;                    // hedged: still open
-    if (ANSWER.test(next.text)) return false;               // answered outright
-    if (!/\?\s*$/.test(next.text) && next.text.split(' ').length >= 6) return false;
+    if (next.event.role === sentence.event.role) {
+      if (turn.length) break;   // the reply turn has ended
+      continue;                 // the asker is still talking
+    }
+    turn.push(next.norm);
   }
-  return true;
+  if (!turn.length) return true;
+
+  const reply = turn.join(' ');
+  if (HEDGE.test(reply)) return true;                  // hedged: still open
+  if (ANSWER.test(reply)) return false;                // answered outright
+  return reply.split(/\s+/).length < 5;                // a substantive reply closes it
 }

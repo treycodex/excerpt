@@ -1,64 +1,97 @@
-import { useEffect, useMemo, useState } from 'react';
-import { DemoTranscriptAdapter, splitIntoSubtitleLines } from '@excerpt/core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DemoTranscriptAdapter } from '@excerpt/core';
+import { Strip } from '@excerpt/ui';
 import type { TranscriptEvent } from '@excerpt/types';
 import { DEMO_SCRIPT } from '../demo/script';
+import { CallFrame } from './CallFrame';
+import type { Spoken } from './CallFrame';
 
-const LINGER = 2600;
-interface Spoken { text: string; at: number; label: string }
+const LINGER = 3200;
 
 export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void }) {
-  const [spoken, setSpoken] = useState<Record<string, Spoken>>({});
-  const [, setTick] = useState(0);
   const adapter = useMemo(() => new DemoTranscriptAdapter(DEMO_SCRIPT, 'demo-session', 1), []);
+  const duration = adapter.duration + 2000;
+
+  const [spoken, setSpoken] = useState<Record<string, Spoken>>({});
+  const [elapsed, setElapsed] = useState(0);
+  const [playing, setPlaying] = useState(true);
+  const collected = useRef<TranscriptEvent[]>([]);
+  const base = useRef({ at: performance.now(), offset: 0 });
+
+  const finish = useCallback(() => {
+    void adapter.stop();
+    onEnd(adapter.finalsUpTo(adapter.duration));
+  }, [adapter, onEnd]);
 
   useEffect(() => {
-    const collected: TranscriptEvent[] = [];
     const off = adapter.onEvent((e) => {
-      if (e.isFinal) collected.push(e);
+      if (e.isFinal) collected.current.push(e);
       setSpoken((prev) => ({
         ...prev,
         [e.role]: { text: e.text, at: performance.now(), label: e.speakerLabel },
       }));
     });
-    void adapter.start();
-    const tick = setInterval(() => setTick((t) => t + 1), 250);
-    const end = setTimeout(() => onEnd(collected), adapter.duration + LINGER);
-    return () => { off(); clearInterval(tick); clearTimeout(end); void adapter.stop(); };
-  }, [adapter, onEnd]);
+    void adapter.start(0);
+    base.current = { at: performance.now(), offset: 0 };
+    return () => { off(); void adapter.stop(); };
+  }, [adapter]);
+
+  // A single clock drives the strip, the call timer and the end of the demo.
+  //
+  // Deliberately setInterval, not requestAnimationFrame: rAF stops dead in a hidden
+  // tab while the caption timers keep firing, so a judge who switches away would come
+  // back to captions and a strip that disagree. The value is computed from
+  // performance.now() each tick, so throttling costs resolution, never accuracy.
+  useEffect(() => {
+    if (!playing) return;
+    const tick = () => {
+      const now = base.current.offset + (performance.now() - base.current.at);
+      setElapsed(now);
+      if (now >= duration) finish();
+    };
+    tick();
+    const id = setInterval(tick, 100);
+    return () => clearInterval(id);
+  }, [playing, duration, finish]);
+
+  const seek = (ms: number) => {
+    if (!Number.isFinite(ms)) return;   // never let a bad measurement corrupt the clock
+    const target = Math.max(0, Math.min(duration, ms));
+    base.current = { at: performance.now(), offset: target };
+    setElapsed(target);
+    setSpoken({});
+    collected.current = adapter.finalsUpTo(target);
+    void adapter.seek(target);
+    setPlaying(true);
+  };
+
+  const toggle = () => {
+    if (playing) {
+      base.current = { at: performance.now(), offset: elapsed };
+      void adapter.stop();
+      setPlaying(false);
+    } else {
+      seek(elapsed);
+    }
+  };
 
   const now = performance.now();
-  const fresh = Object.values(spoken).filter((s) => now - s.at < LINGER).sort((a, b) => a.at - b.at);
+  const fresh = Object.values(spoken)
+    .filter((s) => now - s.at < LINGER)
+    .sort((a, b) => a.at - b.at);
 
   return (
-    <div className="stage">
-      <div className="hud">Excerpt · <b>in session</b></div>
-      <Caption fresh={fresh} />
-    </div>
-  );
-}
+    <div className="session">
+      <CallFrame fresh={fresh} elapsed={elapsed} />
 
-function Caption({ fresh }: { fresh: Spoken[] }) {
-  const key = fresh.map((f) => f.text).join('|');
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    setShown(false);
-    const id = requestAnimationFrame(() => setShown(true));
-    return () => cancelAnimationFrame(id);
-  }, [key]);
-
-  if (!fresh.length) return null;
-  const overlapping = fresh.length > 1;
-
-  return (
-    <div className="caption">
-      <div className={`fade${shown ? ' in' : ''}`}>
-        {!overlapping && fresh[0] && <div className="who">{fresh[0].label}</div>}
-        {fresh.flatMap((s, i) => {
-          const lines = splitIntoSubtitleLines(s.text, { maxChars: overlapping ? 40 : 42 });
-          return overlapping
-            ? [<div className="line" key={i}>– {lines.join(' ')}</div>]
-            : lines.map((l, j) => <div className="line" key={`${i}-${j}`}>{l}</div>);
-        })}
+      <div className="transport">
+        <button className="play" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
+          {playing ? 'Pause' : 'Play'}
+        </button>
+        <div className="transport-strip">
+          <Strip duration={duration} position={elapsed} onScrub={seek} />
+        </div>
+        <button className="skip" onClick={finish}>Skip to notes</button>
       </div>
     </div>
   );

@@ -36,7 +36,7 @@ export interface ActionMatch {
  * goes to Needs review, where one click fixes it.
  */
 export function classifyAction(sentence: Sentence): ActionMatch | null {
-  const text = sentence.text;
+  const text = sentence.norm;
   const fromYou = sentence.event.role === 'you';
 
   if (SELF_COMMIT.some((r) => r.test(text))) {

@@ -17,7 +17,7 @@ const HEADING: Record<Category, string> = {
 };
 const ORDER: Category[] = ['decision', 'action', 'deadline', 'question'];
 
-export function Notes({ meeting: initial }: { meeting: Meeting }) {
+export function Notes({ meeting: initial, onReplay }: { meeting: Meeting; onReplay?: () => void }) {
   const [meeting, setMeeting] = useState(initial);
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [focusedEvent, setFocusedEvent] = useState<string | null>(null);
@@ -126,6 +126,7 @@ export function Notes({ meeting: initial }: { meeting: Meeting }) {
         <div className="actions">
           <button onClick={copy}>{copied ? 'Copied' : 'Copy Markdown'}</button>
           <button onClick={download}>Download .md</button>
+          {onReplay && <button onClick={onReplay}>Replay the meeting</button>}
         </div>
       </header>
 
