@@ -1,5 +1,5 @@
 import type { Item, ItemState } from '@excerpt/types';
-import type { Sentence } from './sentences';
+import type { Sentence } from './types';
 
 /** Commitment: something is being settled, not floated. */
 const COMMIT = [

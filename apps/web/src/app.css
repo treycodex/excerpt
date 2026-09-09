@@ -83,3 +83,39 @@
   text-transform: uppercase; color: var(--faint);
 }
 .line-row.focused { background: rgba(255, 77, 15, 0.09); box-shadow: inset 2px 0 0 var(--ember); }
+
+/* --- Corrections ---------------------------------------------------------- */
+.item .state .mine   { color: var(--ember); }
+.item .state .due    { color: var(--dim); }
+.item .state .edited { color: var(--faint); }
+.item .title { cursor: pointer; }
+.item blockquote { cursor: pointer; }
+
+.controls { display: flex; gap: 8px; margin-top: 14px; align-items: center; opacity: 0; transition: opacity .15s; }
+.item:hover .controls, .item:focus-within .controls { opacity: 1; }
+.controls button, .controls select, .edit button {
+  font: var(--label); letter-spacing: 0.1em; text-transform: uppercase;
+  background: transparent; color: var(--faint); border: 1px solid var(--line);
+  padding: 6px 10px; cursor: pointer;
+}
+.controls button:hover, .edit button:hover { border-color: var(--ember); color: var(--ember); }
+.controls select { color: var(--dim); }
+
+.edit { display: flex; gap: 8px; margin-bottom: 12px; }
+.edit input {
+  flex: 1; background: var(--raise); border: 1px solid var(--line-strong);
+  color: var(--ink); font: 400 18px/1.4 var(--sans); padding: 8px 10px;
+}
+.edit input:focus { outline: none; border-color: var(--ember); }
+
+.dismissed-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--faint);
+  font: 400 15px/1.4 var(--sans);
+}
+.dismissed-row button {
+  font: var(--label); letter-spacing: 0.1em; text-transform: uppercase;
+  background: transparent; color: var(--faint); border: 1px solid var(--line);
+  padding: 6px 10px; cursor: pointer;
+}
+.dismissed-row button:hover { border-color: var(--ember); color: var(--ember); }

@@ -8,7 +8,7 @@ const ev = (text: string, i = 0): TranscriptEvent => ({
   id: `e${i}`, sessionId: 's', role: 'remote', speakerLabel: 'SPEAKER',
   text, isFinal: true, tArrived: i * 1000,
 });
-const state = (text: string) => classify({ text, event: ev(text) })?.state ?? null;
+const state = (text: string) => classify({ text, event: ev(text), index: 0 })?.state ?? null;
 
 describe('decision classification', () => {
   it('detects a plain decision', () => {

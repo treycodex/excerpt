@@ -15,7 +15,7 @@ export function App() {
       endedAt: new Date().toISOString(),
       processing: 'demo',
       events,
-      items: extractItems(events),
+      items: extractItems(events, new Date()),
     };
     await saveMeeting(m);      // persisted locally before it is shown
     setMeeting(m);
