@@ -27,7 +27,7 @@
 
     /* Type — Motif 1 and 4 */
     --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
-    --sans:  "Switzer", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    --sans:  "Instrument Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
     --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
     /* Chrome is mono, uppercase, letter-spaced. Human speech never is. */
@@ -84,16 +84,16 @@
   .credits dt { color: var(--faint); }
   .credits dd { margin: 0; color: var(--ink); }
 
-  /* Motif 3 — The Frame */
+  /* Motif 3 — The Frame. Brackets appear only on the active element. */
   .framed { position: relative; }
-  .framed::before, .framed::after,
-  .framed > .frame-b::before, .framed > .frame-b::after {
+  .framed.is-active::before, .framed.is-active::after,
+  .framed.is-active > .frame-b::before, .framed.is-active > .frame-b::after {
     content: ""; position: absolute;
     width: var(--frame-size); height: var(--frame-size);
     border: 1px solid var(--ember); pointer-events: none;
   }
-  .framed::before { top: var(--frame-inset); left:  var(--frame-inset); border-width: 1px 0 0 1px; }
-  .framed::after  { top: var(--frame-inset); right: var(--frame-inset); border-width: 1px 1px 0 0; }
-  .framed > .frame-b::before { bottom: var(--frame-inset); left:  var(--frame-inset); border-width: 0 0 1px 1px; }
-  .framed > .frame-b::after  { bottom: var(--frame-inset); right: var(--frame-inset); border-width: 0 1px 1px 0; }
+  .framed.is-active::before { top: var(--frame-inset); left:  var(--frame-inset); border-width: 1px 0 0 1px; }
+  .framed.is-active::after  { top: var(--frame-inset); right: var(--frame-inset); border-width: 1px 1px 0 0; }
+  .framed.is-active > .frame-b::before { bottom: var(--frame-inset); left:  var(--frame-inset); border-width: 0 0 1px 1px; }
+  .framed.is-active > .frame-b::after  { bottom: var(--frame-inset); right: var(--frame-inset); border-width: 0 1px 1px 0; }
 }

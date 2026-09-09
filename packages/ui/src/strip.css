@@ -1,0 +1,67 @@
+/* Motif 2 — The Strip. A film strip, not a scrollbar. */
+
+.strip { position: relative; margin: 0 0 8px; user-select: none; }
+
+.strip-rail {
+  position: relative;
+  height: 42px;
+  cursor: crosshair;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Ticks hang from the rail like frame edges on a strip of film. */
+.strip-rail .tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 7px;
+  background: var(--line-strong);
+  transform: translateX(-0.5px);
+}
+.strip-rail .tick.major { height: 14px; background: var(--faint); }
+
+/* Item marks sit above the rail. Only settled ones wear the accent. */
+.strip-rail .mark {
+  position: absolute;
+  bottom: 15px;
+  width: 1px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: var(--faint);
+  transform: translateX(-0.5px);
+  cursor: pointer;
+  transition: background .15s, height .15s;
+}
+.strip-rail .mark::after {          /* generous hit area, invisible */
+  content: ""; position: absolute; inset: -8px -6px;
+}
+.strip-rail .mark:hover { background: var(--ink); height: 22px; }
+.strip-rail .mark.settled { background: var(--ember); height: 22px; }
+.strip-rail .mark.settled:hover { height: 27px; }
+
+/* One ember dot. The playhead is the only round thing on the page. */
+.strip-rail .playhead {
+  position: absolute;
+  bottom: -3.5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ember);
+  transform: translateX(-3.5px);
+  transition: left .28s cubic-bezier(.22,.61,.36,1);
+  pointer-events: none;
+}
+
+.strip-labels {
+  position: relative;
+  height: 18px;
+  font: var(--label);
+  letter-spacing: 0.16em;
+  color: var(--faint);
+}
+.strip-labels span { position: absolute; top: 5px; transform: translateX(-50%); }
+
+@media (prefers-reduced-motion: reduce) {
+  .strip-rail .playhead { transition: none; }
+}

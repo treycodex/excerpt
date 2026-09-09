@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { saveMeeting, toMarkdown } from '@excerpt/core';
+import { Frame, Strip } from '@excerpt/ui';
+import type { StripMark } from '@excerpt/ui';
 import type { Category, Item, Meeting } from '@excerpt/types';
 
 const clock = (ms: number) => {
@@ -17,11 +19,13 @@ const ORDER: Category[] = ['decision', 'action', 'deadline', 'question'];
 
 export function Notes({ meeting: initial }: { meeting: Meeting }) {
   const [meeting, setMeeting] = useState(initial);
-  const [focused, setFocused] = useState<string | null>(null);
+  const [activeItem, setActiveItem] = useState<string | null>(null);
+  const [focusedEvent, setFocusedEvent] = useState<string | null>(null);
+  const [position, setPosition] = useState<number | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   const rows = useRef<Record<string, HTMLDivElement | null>>({});
+  const cards = useRef<Record<string, HTMLElement | null>>({});
 
-  /** Every correction persists immediately. Edits are the user's, not suggestions. */
   const update = (id: string, patch: Partial<Item>) => {
     const next = {
       ...meeting,
@@ -32,6 +36,7 @@ export function Notes({ meeting: initial }: { meeting: Meeting }) {
   };
 
   const live = meeting.items.filter((i) => !i.dismissed);
+  const duration = meeting.events.at(-1)?.tArrived ?? 1;
   const decided = live.filter((i) => i.state === 'decided' && i.category === 'decision');
   const mine = live.filter((i) => i.assignee === 'you');
   const review = live.filter((i) => i.category === 'action' && i.assignee === 'unassigned');
@@ -42,9 +47,38 @@ export function Notes({ meeting: initial }: { meeting: Meeting }) {
     [live],
   );
 
-  const reveal = (eventId: string) => {
-    setFocused(eventId);
+  const marks: StripMark[] = live.map((i) => ({
+    id: i.id,
+    at: i.evidence[0]?.tArrived ?? 0,
+    settled: i.state === 'decided',
+    label: i.title,
+  }));
+
+  /** One gesture: select an item, move the playhead, frame its passage. */
+  const selectItem = (id: string) => {
+    const item = meeting.items.find((i) => i.id === id);
+    const ev = item?.evidence[0];
+    if (!ev) return;
+    setActiveItem(id);
+    setPosition(ev.tArrived);
+    setFocusedEvent(ev.eventIds[0] ?? null);
+    cards.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const revealEvidence = (itemId: string, eventId: string, at: number) => {
+    setActiveItem(itemId);
+    setPosition(at);
+    setFocusedEvent(eventId);
     rows.current[eventId]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  /** Scrubbing the rail lands on the nearest thing actually said. */
+  const scrub = (ms: number) => {
+    setPosition(ms);
+    const nearest = meeting.events.reduce((best, e) =>
+      Math.abs(e.tArrived - ms) < Math.abs(best.tArrived - ms) ? e : best, meeting.events[0]!);
+    setFocusedEvent(nearest.id);
+    rows.current[nearest.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   const copy = async () => {
@@ -64,16 +98,31 @@ export function Notes({ meeting: initial }: { meeting: Meeting }) {
 
   return (
     <div className="notes">
-      <header>
+      <header className="masthead">
+        <div className="eyebrow">Excerpt</div>
         <h1>{meeting.title}</h1>
+
         <dl className="credits">
           <dt>Attendees</dt><dd>You + 1 other</dd>
-          <dt>Duration</dt><dd>{clock(meeting.events.at(-1)?.tArrived ?? 0)}</dd>
+          <dt>Duration</dt><dd>{clock(duration)}</dd>
           <dt>Decided</dt><dd>{decided.length}</dd>
           <dt>Assigned to you</dt><dd>{mine.length}</dd>
           <dt>Needs review</dt><dd>{review.length}</dd>
           <dt>Processing</dt><dd>{meeting.processing}</dd>
         </dl>
+
+        <Strip
+          duration={duration}
+          position={position}
+          marks={marks}
+          onScrub={scrub}
+          onSelect={selectItem}
+        />
+        <p className="rubric">
+          Every note points at the passage it came from. Timings are approximate —
+          measured when text arrived, not from audio.
+        </p>
+
         <div className="actions">
           <button onClick={copy}>{copied ? 'Copied' : 'Copy Markdown'}</button>
           <button onClick={download}>Download .md</button>
@@ -84,20 +133,17 @@ export function Notes({ meeting: initial }: { meeting: Meeting }) {
         <section key={category}>
           <h2>{HEADING[category]}</h2>
           {group.map((item) => (
-            <ItemCard key={item.id} item={item} onReveal={reveal} onUpdate={update} />
+            <div key={item.id} ref={(el) => { cards.current[item.id] = el; }}>
+              <ItemCard
+                item={item}
+                active={activeItem === item.id}
+                onEvidence={revealEvidence}
+                onUpdate={update}
+              />
+            </div>
           ))}
         </section>
       ))}
-
-      {review.length > 0 && (
-        <section>
-          <h2>Needs review</h2>
-          <p className="empty">
-            Excerpt heard these but cannot tell who they were addressed to. It will not
-            guess.
-          </p>
-        </section>
-      )}
 
       {dismissed.length > 0 && (
         <section>
@@ -113,14 +159,11 @@ export function Notes({ meeting: initial }: { meeting: Meeting }) {
 
       <section>
         <h2>Transcript</h2>
-        <p className="empty">
-          Timings are approximate — measured when text arrived, not from audio.
-        </p>
         {meeting.events.map((e) => (
           <div
             key={e.id}
             ref={(el) => { rows.current[e.id] = el; }}
-            className={`line-row${focused === e.id ? ' focused' : ''}`}
+            className={`line-row${focusedEvent === e.id ? ' focused' : ''}`}
           >
             <span className="meta">{e.speakerLabel} ~{clock(e.tArrived)}</span>
             <span>{e.text}</span>
@@ -132,56 +175,64 @@ export function Notes({ meeting: initial }: { meeting: Meeting }) {
 }
 
 function ItemCard({
-  item, onReveal, onUpdate,
+  item, active, onEvidence, onUpdate,
 }: {
   item: Item;
-  onReveal: (eventId: string) => void;
+  active: boolean;
+  onEvidence: (itemId: string, eventId: string, at: number) => void;
   onUpdate: (id: string, patch: Partial<Item>) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.title);
 
   return (
-    <article className={`item${item.state === 'decided' ? ' decided' : ''}`}>
-      <div className="state">
-        {item.state}
-        {item.assignee === 'you' && <span className="mine"> · assigned to you</span>}
-        {item.due && <span className="due"> · due {item.due}</span>}
-        {item.userEdited && <span className="edited"> · edited</span>}
-      </div>
-
-      {editing ? (
-        <div className="edit">
-          <input value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
-          <button onClick={() => { onUpdate(item.id, { title: draft }); setEditing(false); }}>Save</button>
-          <button onClick={() => { setDraft(item.title); setEditing(false); }}>Cancel</button>
+    <Frame active={active}>
+      <article className={`item${item.state === 'decided' ? ' decided' : ''}`}>
+        <div className="state">
+          {/* discussed/proposed/decided only means something for a decision. An
+              action labelled "decided" reads as nonsense, and an unanswered
+              question labelled "discussed" reads as wrong. */}
+          {item.category === 'decision' && <span className="badge">{item.state}</span>}
+          {item.category === 'question' && <span className="badge open">open</span>}
+          {item.category === 'deadline' && <span className="badge">deadline</span>}
+          {item.assignee === 'you' && <span className="mine">assigned to you</span>}
+          {item.category === 'action' && item.assignee === 'unassigned' && (
+            <span className="review" title="Excerpt cannot tell who this was addressed to, so it will not guess.">
+              needs review
+            </span>
+          )}
+          {item.due && <span className="due">due {item.due}</span>}
+          {item.userEdited && <span className="edited">edited</span>}
         </div>
-      ) : (
-        <div className="title" onClick={() => item.evidence[0] && onReveal(item.evidence[0].eventIds[0]!)}>
-          {item.title}
+
+        {editing ? (
+          <div className="edit">
+            <input value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
+            <button onClick={() => { onUpdate(item.id, { title: draft }); setEditing(false); }}>Save</button>
+            <button onClick={() => { setDraft(item.title); setEditing(false); }}>Cancel</button>
+          </div>
+        ) : (
+          <h3 className="title">{item.title}</h3>
+        )}
+
+        {item.evidence.map((e, i) => (
+          <blockquote key={i} onClick={() => onEvidence(item.id, e.eventIds[0]!, e.tArrived)}>
+            {e.quote}
+            <cite>{e.speakerLabel} · ~{clock(e.tArrived)}</cite>
+          </blockquote>
+        ))}
+
+        <div className="controls">
+          <button onClick={() => setEditing(true)}>Edit</button>
+          {item.assignee === 'unassigned'
+            ? <button onClick={() => onUpdate(item.id, { assignee: 'you' })}>Assign to me</button>
+            : <button onClick={() => onUpdate(item.id, { assignee: 'unassigned' })}>Unassign</button>}
+          <select value={item.category} onChange={(e) => onUpdate(item.id, { category: e.target.value as Category })}>
+            {ORDER.map((c) => <option key={c} value={c}>{HEADING[c]}</option>)}
+          </select>
+          <button onClick={() => onUpdate(item.id, { dismissed: true })}>Dismiss</button>
         </div>
-      )}
-
-      {item.evidence.map((e, i) => (
-        <blockquote key={i} onClick={() => onReveal(e.eventIds[0]!)}>
-          {e.quote}
-          <cite>{e.speakerLabel} · ~{clock(e.tArrived)}</cite>
-        </blockquote>
-      ))}
-
-      <div className="controls">
-        <button onClick={() => setEditing(true)}>Edit</button>
-        {item.assignee === 'unassigned'
-          ? <button onClick={() => onUpdate(item.id, { assignee: 'you' })}>Assign to me</button>
-          : <button onClick={() => onUpdate(item.id, { assignee: 'unassigned' })}>Unassign</button>}
-        <select
-          value={item.category}
-          onChange={(e) => onUpdate(item.id, { category: e.target.value as Category })}
-        >
-          {ORDER.map((c) => <option key={c} value={c}>{HEADING[c]}</option>)}
-        </select>
-        <button onClick={() => onUpdate(item.id, { dismissed: true })}>Dismiss</button>
-      </div>
-    </article>
+      </article>
+    </Frame>
   );
 }
