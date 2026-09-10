@@ -24,6 +24,24 @@ enum CaptionTokens {
     static let centreFraction: CGFloat = 0.78
     static let fade: Double = 0.18
 
+    /// Motif 5, The Ground: near-black, a narrow grey ramp, and ONE accent whose only
+    /// meaning is settled. If ember appears more than a few times on a screen, it is
+    /// being misused.
+    enum Palette {
+        static let ground = Color(.sRGB, red: 0.0392156862745098, green: 0.0392156862745098, blue: 0.0392156862745098, opacity: 1.0)
+        static let raise = Color(.sRGB, red: 0.07450980392156863, green: 0.07450980392156863, blue: 0.07450980392156863, opacity: 1.0)
+        static let line = Color(.sRGB, red: 0.13725490196078433, green: 0.13725490196078433, blue: 0.13725490196078433, opacity: 1.0)
+        static let lineStrong = Color(.sRGB, red: 0.2, green: 0.2, blue: 0.2, opacity: 1.0)
+        static let ink = Color(.sRGB, red: 0.9568627450980393, green: 0.9529411764705882, blue: 0.9450980392156862, opacity: 1.0)
+        static let dim = Color(.sRGB, red: 0.5490196078431373, green: 0.5490196078431373, blue: 0.5490196078431373, opacity: 1.0)
+        static let faint = Color(.sRGB, red: 0.4666666666666667, green: 0.4666666666666667, blue: 0.4666666666666667, opacity: 1.0)
+        static let ember = Color(.sRGB, red: 1.0, green: 0.30196078431372547, blue: 0.058823529411764705, opacity: 1.0)
+        static let emberDim = Color(.sRGB, red: 0.47843137254901963, green: 0.1411764705882353, blue: 0.03137254901960784, opacity: 1.0)
+        static let ok = Color(.sRGB, red: 0.3568627450980392, green: 0.8156862745098039, blue: 0.5411764705882353, opacity: 1.0)
+        static let warn = Color(.sRGB, red: 0.9098039215686274, green: 0.7803921568627451, blue: 0.47843137254901963, opacity: 1.0)
+        static let bad = Color(.sRGB, red: 1.0, green: 0.30196078431372547, blue: 0.30196078431372547, opacity: 1.0)
+    }
+
     struct Shadow: Equatable, Sendable {
         var x: CGFloat
         var y: CGFloat

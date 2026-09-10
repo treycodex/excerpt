@@ -23,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var session: MeetingSession?
     private var notes: NotesWindowController?
     private var gateWindow: NSWindow?
+    private var setup: SetupWindowController?
+    private var previewTimeout: Task<Void, Never>?
+    private lazy var setupModel = SetupModel(overlay: overlay)
 
     /// Before the first frame, not after. Demoting to accessory in
     /// applicationDidFinishLaunching puts a Dock icon on screen for a moment and then
@@ -51,9 +54,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             presentStartupFailure(error)
         }
 
+        // First run opens the setup by itself. Someone who has been through it once —
+        // or declined once — is never shown it again unasked.
+        if !setupModel.hasCompletedSetup && !CommandLine.arguments.contains("--diagnose") {
+            showSetup()
+        }
+
         // Launch flags, for driving the app from a terminal during development. They
         // do nothing a menu item does not; they just do it without a hand on a mouse.
         if CommandLine.arguments.contains("--gates") { showGateWindow() }
+        if CommandLine.arguments.contains("--setup") { showSetup() }
+        if let index = CommandLine.arguments.firstIndex(of: "--setup-step"),
+           let name = CommandLine.arguments.dropFirst(index + 1).first,
+           let step = SetupModel.Step.allCases.first(where: { "\($0)" == name }) {
+            showSetup()
+            Task { await setupModel.jump(to: step) }
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--notes") {
             let id = CommandLine.arguments.dropFirst(index + 1).first
             notes?.show(meeting: id?.hasPrefix("--") == false ? id : nil)
@@ -124,6 +140,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                  action: #selector(chooseSize(_:)), symbol: "textformat.size.larger"))
         lookMenu.addItem(submenu(title: "Position", items: CaptionPosition.allCases.map { ($0.title, $0.rawValue) },
                                  action: #selector(choosePosition(_:)), symbol: "arrow.up.and.down"))
+        lookMenu.addItem(.separator())
+        // Choosing a look against a swatch is choosing it against the wrong thing.
+        let tryIt = NSMenuItem(title: "Try it on screen", action: #selector(previewCaption), keyEquivalent: "")
+        tryIt.target = self
+        tryIt.image = Self.symbol("eye", "Try it on screen")
+        lookMenu.addItem(tryIt)
         look.submenu = lookMenu
         menu.addItem(look)
         self.lookMenu = lookMenu
@@ -143,6 +165,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(reveal)
 
         menu.addItem(.separator())
+
+        let setupItem = NSMenuItem(title: "Set up Excerpt…", action: #selector(showSetup), keyEquivalent: "")
+        setupItem.target = self
+        setupItem.image = Self.symbol("sparkles", "Set up Excerpt")
+        menu.addItem(setupItem)
 
         let gates = NSMenuItem(title: "Permissions and diagnostics…", action: #selector(showGateWindow), keyEquivalent: "")
         gates.target = self
@@ -256,6 +283,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func revealFolder() {
         guard let folder = store?.folder else { return }
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folder.path(percentEncoded: false))
+    }
+
+    @objc private func showSetup() {
+        if setup == nil { setup = SetupWindowController(model: setupModel) }
+        setup?.present()
+    }
+
+    /// A sample caption in the real overlay, so a look can be judged where it will be
+    /// seen. It goes away on its own — during a meeting the live text simply replaces
+    /// it, and outside one there is nothing to leave behind.
+    @objc private func previewCaption() {
+        overlay.show()
+        overlay.update(speaker: "SPEAKER",
+                       text: "Okay. Let's move the campaign launch to October. That's decided.")
+        refresh()
+
+        guard session?.state.isActive != true else { return }
+        previewTimeout?.cancel()
+        previewTimeout = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard let self, self.session?.state.isActive != true else { return }
+            self.overlay.update(speaker: "", text: "")
+        }
     }
 
     @objc private func showGateWindow() {

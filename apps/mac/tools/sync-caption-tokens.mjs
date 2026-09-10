@@ -89,6 +89,14 @@ const [sizeMin, sizeViewportFactor, sizeMax] = clampRange(base['--cap-size']);
 const f = (n) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 const swiftColor = (c) => `Color(.sRGB, red: ${f(c.r)}, green: ${f(c.g)}, blue: ${f(c.b)}, opacity: ${f(c.a)})`;
 
+/** The chrome palette — Motif 5, The Ground. Same values, same one accent. */
+const PALETTE = [
+  ['ground', '--ground'], ['raise', '--raise'], ['line', '--line'], ['lineStrong', '--line-strong'],
+  ['ink', '--ink'], ['dim', '--dim'], ['faint', '--faint'],
+  ['ember', '--ember'], ['emberDim', '--ember-dim'],
+  ['ok', '--ok'], ['warn', '--warn'], ['bad', '--bad'],
+];
+
 function swiftPreset(name, p) {
   const sh = shadows(p['--cap-shadow']).map((s) => `            .init(x: ${f(s.x)}, y: ${f(s.y)}, radius: ${f(s.blur)}, color: ${swiftColor(s.color)}),`);
   const back = color(p['--cap-backdrop']);
@@ -128,6 +136,13 @@ enum CaptionTokens {
     /// Vertical centre of the caption, as a fraction of the screen from the top.
     static let centreFraction: CGFloat = ${f(num(base['--cap-bottom']) / 100)}
     static let fade: Double = ${f(num(base['--cap-fade']) / 1000)}
+
+    /// Motif 5, The Ground: near-black, a narrow grey ramp, and ONE accent whose only
+    /// meaning is settled. If ember appears more than a few times on a screen, it is
+    /// being misused.
+    enum Palette {
+${PALETTE.map(([name, token]) => `        static let ${name} = ${swiftColor(color(base[token]))}`).join('\n')}
+    }
 
     struct Shadow: Equatable, Sendable {
         var x: CGFloat

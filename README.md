@@ -109,6 +109,55 @@ but headphones remove the problem rather than mitigating it.
 
 ---
 
+## The Mac app
+
+The website can only hear what a browser tab will hand it, and it can only draw
+captions inside a page. The Mac app hears the meeting through ScreenCaptureKit and
+draws the subtitles **directly over it** — no window, no panel, no box — which is the
+thing a web page fundamentally cannot do.
+
+It lives in the menu bar. There is no Dock icon and no window to keep open.
+
+```bash
+pnpm --filter @excerpt/core build:engine   # the extraction engine, for JavaScriptCore
+pnpm --filter @excerpt/web  build:notes    # the notes editor, for the app's webview
+cd apps/mac && ./build.sh
+open build/Excerpt.app
+```
+
+First launch walks through four steps — see it, let it listen, get ready, done —
+and asks for three separate permissions, because macOS treats microphone, screen
+recording and speech recognition as three separate grants. Screen recording only
+takes effect after the app is restarted; the setup says so rather than leaving you
+looking at a tick box that appears to do nothing.
+
+**Same engine, not a port.** What counts as a decision, what may be called an action
+assigned to you, and where a subtitle breaks are compiled from `packages/core` into a
+bundle the app runs in JavaScriptCore. `fixtures/parity.json` is checked by vitest
+against the TypeScript and by the Swift tests against that bundle. The notes editor is
+literally the web app, in a `WKWebView`, reading the Mac's own files.
+
+### The app is unsigned
+
+Excerpt has no Apple Developer certificate — it costs money every year, and a free
+tool that costs nothing to run should not have a subscription hiding inside it. What
+that means for you:
+
+- **Gatekeeper will refuse it on first open.** Right-click the app → **Open** →
+  **Open** again. macOS then remembers it. Double-clicking gives you a dialog with no
+  Open button at all, which looks like the app is broken; it is not.
+- If macOS says the app "is damaged and can't be opened", it was quarantined on
+  download. Clear the flag: `xattr -dr com.apple.quarantine "Excerpt.app"`.
+- Build it yourself and none of this applies — a locally built app is not quarantined.
+
+`build.sh` signs with a **locally created** self-signed identity, which does nothing
+for Gatekeeper and is not an Apple certificate. Its only job is keeping the app's code
+identity stable between builds: permissions are keyed to identity, and ad-hoc signing
+(`codesign -s -`) produces a new one every time, so every rebuild silently drops all
+three grants. Measured, both ways. `tools/dev-identity.sh` creates one.
+
+---
+
 ## Requirements
 
 **Live capture:** macOS, Chrome 139+ (tested on 152 and 153). Chrome-only by
@@ -117,6 +166,9 @@ necessity — `SpeechRecognition.start(audioTrack)` (Chrome 135) and `processLoc
 `getDisplayMedia` entirely.
 
 **The demo** runs in any modern browser.
+
+**The Mac app:** macOS 26 or later, Apple silicon. It uses `SpeechAnalyzer` and
+`SpeechTranscriber`, which do not exist on earlier versions.
 
 On-device speech needs Chrome's SODA language pack, which arrives with Live Caption
 (`chrome://settings/captions`). If it is unavailable, Excerpt **stops and asks**
@@ -142,11 +194,18 @@ every install exits 1, including on CI.
 
 ```
 apps/web        product + competition demo
-packages/core   capture adapters, extraction, preferences, export
+apps/mac        the macOS app (SwiftPM; see apps/mac/SPIKE-RESULTS.md)
+packages/core   capture adapters, extraction, scoring, export, the shared engine
 packages/ui     Strip, Frame, design tokens
 packages/types  shared schemas
 spike/          Day 0 feasibility harness (see spike/SPIKE-RESULTS.md)
 ```
+
+Three files in `apps/mac` are generated and must never be edited by hand:
+`Resources/excerpt-engine.js` and `Resources/notes/` are build outputs of the web
+packages, and `Captions/CaptionTokens.generated.swift` comes from
+`packages/ui/src/tokens.css` — so a caption preset means one thing on both surfaces.
+`build.sh` refuses to assemble a bundle if any of them is missing or stale.
 
 `spike/` is kept deliberately. It is the throwaway harness that proved the
 architecture before anything was built on it, and it records what was measured
