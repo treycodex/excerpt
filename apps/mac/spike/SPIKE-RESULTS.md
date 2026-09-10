@@ -8,17 +8,18 @@ Measured against real audio, not assumed.
 | # | Gate | Result | Evidence |
 |---|---|---|---|
 | 1 | Speech model provisioning | **pass** | en-US supported, installed, reserved; `AssetInventory.status` = installed |
-| 2 | System audio capture | **pass** | 84.5s of sound, 48000Hz ×1, 4754 buffers |
+| 2 | System audio capture | **pass** | 191.5s of sound, 48000Hz ×1, 11441 buffers |
 | 3 | Microphone capture | **pass** | separable from system audio, own transcript |
 | 4 | Three authorizations | **pass** | microphone, screen recording, speech — each independent |
 | 5 | Two transcribers | **pass** | system 313 volatile / 31 finalized · mic 148 / 23, concurrent, on-device |
 | 6 | Volatile → finalized | **pass** | 313 volatile superseded by 31 finalized across 23 settle calls |
-| 7 | Continuous speech 3min+ | outstanding | longest run so far ~95s |
+| 7 | Continuous speech 3min+ | **pass** | 259s continuous; 1393 volatile settled into 98 finalized across 63 settle calls, still producing at the end |
 | 8 | Shared timeline | **pass** | system 92.0–95.1s · mic 93.1–94.9s · monotonic |
 | 9 | Overlay over fullscreen | **pass** | transparent, no panel, readable over fullscreen — **requires accessory mode** |
 | 10 | Click-through | **pass** | `ignoresMouseEvents`; clicks reach the app underneath |
-| 11 | Multi-monitor + Spaces | not started | |
-| 12 | Interrupt / sleep–wake | partial | tail promotion on stop implemented; interruption untested |
+| 11 | Spaces | **pass** | overlay renders over a fullscreen app, which is a separate Space (evidence: gate 9) |
+| 11b | Multiple displays | **untested** | no second display available. Not claimed either way. |
+| 12 | Interrupt / sleep–wake | **pass (interruption)** | stream killed mid-capture with 97 finalized; 97 retained and the failure was reported. Sleep/wake untested. |
 | 13 | Stop is reliable | **pass** | stream and microphone released every run |
 | 14 | Unsigned rebuild | **answered** | ad-hoc: grants lost. Self-signed: grants survive. See below. |
 
@@ -89,6 +90,11 @@ Window level also matters: `maximum` rather than `screenSaver`.
 This is the product's intended architecture rather than a workaround — Excerpt is a
 menu-bar app — but it means the overlay and the Dock icon are mutually exclusive.
 
+**10. Gate 13 must be judged on resources held, not on a state transition.**
+After an interruption the engine is already stopped, so a `running → stopped` check
+reports a false failure for a stop that worked correctly. Judged on whether any
+stream or microphone is still held.
+
 ## Known rough edges (Stage 1 work, not gate blockers)
 
 - Overlapping promotions produce near-duplicate segments
@@ -97,7 +103,14 @@ menu-bar app — but it means the overlay and the Dock icon are mutually exclusi
 - Some finalized segments are punctuation only (`"."`, `".."`). Needs a minimum
   content filter before they reach a transcript.
 
-## Still owed before the gate is fully passed
+## Still owed
 
-Gate 7 (3+ minutes continuous), gates 9–11 (the overlay), gate 12 (interruption and
-sleep/wake), and the offline check for gate 1.
+- **Multiple displays (11b).** No second display available on this machine, so it is
+  recorded as untested rather than passed. A user with two monitors is exactly a user
+  in a meeting, so this needs a real check before the overlay is called done.
+- **Sleep/wake (12).** Interruption is proven; suspend and resume is not.
+- **Offline model check (1).** The model is installed and reserved, but "works
+  offline afterwards" has not been verified with networking disabled.
+
+Nothing here blocks Stage 1. All three are honest gaps rather than risks to the
+architecture.

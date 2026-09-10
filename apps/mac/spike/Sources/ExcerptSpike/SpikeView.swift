@@ -23,6 +23,12 @@ struct SpikeView: View {
         }
         .background(Color(red: 0.04, green: 0.04, blue: 0.04))
         .preferredColorScheme(.dark)
+        .onAppear {
+            // The menu bar is the only way back once there is no Dock icon.
+            OverlayBridge.shared.toggle = {
+                if session.overlay.visible { session.overlay.hide() } else { showOverlay() }
+            }
+        }
         .task {
             // --auto runs the gates that need no human in the loop, so a run can be
             // driven and read from a terminal. Permission gates still need clicks.
@@ -87,6 +93,13 @@ struct SpikeView: View {
                     Button("2·3·5·6·8 · Start capture") { Task { await session.start() } }
                 }
                 Button("Export results") { export() }
+            }
+            HStack(spacing: 8) {
+                Button("12 · Simulate interruption") { Task { await session.simulateInterruption() } }
+                    .disabled(!session.running)
+                Button("1 · Re-check offline") { Task { await runModel() } }
+                Button("11 · overlay followed displays") { board.set("11", .pass, "moved across displays and Spaces") }
+                Button("11 · FAILED to follow") { board.set("11", .fail, "did not follow displays or Spaces") }
             }
             HStack(spacing: 8) {
                 if session.overlay.visible {

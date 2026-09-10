@@ -28,6 +28,12 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     private var onBuffer: ((SourceKind, AVAudioPCMBuffer, CMTime) -> Void)?
     private var onStreamError: ((String) -> Void)?
 
+    /// Whether any capture resource is still held. Gate 13 must be judged on this,
+    /// not on observing a running→stopped transition: after an interruption the
+    /// engine is already stopped, and a transition-based check reports a false
+    /// failure for a stop that worked correctly.
+    var holdsResources: Bool { stream != nil }
+
     /// True between a successful start and a completed stop. Gate 13 depends on this
     /// being honest: Stop must always release the microphone and the stream.
     private(set) var running = false
@@ -71,6 +77,16 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
 
         self.stream = stream
         running = true
+    }
+
+    /// Simulates an interruption: the stream dies without going through stop().
+    /// Gate 12 asks whether transcript captured so far survives that.
+    func simulateInterruption() async {
+        guard let stream else { return }
+        self.stream = nil
+        running = false
+        try? await stream.stopCapture()
+        onStreamError?("stream interrupted (simulated)")
     }
 
     /// Gate 13: always ends capture and releases every resource, even if the stream

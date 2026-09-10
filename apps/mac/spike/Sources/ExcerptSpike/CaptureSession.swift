@@ -116,20 +116,38 @@ final class CaptureSession: ObservableObject {
         if let e = m.error { board.set("5", .fail, "mic transcriber: \(e)") }
     }
 
+    /// Gate 12, non-negotiable: an interruption may stop capture, but it must not
+    /// silently lose what was already transcribed.
+    func simulateInterruption() async {
+        let before = (speech[.system]?.finalizedResults ?? 0) + (speech[.microphone]?.finalizedResults ?? 0)
+        board.note("Simulating interruption with \(before) finalized results captured…")
+
+        await engine.simulateInterruption()
+        try? await Task.sleep(for: .seconds(1))
+        await refresh()
+
+        let after = (speech[.system]?.finalizedResults ?? 0) + (speech[.microphone]?.finalizedResults ?? 0)
+        let kept = after >= before
+        board.set("12", kept ? .pass : .fail,
+                  kept ? "interrupted with \(before) finalized; \(after) retained, capture reported the failure"
+                       : "transcript lost: \(before) → \(after)")
+        board.note(kept ? "  transcript retained (\(after))" : "  TRANSCRIPT LOST", kind: kept ? .good : .bad)
+    }
+
     func stop() async {
         guard running else { return }
         ticker?.invalidate(); ticker = nil
 
-        let before = engine.running
         await engine.stop()
         for (_, t) in transcribers { await t.stop() }
         await refresh()
         running = false
 
-        // Gate 13 is non-negotiable: Stop must always end capture.
-        let released = before && !engine.running
+        // Gate 13 is non-negotiable: after Stop, nothing may still be held — whether
+        // or not capture was already down from an interruption.
+        let released = !engine.holdsResources && !engine.running
         board.set("13", released ? .pass : .fail,
-                  released ? "stream and microphone released" : "engine still reports running after stop")
+                  released ? "no stream or microphone held after stop" : "capture resources still held after stop")
 
         let s = speech[.system] ?? TranscriptStats()
         let m = speech[.microphone] ?? TranscriptStats()
