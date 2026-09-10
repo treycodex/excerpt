@@ -7,6 +7,8 @@ import { DEMO_SCRIPT } from '../demo/script';
 import { CallFrame, Captions } from './CallFrame';
 import type { Spoken } from './CallFrame';
 import { openCaptionWindow, supportsPiP } from '../pip';
+import { createAmbience } from '../ambience';
+import type { Ambience } from '../ambience';
 
 const LINGER = 3200;
 
@@ -19,13 +21,20 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
   const [playing, setPlaying] = useState(true);
   const [pip, setPip] = useState<Document | null>(null);
   const [contrast, setContrast] = useState(false);
+  const [sound, setSound] = useState(false);
+  const ambience = useRef<Ambience | null>(null);
   const collected = useRef<TranscriptEvent[]>([]);
   const base = useRef({ at: performance.now(), offset: 0 });
 
   const finish = useCallback(() => {
+    ambience.current?.stop();
+    ambience.current = null;
     void adapter.stop();
     onEnd(adapter.finalsUpTo(adapter.duration));
   }, [adapter, onEnd]);
+
+  // The bed never outlives the session, and never starts without a click.
+  useEffect(() => () => { ambience.current?.stop(); ambience.current = null; }, []);
 
   useEffect(() => {
     const off = adapter.onEvent((e) => {
@@ -97,6 +106,18 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
         <div className="transport-strip">
           <Strip duration={duration} position={elapsed} onScrub={seek} />
         </div>
+        <button
+          className="sound"
+          aria-pressed={sound}
+          onClick={async () => {
+            if (sound) { ambience.current?.stop(); ambience.current = null; setSound(false); return; }
+            ambience.current = createAmbience();
+            await ambience.current.start();
+            setSound(true);
+          }}
+        >
+          {sound ? 'Sound off' : 'Sound on'}
+        </button>
         <button
           className="contrast"
           aria-pressed={contrast}
