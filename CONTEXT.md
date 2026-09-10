@@ -225,9 +225,10 @@ colour, shadow, wrapping rule and fade.
 **Web:** all nine planned phases plus the polish pass built. The polish pass is local
 and has not been deployed.
 
-**macOS: Stage 1 complete and running.** One meeting journey end to end — capture,
-two transcribers, one clock, journal, assembly, extraction through the shared engine,
-notes in a WKWebView. 82 TypeScript tests, 33 Swift.
+**macOS: Stages 1 and 2 complete and running.** One meeting journey end to end —
+capture, two transcribers, one clock, journal, assembly, extraction through the shared
+engine, notes in a WKWebView — plus the guided setup, the menu bar, and the unsigned
+distribution notes. 82 TypeScript tests, 43 Swift.
 
 ### Owed, in order — start here
 1. **`assigned to you` from a real human voice.** Still the one unproven claim, on
@@ -242,8 +243,10 @@ notes in a WKWebView. 82 TypeScript tests, 33 Swift.
    load, and the overlay during a real call are all unmeasured at length.
 3. **The overlay over an actual fullscreen meeting.** Judged only against this desktop.
 4. Still untested from Stage 0: multiple displays, sleep/wake, gate 1's offline check.
-5. Stage 2 — guided setup (preview → permissions → model → ready), and the unsigned
-   distribution notes.
+5. **The setup flow has never been walked by a person**, only jumped through with
+   `--setup-step` on a Mac where all three permissions were already granted. The
+   denied path, the request prompts and the relaunch notice are unit-tested but
+   unseen. `defaults delete com.excerpt.app setup.completed` makes it first-run again.
 
 Recognition text is imperfect and expected to be: `"get it over by."` lost its
 Thursday in one run and kept it in another. Extraction is deliberately conservative
