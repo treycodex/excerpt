@@ -336,6 +336,9 @@ main:focus { outline: none; }
   font: var(--label); letter-spacing: var(--label-track); text-transform: uppercase;
 }
 .nav .spacer { flex: 1; }
+/* Inside Excerpt's own window the title bar is transparent and sits over the page,
+   so the nav has to start below the traffic lights rather than under them. */
+[data-host="mac"] .nav { padding-top: 40px; }
 .nav a { color: var(--faint); text-decoration: none; transition: color .15s; }
 .nav a:hover, .nav a.on { color: var(--ink); }
 .nav a:first-child { color: var(--ink); letter-spacing: 0.3em; }

@@ -15,11 +15,16 @@ final class GateSession: ObservableObject {
         .microphone: SourceTranscriber(kind: .microphone),
     ]
     private var ticker: Timer?
-    let overlay = OverlayController()
+    /// The app's overlay, not one of its own. Two controllers would each believe they
+    /// owned the window, and the menu bar's checkmark would describe the wrong one.
+    let overlay: OverlayController
     private var startedAt: Date?
     private unowned let board: GateBoard
 
-    init(board: GateBoard) { self.board = board }
+    init(board: GateBoard, overlay: OverlayController) {
+        self.board = board
+        self.overlay = overlay
+    }
 
     func start() async {
         guard !running else { return }

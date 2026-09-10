@@ -1,14 +1,28 @@
 import AppKit
 import SwiftUI
 
+/// The whole of Excerpt's chrome.
+///
+/// An accessory app has no Dock icon, so this menu is the only way in: it has to
+/// answer where you are, what you can do, and how to get out, on its own. Everything
+/// here is one click from the front, and the things a person does every meeting come
+/// before the things they set once.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var window: NSWindow?
+
     private var statusItem: NSStatusItem?
-    private var showCaptionsItem: NSMenuItem?
+    private var statusLine: NSMenuItem?
+    private var listenItem: NSMenuItem?
+    private var captionsItem: NSMenuItem?
     private var lookMenu: NSMenu?
 
-    private var overlay: OverlayController? { OverlayBridge.shared.controller }
+    private var engine: CoreEngine?
+    private var store: MeetingStore?
+    private var preferences = PreferencesStore()
+    private var overlay = OverlayController()
+    private var session: MeetingSession?
+    private var notes: NotesWindowController?
+    private var gateWindow: NSWindow?
 
     /// Before the first frame, not after. Demoting to accessory in
     /// applicationDidFinishLaunching puts a Dock icon on screen for a moment and then
@@ -19,17 +33,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Accessory, not regular. A regular app owns a Space and is switched
-        // away from when another app goes fullscreen, so its overlay disappears exactly
-        // when a meeting needs it. Measured, and it matches the product's menu-bar
-        // architecture anyway.
-        //
-        // The cost is the Dock icon: an accessory app has none, so the menu bar is the
-        // only way back to the app. That is not a workaround, it is how the product is
-        // meant to work — which is why the menu below has to answer "where am I, what
-        // can I do, how do I get out" on its own.
+        OverlayBridge.shared.controller = overlay
         makeStatusItem()
-        makeWindow()
+
+        do {
+            let store = try MeetingStore()
+            let engine = try CoreEngine()
+            self.store = store
+            self.engine = engine
+            session = MeetingSession(engine: engine, store: store, overlay: overlay)
+            notes = NotesWindowController(bridge: NotesBridge(store: store, preferences: preferences))
+            offerRecovery(store: store)
+        } catch {
+            // Without the engine there are no notes and without the folder there is
+            // nowhere to put them. Say so plainly at launch rather than at Stop, when
+            // a real meeting's transcript is riding on it.
+            presentStartupFailure(error)
+        }
+
+        // Launch flags, for driving the app from a terminal during development. They
+        // do nothing a menu item does not; they just do it without a hand on a mouse.
+        if CommandLine.arguments.contains("--gates") { showGateWindow() }
+        if let index = CommandLine.arguments.firstIndex(of: "--notes") {
+            let id = CommandLine.arguments.dropFirst(index + 1).first
+            notes?.show(meeting: id?.hasPrefix("--") == false ? id : nil)
+        }
+        if CommandLine.arguments.contains("--captions") { overlay.show() }
+        refresh()
     }
 
     // MARK: - Menu bar
@@ -51,15 +81,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
-        // Show captions is the one thing this app does; it goes first, with a shortcut,
-        // and it carries its own state as a checkmark rather than a changing title.
+        // Status first, because "is it working?" is the question a person actually
+        // arrives with. It is a label, not a control — feedback, not a thing to click.
+        let status = NSMenuItem(title: "Not listening", action: nil, keyEquivalent: "")
+        status.isEnabled = false
+        menu.addItem(status)
+        statusLine = status
+
+        menu.addItem(.separator())
+
+        let listen = NSMenuItem(title: "Start listening", action: #selector(toggleListening), keyEquivalent: "r")
+        listen.keyEquivalentModifierMask = [.command, .shift]
+        listen.target = self
+        menu.addItem(listen)
+        listenItem = listen
+
         let captions = NSMenuItem(title: "Show captions over my meeting",
                                   action: #selector(toggleOverlay), keyEquivalent: "c")
         captions.keyEquivalentModifierMask = [.command, .shift]
         captions.target = self
-        captions.image = Self.symbol("captions.bubble", "Show captions")
         menu.addItem(captions)
-        showCaptionsItem = captions
+        captionsItem = captions
 
         // The look, one level deeper: the common path is on, the choice is behind it.
         let look = NSMenuItem(title: "Caption look", action: nil, keyEquivalent: "")
@@ -84,13 +126,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        // With no Dock icon this is the only way back into the app, so it is named for
-        // where it goes rather than for what it does to a window.
-        let gate = NSMenuItem(title: "Open Excerpt", action: #selector(showWindow), keyEquivalent: "0")
-        gate.keyEquivalentModifierMask = [.command]
-        gate.target = self
-        gate.image = Self.symbol("macwindow", "Open Excerpt")
-        menu.addItem(gate)
+        let openNotes = NSMenuItem(title: "Open notes", action: #selector(openNotes), keyEquivalent: "n")
+        openNotes.keyEquivalentModifierMask = [.command]
+        openNotes.target = self
+        openNotes.image = Self.symbol("doc.text", "Open notes")
+        menu.addItem(openNotes)
+
+        // "Nothing leaves this Mac" is a claim. This is how a person checks it.
+        let reveal = NSMenuItem(title: "Show where notes are kept", action: #selector(revealFolder), keyEquivalent: "")
+        reveal.target = self
+        reveal.image = Self.symbol("folder", "Show where notes are kept")
+        menu.addItem(reveal)
+
+        menu.addItem(.separator())
+
+        let gates = NSMenuItem(title: "Permissions and diagnostics…", action: #selector(showGateWindow), keyEquivalent: "")
+        gates.target = self
+        gates.image = Self.symbol("stethoscope", "Permissions and diagnostics")
+        menu.addItem(gates)
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Excerpt",
@@ -114,67 +167,204 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Actions
 
-    @objc private func showWindow() {
-        window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+    @objc private func toggleListening() {
+        guard let session else { return }
+        Task {
+            if session.state.isActive {
+                await session.stop()
+                refresh()
+                // The meeting is the point, so it opens itself. Nothing is lost if the
+                // user closes it — the notes are already on disk.
+                if let saved = session.lastSaved, !saved.items.isEmpty {
+                    notes?.navigate(toMeeting: saved.id)
+                }
+            } else {
+                guard await ensurePermissions() else { return }
+                if !overlay.visible { overlay.show() }
+                await session.start()
+                refresh()
+                suggestHeadphonesIfNeeded()
+            }
+        }
+    }
+
+    /// Asks for what is missing, one grant at a time, and explains the consequence of
+    /// a refusal rather than failing at the first buffer.
+    private func ensurePermissions() async -> Bool {
+        for permission in Permission.allCases {
+            var state = await Permissions.state(of: permission)
+            if state == .undetermined { state = await Permissions.request(permission) }
+
+            if permission == .screenRecording, state != .granted {
+                // Measured in Stage 0: the grant only takes effect after a relaunch,
+                // and an app that does not say so looks broken to someone who has just
+                // ticked the box.
+                _ = await Permissions.request(.screenRecording)
+                present(
+                    title: "Excerpt needs permission to hear your meeting",
+                    body: "Allow Excerpt under Screen & System Audio Recording, then quit and open Excerpt again. macOS only applies this one after a restart of the app.",
+                    style: .warning
+                )
+                return false
+            }
+
+            if state != .granted {
+                present(
+                    title: "Excerpt needs \(permission.rawValue.lowercased()) access",
+                    body: consequence(of: permission),
+                    style: .warning
+                )
+                return false
+            }
+        }
+        return true
+    }
+
+    private func consequence(of permission: Permission) -> String {
+        switch permission {
+        case .microphone:
+            "Without it, Excerpt can hear the other people in the meeting but not you — so nothing will ever be marked as yours. Turn it on in System Settings › Privacy & Security › Microphone."
+        case .screenRecording:
+            "This is how macOS lets an app hear the meeting's audio. Nothing about your screen is recorded or saved. Turn it on in System Settings › Privacy & Security › Screen & System Audio Recording."
+        case .speech:
+            "Excerpt turns speech into text on this Mac, and macOS asks permission for that even though nothing is uploaded. Turn it on in System Settings › Privacy & Security › Speech Recognition."
+        }
+    }
+
+    private func suggestHeadphonesIfNeeded() {
+        guard let session, session.shouldSuggestHeadphones else { return }
+        present(
+            title: "Your microphone is picking up the meeting",
+            body: "Excerpt is hearing the same words twice, which makes it harder to tell who said what. Headphones fix it completely.",
+            style: .informational
+        )
     }
 
     @objc private func toggleOverlay() {
-        overlay?.toggle()
-        refreshStatusItem()
+        overlay.toggle()
+        refresh()
+    }
+
+    @objc private func openNotes() {
+        notes?.show()
+    }
+
+    @objc private func revealFolder() {
+        guard let folder = store?.folder else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folder.path(percentEncoded: false))
+    }
+
+    @objc private func showGateWindow() {
+        if gateWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Excerpt — permissions and diagnostics"
+            window.center()
+            window.contentView = NSHostingView(rootView: GateView())
+            window.isReleasedWhenClosed = false
+            gateWindow = window
+        }
+        gateWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func choosePreset(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let preset = CaptionPreset(rawValue: raw) else { return }
-        overlay?.setPreset(preset)
+        overlay.setPreset(preset)
     }
 
     @objc private func chooseSize(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let size = CaptionSize(rawValue: raw) else { return }
-        overlay?.setSize(size)
+        overlay.setSize(size)
     }
 
     @objc private func choosePosition(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let position = CaptionPosition(rawValue: raw) else { return }
-        overlay?.setPosition(position)
+        overlay.setPosition(position)
+    }
+
+    // MARK: - Recovery
+
+    /// A meeting whose journal outlived the app. Offered, never restored silently — a
+    /// transcript appearing on its own is its own kind of surprise.
+    private func offerRecovery(store: MeetingStore) {
+        let interrupted = store.recoverable()
+        guard !interrupted.isEmpty, let session else { return }
+
+        let alert = NSAlert()
+        alert.messageText = interrupted.count == 1
+            ? "A meeting ended unexpectedly"
+            : "\(interrupted.count) meetings ended unexpectedly"
+        alert.informativeText = "Excerpt kept what it had already heard. Would you like the notes from it?"
+        alert.addButton(withTitle: "Recover")
+        alert.addButton(withTitle: "Discard")
+        alert.alertStyle = .informational
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            for id in interrupted { store.discardJournal(id: id) }
+            return
+        }
+        var recovered: Meeting?
+        for id in interrupted { recovered = session.recover(id: id) ?? recovered }
+        if let recovered { notes?.show(meeting: recovered.id) }
     }
 
     // MARK: - State
 
-    /// The icon says whether captions are on, so the answer is visible without opening
-    /// anything — the menu bar is the whole of this app's chrome.
-    private func refreshStatusItem() {
-        let on = overlay?.visible ?? false
-        statusItem?.button?.image = Self.symbol(on ? "captions.bubble.fill" : "captions.bubble", "Excerpt")
-        showCaptionsItem?.state = on ? .on : .off
+    /// Everything the menu shows, recomputed from the session rather than tracked
+    /// alongside it. There is no state here that can disagree with what is happening.
+    private func refresh() {
+        let listening = session?.state.isActive ?? false
+        let captionsOn = overlay.visible
+
+        statusItem?.button?.image = Self.symbol(
+            listening ? "captions.bubble.fill" : "captions.bubble", "Excerpt")
+        statusLine?.title = session?.status ?? "Not listening"
+        listenItem?.title = listening ? "Stop listening" : "Start listening"
+        listenItem?.image = Self.symbol(listening ? "stop.circle" : "record.circle",
+                                        listening ? "Stop listening" : "Start listening")
+        captionsItem?.state = captionsOn ? .on : .off
     }
 
-    private func makeWindow() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
+    private func present(title: String, body: String, style: NSAlert.Style) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = body
+        alert.alertStyle = style
+        alert.runModal()
+    }
+
+    private func presentStartupFailure(_ error: Error) {
+        present(
+            title: "Excerpt could not start",
+            body: error.localizedDescription,
+            style: .critical
         )
-        window.title = "Excerpt — Stage 0 gate"
-        window.center()
-        window.contentView = NSHostingView(rootView: GateView())
-        window.isReleasedWhenClosed = false      // reopen from the menu bar
-        window.makeKeyAndOrderFront(nil)
-        self.window = window
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Quitting mid-meeting must not lose the meeting. The journal already holds
+    /// every settled line, so the worst case is a recovery prompt next launch — but
+    /// stopping cleanly turns it into a saved meeting instead.
+    func applicationWillTerminate(_ notification: Notification) {
+        guard let session, session.state.isActive else { return }
+        let finished = DispatchSemaphore(value: 0)
+        Task { await session.stop(); finished.signal() }
+        _ = finished.wait(timeout: .now() + 5)
+    }
 }
 
-@MainActor
 extension AppDelegate: NSMenuDelegate {
-    /// Marks are set as the menu opens rather than kept in sync by hand. There is no
-    /// window in which the menu can be showing something that is no longer true.
+    /// Marks and titles are set as the menu opens. There is no window in which the
+    /// menu can be showing something that is no longer true.
     func menuNeedsUpdate(_ menu: NSMenu) {
-        refreshStatusItem()
-        guard let overlay, menu === statusItem?.menu || menu === lookMenu else { return }
+        refresh()
+        guard menu === statusItem?.menu || menu === lookMenu else { return }
 
         for item in lookMenu?.items ?? [] {
             if let raw = item.representedObject as? String {
@@ -188,9 +378,7 @@ extension AppDelegate: NSMenuDelegate {
     }
 }
 
-/// Lets the menu bar reach the overlay owned by the SwiftUI view tree. One reference
-/// rather than a bag of closures: the menu needs to *read* state to draw its marks,
-/// not only to fire actions.
+/// Lets the gate window reach the overlay the app owns.
 @MainActor
 final class OverlayBridge {
     static let shared = OverlayBridge()

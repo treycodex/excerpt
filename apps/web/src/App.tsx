@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { applyPreferences, extractItems, loadMeeting, loadPreferences, saveMeeting } from '@excerpt/core';
+import { applyPreferences, extractItems, isNativeHost, loadMeeting, loadPreferences, saveMeeting } from '@excerpt/core';
 import type { Meeting, Preferences as Prefs, TranscriptEvent } from '@excerpt/types';
 import { Landing } from './views/Landing';
 import { Session } from './views/Session';
@@ -109,7 +109,11 @@ export function App() {
       <nav className="nav" aria-label="Main">
         <a href="#/" className={route.name === 'landing' ? 'on' : ''}>Excerpt</a>
         <span className="spacer" />
-        <a href="#/record" className={route.name === 'record' ? 'on' : ''}>Record</a>
+        {/* Inside the Mac app, recording is the menu bar's job — this screen asks the
+            browser to share a tab, which is not how the Mac hears a meeting. */}
+        {!isNativeHost() && (
+          <a href="#/record" className={route.name === 'record' ? 'on' : ''}>Record</a>
+        )}
         <a href="#/meetings" className={route.name === 'library' ? 'on' : ''}>Meetings</a>
         <a href="#/preferences" className={route.name === 'preferences' ? 'on' : ''}>Preferences</a>
         {/* Build stamp is a debugging aid, not something a visitor should see. */}

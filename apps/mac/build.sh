@@ -30,6 +30,15 @@ if [ ! -f Resources/excerpt-engine.js ]; then
 fi
 cp Resources/excerpt-engine.js "$APP/Contents/Resources/excerpt-engine.js"
 
+# The notes editor is the web app's own build output. Same reasoning as the engine:
+# a missing one means an app with no notes in it, so fail rather than ship it.
+if [ ! -f Resources/notes/index.html ]; then
+  echo "error: Resources/notes missing — run: pnpm --filter @excerpt/web build:notes"
+  exit 1
+fi
+rm -rf "$APP/Contents/Resources/notes"
+cp -R Resources/notes "$APP/Contents/Resources/notes"
+
 # TCC keys permissions to code identity. Ad-hoc signing (-s -) produces a new hash
 # every build, so macOS treats each build as a different app and drops every grant —
 # measured, not assumed: gate 14 saw microphone and speech fall back to undetermined

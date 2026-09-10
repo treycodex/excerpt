@@ -8,7 +8,10 @@ struct GateView: View {
     init() {
         let board = GateBoard()
         _board = StateObject(wrappedValue: board)
-        _session = StateObject(wrappedValue: GateSession(board: board))
+        _session = StateObject(wrappedValue: GateSession(
+            board: board,
+            overlay: OverlayBridge.shared.controller ?? OverlayController()
+        ))
     }
 
     var body: some View {
@@ -23,10 +26,6 @@ struct GateView: View {
         }
         .background(Color(red: 0.04, green: 0.04, blue: 0.04))
         .preferredColorScheme(.dark)
-        .onAppear {
-            // The menu bar is the only way back once there is no Dock icon.
-            OverlayBridge.shared.controller = session.overlay
-        }
         .task {
             // --overlay puts a caption on screen at launch, so the look can be judged
             // from a screenshot instead of from a description of it.

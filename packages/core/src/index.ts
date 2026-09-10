@@ -12,6 +12,8 @@ export {
   saveCaptureDraft, loadCaptureDraft, clearCaptureDraft,
 } from './store/meetings';
 export type { CaptureDraft } from './store/meetings';
+export { bridge, hasBridge, isNativeHost } from './store/bridge';
+export type { ExcerptBridge } from './store/bridge';
 export { toMarkdown } from './export/markdown';
 export {
   DEFAULT_PREFERENCES, applyPreferences, deriveBoosts, matchedBoosts, scoreItem,

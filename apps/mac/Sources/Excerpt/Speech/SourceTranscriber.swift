@@ -21,6 +21,14 @@ struct TranscriptStats: Sendable {
     var finalizedSamples: [String] = []
 }
 
+/// One settled span of speech, in this source's own local seconds. The meeting
+/// clock turns it into a position on the shared timeline.
+struct Segment: Sendable, Equatable {
+    var start: Double
+    var end: Double
+    var text: String
+}
+
 /// One SpeechAnalyzer + SpeechTranscriber for a single audio source.
 ///
 /// Deliberately NOT porting the web build's six-second chunking: that works around
@@ -63,7 +71,20 @@ actor SourceTranscriber {
     private var sourceOffset: CMTime = .zero
     private var haveOffset = false
 
-    init(kind: SourceKind) { self.kind = kind }
+    /// Settled speech, in the order it settled. A stream rather than a callback so
+    /// the consumer sees promotions in order — with a callback plus a Task hop, two
+    /// promotions in the same run can arrive swapped, and a transcript that reorders
+    /// itself is worse than one that lags.
+    nonisolated let segments: AsyncStream<Segment>
+    private let emit: AsyncStream<Segment>.Continuation
+
+    /// Recently emitted segments, for the overlap check below.
+    private var recentlyEmitted: [Segment] = []
+
+    init(kind: SourceKind) {
+        self.kind = kind
+        (segments, emit) = AsyncStream<Segment>.makeStream()
+    }
 
     func statistics() -> TranscriptStats { stats }
 
@@ -124,13 +145,49 @@ actor SourceTranscriber {
         let settled = pending.filter { $0.end <= boundary + 0.001 }
         guard !settled.isEmpty else { return }
         pending.removeAll { $0.end <= boundary + 0.001 }
-        for item in settled where !item.text.isEmpty {
+        for item in settled.sorted(by: { $0.start < $1.start }) {
+            let segment = Segment(start: item.start, end: item.end, text: item.text)
+            guard Self.carriesContent(segment.text), !isRepeat(of: segment) else { continue }
+
+            recentlyEmitted.append(segment)
+            if recentlyEmitted.count > 4 { recentlyEmitted.removeFirst() }
+
             stats.finalizedResults += 1
-            stats.lastFinalized = item.text
+            stats.lastFinalized = segment.text
             if stats.finalizedSamples.count < 6 {
-                stats.finalizedSamples.append(String(format: "%.2f–%.2f “%@”", item.start, item.end, item.text.suffix(50).description))
+                stats.finalizedSamples.append(String(format: "%.2f–%.2f “%@”", segment.start, segment.end, segment.text.suffix(50).description))
             }
+            emit.yield(segment)
         }
+    }
+
+    /// Measured in Stage 0: overlapping promotions produce near-duplicate segments —
+    /// `4.02–8.38 "For his 1st act"` followed by `7.02–8.38 "For his 1st act."`. The
+    /// same words, settled twice, because two promotions covered overlapping audio.
+    /// Time alone cannot decide it and text alone cannot either; overlapping *and*
+    /// one text containing the other is what makes it a revision rather than a repeat
+    /// of a genuinely repeated phrase.
+    private func isRepeat(of segment: Segment) -> Bool {
+        let incoming = Self.normalized(segment.text)
+        guard !incoming.isEmpty else { return true }
+
+        return recentlyEmitted.contains { previous in
+            let overlap = min(previous.end, segment.end) - max(previous.start, segment.start)
+            guard overlap > 0 else { return false }
+            let existing = Self.normalized(previous.text)
+            return existing.contains(incoming) || incoming.contains(existing)
+        }
+    }
+
+    /// Measured in Stage 0: some settled segments are punctuation only — `"."`, `".."`.
+    /// A transcript row saying nothing is worse than no row.
+    private static func carriesContent(_ text: String) -> Bool {
+        text.contains { $0.isLetter || $0.isNumber }
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text.lowercased().filter { $0.isLetter || $0.isNumber || $0 == " " }
+            .trimmingCharacters(in: .whitespaces)
     }
 
     /// Finalize everything except a short trailing window.
@@ -267,6 +324,7 @@ actor SourceTranscriber {
 
         // Gate 12: the tail must not vanish just because the session ended.
         promote(settledBefore: .greatestFiniteMagnitude)
+        emit.finish()
 
         analyzer = nil
         transcriber = nil

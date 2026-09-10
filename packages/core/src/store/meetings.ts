@@ -1,6 +1,7 @@
 import { createStore, del, get, keys, set } from 'idb-keyval';
 import type { Meeting } from '@excerpt/types';
 import type { ProcessingMode, TranscriptEvent } from '@excerpt/types';
+import { bridge } from './bridge';
 
 /**
  * Local meeting library. IndexedDB, on this device, and nowhere else — there is no
@@ -24,14 +25,20 @@ export interface CaptureDraft {
  * forever, so every read degrades to an empty result instead.
  */
 export async function saveMeeting(m: Meeting): Promise<void> {
+  const host = bridge();
+  if (host) return host.saveMeeting(m);
   await set(m.id, m, store);
 }
 
 export async function loadMeeting(id: string): Promise<Meeting | undefined> {
+  const host = bridge();
+  if (host) { try { return await host.loadMeeting(id); } catch { return undefined; } }
   try { return await get<Meeting>(id, store); } catch { return undefined; }
 }
 
 export async function deleteMeeting(id: string): Promise<void> {
+  const host = bridge();
+  if (host) { try { await host.deleteMeeting(id); } catch { /* nothing to remove */ } return; }
   try { await del(id, store); } catch { /* nothing to remove */ }
 }
 
@@ -41,6 +48,13 @@ export async function listMeetings(): Promise<Meeting[]> {
 }
 
 export async function readMeetingLibrary(): Promise<{ meetings: Meeting[]; available: boolean }> {
+  const host = bridge();
+  if (host) {
+    // The Mac always has a folder. "Unavailable" there would mean a broken app, not
+    // a browser refusing storage, so it is an error to report rather than degrade to.
+    try { return { meetings: await host.listMeetings(), available: true }; }
+    catch { return { meetings: [], available: false }; }
+  }
   try {
     const ids = await keys(store);
     const all = await Promise.all(ids.map((k) => get<Meeting>(k as string, store)));

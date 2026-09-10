@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { applyPreferences, matchedBoosts, orderCategories, saveMeeting, toMarkdown } from '@excerpt/core';
+import { applyPreferences, bridge, matchedBoosts, orderCategories, saveMeeting, toMarkdown } from '@excerpt/core';
 import { Frame, Strip } from '@excerpt/ui';
 import type { StripMark } from '@excerpt/ui';
 import type { Category, Item, Meeting, Preferences as Prefs } from '@excerpt/types';
@@ -9,6 +9,20 @@ const clock = (ms: number) => {
   const t = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
+
+/**
+ * A timestamp, and whether it may be stated exactly.
+ *
+ * `tStart` is where the words actually are in the audio; macOS reports one for every
+ * result. `tArrived` is when the text turned up, which lags real speech by however
+ * long recognition took — the Web Speech API offers nothing better. The tilde is the
+ * difference, and dropping it where it is no longer true matters more than keeping
+ * one code path.
+ */
+const stamp = (source: { tStart?: number; tArrived: number }) =>
+  source.tStart !== undefined
+    ? clock(source.tStart * 1000)
+    : `~${clock(source.tArrived)}`;
 
 const HEADING: Record<Category, string> = {
   decision: 'Decisions',
@@ -124,10 +138,18 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
   };
 
   const download = () => {
-    const blob = new Blob([toMarkdown({ ...meeting, items: [...live, ...dismissed] })], { type: 'text/markdown' });
+    const markdown = toMarkdown({ ...meeting, items: [...live, ...dismissed] });
+    const filename = `${meeting.title.replace(/\W+/g, '-').toLowerCase()}.md`;
+
+    // Inside Excerpt's own window a browser download goes somewhere the user cannot
+    // find, which reads as the export having failed. The host opens a real save panel.
+    const host = bridge();
+    if (host) { void host.exportMarkdown(filename, markdown); return; }
+
+    const blob = new Blob([markdown], { type: 'text/markdown' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${meeting.title.replace(/\W+/g, '-').toLowerCase()}.md`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -167,8 +189,9 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
           onSelect={selectItem}
         />
         <p className="rubric">
-          Every note points at the passage it came from. Timings are approximate —
-          measured when text arrived, not from audio.
+          {meeting.events.some((e) => e.tStart !== undefined)
+            ? 'Every note points at the passage it came from, at the moment in the audio where it was said.'
+            : 'Every note points at the passage it came from. Timings are approximate — measured when text arrived, not from audio.'}
         </p>
 
       </header>
@@ -229,7 +252,7 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
             ref={(el) => { rows.current[e.id] = el; }}
             className={`line-row${focusedEvent === e.id ? ' focused' : ''}`}
           >
-            <span className="meta">{e.speakerLabel} ~{clock(e.tArrived)}</span>
+            <span className="meta">{e.speakerLabel} {stamp(e)}</span>
             <span>{e.text}</span>
           </div>
         ))}
@@ -288,7 +311,7 @@ function ItemCard({
         {item.evidence.map((e, i) => (
           <blockquote key={i}>
             {e.quote}
-            <cite>{e.speakerLabel} · ~{clock(e.tArrived)}</cite>
+            <cite>{e.speakerLabel} · {stamp(e)}</cite>
             <button className="view-passage" onClick={() => onEvidence(item.id, e.eventIds[0]!, e.tArrived)}>
               View passage
             </button>
@@ -300,7 +323,7 @@ function ItemCard({
             <div className="passage-label">Source passage</div>
             {context.map((event) => (
               <p key={event.id} className={item.evidence.some((e) => e.eventIds.includes(event.id)) ? 'source' : ''}>
-                <span>{event.speakerLabel} · ~{clock(event.tArrived)}</span>{event.text}
+                <span>{event.speakerLabel} · {stamp(event)}</span>{event.text}
               </p>
             ))}
             <button onClick={() => onFullTranscript(item.evidence[0]?.eventIds[0] ?? '')}>View in full transcript</button>

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import type { TranscriptEvent } from '@excerpt/types';
 import { extractItems } from './index';
+// Imported, not read from disk, so this file needs no Node types and the same
+// fixtures compile under the same tsconfig as everything else.
+import parity from '../../fixtures/parity.json';
 
 /**
  * The TypeScript half of the parity harness. The Swift half — `ParityTests` in
@@ -11,9 +12,7 @@ import { extractItems } from './index';
  * the Mac app disagree about what a decision is, which is the one class of bug
  * "one shared engine" exists to make impossible.
  */
-const fixtures = JSON.parse(
-  readFileSync(fileURLToPath(new URL('../../fixtures/parity.json', import.meta.url)), 'utf8'),
-) as {
+const fixtures = parity as unknown as {
   reference: string;
   cases: {
     name: string;

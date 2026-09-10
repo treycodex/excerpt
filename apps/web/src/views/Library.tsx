@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { readMeetingLibrary, deleteMeeting, saveMeeting } from '@excerpt/core';
+import { readMeetingLibrary, deleteMeeting, saveMeeting, isNativeHost } from '@excerpt/core';
 import type { Meeting } from '@excerpt/types';
 
 const when = (iso: string) =>
@@ -25,8 +25,9 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
         <div className="eyebrow">Excerpt</div>
         <h1>Your meetings</h1>
         <p className="rubric">
-          Stored on this device only. There is no account and no server, so these exist
-          in this browser and nowhere else.
+          {isNativeHost()
+            ? 'Kept on this Mac only. There is no account and no server — you can open the folder they live in from the Excerpt menu.'
+            : 'Stored on this device only. There is no account and no server, so these exist in this browser and nowhere else.'}
         </p>
       </header>
 
