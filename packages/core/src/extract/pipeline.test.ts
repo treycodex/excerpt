@@ -203,3 +203,25 @@ describe('a question is closed only by its own reply', () => {
     expect(items.some((i) => i.category === 'question')).toBe(false);
   });
 });
+
+describe('real-capture false positives', () => {
+  it('does not treat "I\'ll do my best" as an action', () => {
+    const items = extractItems([ev("In this video I'll do my best.", 'remote', 0)], REF);
+    expect(items.filter((i) => i.category === 'action')).toHaveLength(0);
+  });
+
+  it('still catches a concrete self-commitment', () => {
+    const items = extractItems([ev("I'll do the deck tonight.", 'you', 0)], REF);
+    expect(items[0]?.category).toBe('action');
+    expect(items[0]?.assignee).toBe('you');
+  });
+
+  it('trims a run-on title but keeps the full passage as evidence', () => {
+    const long = "I'll take the revised deck and get it over by Thursday and then I will chase media "
+      + 'about the out of home spend which has been dragging on for weeks now honestly';
+    const items = extractItems([ev(long, 'you', 0)], REF);
+    const item = items[0]!;
+    expect(item.title.split(/\s+/).length).toBeLessThanOrEqual(19);
+    expect(item.evidence[0]!.quote).toBe(long);
+  });
+});

@@ -20,6 +20,17 @@ const REQUEST = [
   /\b\w+\s+will\s+(take|own|send|handle|draft)\b/i,
 ];
 
+/**
+ * Commitment-shaped phrases that commit to nothing. "I'll do my best" matches a
+ * self-commitment pattern and is not an action item; it was the first false
+ * positive a real capture produced.
+ */
+const VAGUE = [
+  /\bi'?ll\s+(do|try|give)\s+(my\s+best|it\s+a\s+go|it\s+a\s+shot|it\s+justice|the\s+same)\b/i,
+  /\bi'?ll\s+(see|think about it|let you know|keep you posted|be honest|admit)\b/i,
+  /\bi'?ll\s+do\s+(my|our|his|her|their)\b/i,
+];
+
 export interface ActionMatch {
   assignee: Assignee;
   /** True when a request was aimed at somebody we cannot identify. */
@@ -38,6 +49,8 @@ export interface ActionMatch {
 export function classifyAction(sentence: Sentence): ActionMatch | null {
   const text = sentence.norm;
   const fromYou = sentence.event.role === 'you';
+
+  if (VAGUE.some((r) => r.test(text))) return null;
 
   if (SELF_COMMIT.some((r) => r.test(text))) {
     return fromYou

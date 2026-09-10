@@ -6,9 +6,27 @@ import { isOpenQuestion } from './questions';
 import { toSentences } from './sentences';
 import type { Sentence } from './types';
 
-/** Strip leading filler so an extractive title reads cleanly. Never rewrites words. */
+const MAX_TITLE_WORDS = 18;
+
+/**
+ * An extractive title: a verbatim SPAN of what was said, never a rewrite.
+ *
+ * Live speech arrives without reliable punctuation, so a "sentence" can be a
+ * 25-word run-on. When that happens the title is trimmed to the clause carrying
+ * the point and the full passage stays as evidence, which is where the detail
+ * belongs anyway.
+ */
 function title(text: string): string {
-  return text.replace(/^\s*(okay|ok|so|right|well|alright|and|but)[,.]?\s+/i, '').trim();
+  const stripped = text.replace(/^\s*(okay|ok|so|right|well|alright|and|but)[,.]?\s+/i, '').trim();
+  if (stripped.split(/\s+/).length <= MAX_TITLE_WORDS) return stripped;
+
+  // Prefer a clause boundary; otherwise cut on the word budget and mark the cut.
+  const clauses = stripped.split(/\s*(?:,|;|\s+but\s+|\s+and\s+|\s+because\s+|\s+so\s+)\s*/i);
+  const best = clauses.find((c) => c.split(/\s+/).length >= 4) ?? stripped;
+  const words = best.split(/\s+/);
+  return words.length <= MAX_TITLE_WORDS
+    ? best.trim()
+    : `${words.slice(0, MAX_TITLE_WORDS).join(' ')}…`;
 }
 
 function evidenceOf(s: Sentence) {
