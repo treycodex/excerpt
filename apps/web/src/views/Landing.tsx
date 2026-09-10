@@ -49,7 +49,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
 
       <section className="ed-notes">
         <div className="ed-notes-copy"><span className="ed-label">[ AFTER YOUR MEETING ]</span><h2>Meeting notes<br /><em>you can check.</em></h2><p>Review decisions, action items, and deadlines. Each note links to the passage in your transcript it came from.</p><p>Check what was said, edit any note, and export to Markdown.</p><button className="ed-link" onClick={onStart}>See how the notes work <span>↗</span></button></div>
-        <figure><img src="/media/notes.jpg" alt="Excerpt meeting notes with decisions and supporting transcript passages" loading="lazy" /><figcaption>02 — NOTES LINKED TO YOUR TRANSCRIPT</figcaption></figure>
+        <figure><img src="/media/notes.png" alt="Excerpt's notes workspace: a meeting's decisions, each with the passage it came from" loading="lazy" /><figcaption>02 — NOTES LINKED TO YOUR TRANSCRIPT</figcaption></figure>
       </section>
 
       <section className="ed-how" id="how-it-works"><div className="ed-section-line"><span className="ed-label">[ HOW IT WORKS ]</span><span className="ed-label">THREE SIMPLE STEPS</span></div><h2>Meeting notes in <em>three steps.</em></h2><div className="ed-steps">{STEPS.map(([n, title, body, meta]) => <article key={n}><span className="ed-step-number">{n}</span><h3>{title}</h3><p>{body}</p><span className="ed-label">{meta}</span></article>)}</div><div className="ed-how-footer"><span>Live capture works in Chrome on macOS. The demo works in any modern browser.</span><a className="ed-button" href="#/get-started">Start your first meeting <span>↗</span></a></div></section>

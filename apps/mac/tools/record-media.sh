@@ -17,12 +17,15 @@ MEDIA="../web/public/media"
 WORK=$(mktemp -d)
 WHAT=${1:-all}
 
-# The notes window is 1040x760 at the top-left of the main display. It is a real
-# browser window with no chrome to crop out, which is why the shots come from there
-# rather than from a browser with a toolbar in the way.
-WINDOW="0,258,1040,760"
-# The call frame inside it. Excludes the transport and the "scripted demo" chrome.
-FRAME="50,393,900,506"
+# Where the call frame sits inside the window, as fractions of it. Resolved against
+# the window's real position at record time rather than hardcoded: the window does not
+# always land in the same place, and a fixed rectangle records whatever is there.
+# The whole call frame, edge to edge. Cropping tighter was tried and does not work:
+# the subtitle sits at 84% of the frame by design, so any crop that ends above the
+# frame's own border leaves it touching the bottom edge and reading as clipped. The
+# frame's border and nameplates are what give it a floor — and the "SCRIPTED DEMO"
+# label staying in shot is the honest caption for a screenshot of a scripted demo.
+FRAME_LEFT=0.043; FRAME_TOP=0.172; FRAME_WIDTH=0.892; FRAME_HEIGHT=0.685
 
 [ -d "$APP" ] || { echo "build the app first: ./build.sh"; exit 1; }
 
@@ -47,14 +50,27 @@ launch() {
   park_pointer
 }
 
+# id x y w h for Excerpt's window — and it exits non-zero if Excerpt is not actually
+# the frontmost app, so a run can never quietly photograph something else.
+window_geometry() {
+  if ! swift tools/window-id.swift "Excerpt"; then
+    echo "error: Excerpt's window is not frontmost. Nothing was recorded." >&2
+    exit 1
+  fi
+}
+
 if [ "$WHAT" = all ] || [ "$WHAT" = hero ]; then
   echo "recording the demo session…"
   launch --notes-route "#/session"
+  read -r _ WX WY WW WH <<< "$(window_geometry)"
+  FRAME=$(awk -v x="$WX" -v y="$WY" -v w="$WW" -v h="$WH" \
+    -v l=$FRAME_LEFT -v t=$FRAME_TOP -v fw=$FRAME_WIDTH -v fh=$FRAME_HEIGHT \
+    'BEGIN { printf "%d,%d,%d,%d", x + w*l, y + h*t, w*fw, h*fh }')
   screencapture -v -V 26 -x -R "$FRAME" "$WORK/raw.mov"
 
   # Start on a frame that already has a subtitle in it: autoplay gets refused often
   # enough that the first frame has to work as a poster on its own.
-  V="crop=1800:870:0:75,fps=30"
+  V="fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2"
   ffmpeg -v error -ss 9.4 -t 16 -i "$WORK/raw.mov" -vf "$V" -an \
     -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 22 -preset slow \
     -movflags +faststart "$MEDIA/meeting.mp4" -y
@@ -65,19 +81,17 @@ if [ "$WHAT" = all ] || [ "$WHAT" = hero ]; then
 fi
 
 if [ "$WHAT" = all ] || [ "$WHAT" = stills ]; then
-  echo "shooting the notes view…"
+  echo "shooting the notes workspace…"
   # The demo meeting is built by running the shipped engine over the demo script,
   # so the notes in the screenshot are extracted rather than written by hand.
   node ../../packages/core/tools/seed-demo-meeting.mjs
   launch --notes m-1788931200000
-  screencapture -x -R "$WINDOW" -t png "$WORK/notes.png"
-  ffmpeg -v error -i "$WORK/notes.png" -vf "crop=2080:1360:0:80,scale=1200:-2" -q:v 4 \
-    "$MEDIA/notes.jpg" -y
 
-  echo "shooting the setup…"
-  launch --setup-step ready
-  screencapture -x -R "495,129,720,620" -t png "$WORK/setup.png"
-  ffmpeg -v error -i "$WORK/setup.png" -vf "scale=1100:-2" -q:v 4 "$MEDIA/menubar.jpg" -y
+  # Captured by window id rather than by rectangle: -l gives the window's own rounded
+  # corners with transparency behind them, so the shot drops onto the site's dark
+  # figure without a rectangle of desktop around it. PNG, because JPEG has no alpha.
+  read -r WINDOW_ID _ <<< "$(window_geometry)"
+  screencapture -x -o -l "$WINDOW_ID" -t png "$MEDIA/notes.png"
 fi
 
 pkill -f "MacOS/Excerpt" 2>/dev/null || true
