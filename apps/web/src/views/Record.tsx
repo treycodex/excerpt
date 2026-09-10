@@ -201,7 +201,19 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
           <div className="eyebrow">Excerpt</div>
           <h1>Couldn’t start</h1>
           <p className="rubric">{status.message}</p>
+          {/^That source could not be captured/.test(status.message) && (
+            <p className="rubric">
+              On macOS this usually means Chrome has not been granted screen recording.
+              Open <code>System Settings → Privacy &amp; Security → Screen &amp; System
+              Audio Recording</code>, enable Google Chrome, then <b>quit Chrome
+              completely and reopen it</b> — the permission does not apply until it
+              restarts.
+            </p>
+          )}
           <div className="actions">
+            <button className="primary-choice" onClick={() => { void begin(pendingMode, false); }}>
+              Try again
+            </button>
             <button onClick={() => setStatus({ kind: 'idle' })}>Back</button>
           </div>
         </header>
