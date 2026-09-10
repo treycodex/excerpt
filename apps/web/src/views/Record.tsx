@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   LiveCaptureAdapter, applyPreferences, extractItems,
   loadPreferences, saveMeeting, savePreferences,
 } from '@excerpt/core';
 import type { AdapterStatus, Meeting, ProcessingMode, TranscriptEvent } from '@excerpt/types';
+import type { StreamDiagnostics } from '@excerpt/core';
 import { Captions } from './CallFrame';
 import type { Spoken } from './CallFrame';
 import { Strip } from '@excerpt/ui';
@@ -24,6 +25,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
   const [pip, setPip] = useState<Document | null>(null);
   const [pendingMode, setPendingMode] = useState<Mode>('tab');
   const [captured, setCaptured] = useState(0);
+  const [diag, setDiag] = useState<StreamDiagnostics[]>([]);
 
   const adapter = useRef<LiveCaptureAdapter | null>(null);
   const events = useRef<TranscriptEvent[]>([]);
@@ -54,7 +56,10 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
 
   useEffect(() => {
     if (status.kind !== 'running') return;
-    const id = setInterval(() => setElapsed(performance.now() - startedAt.current), 200);
+    const id = setInterval(() => {
+      setElapsed(performance.now() - startedAt.current);
+      setDiag(Object.values(adapter.current?.diagnostics ?? {}));
+    }, 200);
     return () => clearInterval(id);
   }, [status.kind]);
 
@@ -175,6 +180,13 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
 
   if (status.kind === 'running' || status.kind === 'starting') {
     const processing = status.kind === 'running' ? status.processing : 'on-device';
+    const heard = diag.some((d) => d.voicedSeconds > 3);
+    const recognised = diag.some((d) => d.finals + d.interims > 0);
+    const stalled = elapsed > 15_000 && heard && !recognised;
+    const withError = diag.find((d) => d.lastError);
+    const stalledHint = withError
+      ? `It reported "${withError.lastError}".`
+      : 'Check that the shared tab is the one making sound, and that its audio is not muted in Chrome.';
     return (
       <div className="session">
         <div className="call live">
@@ -194,7 +206,31 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
             {processing === 'cloud' ? 'Google cloud — audio leaves this device' : 'On-device'}
           </dd>
           <dt>Captured</dt><dd>{captured} {captured === 1 ? 'line' : 'lines'}</dd>
+          {diag.map((d) => (
+            <Fragment key={d.role}>
+              <dt>{d.role === 'you' ? 'Your microphone' : 'Shared audio'}</dt>
+              <dd>
+                <Level level={d.level} />
+                <span className={d.voicedSeconds > 1 ? '' : 'warn'}>
+                  {d.voicedSeconds < 1 ? 'no sound reaching Excerpt' : `${d.voicedSeconds.toFixed(0)}s of sound`}
+                </span>
+                <span className="dim"> · {d.finals} final · {d.interims} interim</span>
+                {d.restarts > 0 && <span className="dim"> · {d.restarts} restarts</span>}
+                {d.lastError && <span className="warn"> · error: {d.lastError}</span>}
+                {!d.started && <span className="warn"> · never started</span>}
+              </dd>
+            </Fragment>
+          ))}
         </dl>
+
+        {/* An honest listening indicator: if sound is arriving but nothing is being
+            recognised, say so rather than showing a hopeful spinner forever. */}
+        {stalled && (
+          <p className="rubric stalled">
+            Sound is reaching Excerpt but nothing is coming back from the speech
+            engine. {stalledHint}
+          </p>
+        )}
 
         {pip && createPortal(<Captions fresh={fresh} standalone />, pip.body)}
 
@@ -255,6 +291,18 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
         </p>
       </section>
     </div>
+  );
+}
+
+/** A tiny level meter. Six bars is enough to tell "silent" from "speaking". */
+function Level({ level }: { level: number }) {
+  const bars = Math.min(6, Math.round(level * 90));
+  return (
+    <span className="level" aria-hidden>
+      {Array.from({ length: 6 }, (_, i) => (
+        <i key={i} className={i < bars ? 'on' : ''} />
+      ))}
+    </span>
   );
 }
 

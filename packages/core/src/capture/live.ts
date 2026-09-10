@@ -18,6 +18,25 @@ interface SpeechRecognitionCtor {
 const SR: SpeechRecognitionCtor | undefined =
   (globalThis as any).SpeechRecognition ?? (globalThis as any).webkitSpeechRecognition;
 
+/**
+ * Per-stream health. Without this, "no captions" is indistinguishable from a silent
+ * track, a dead recognizer, or a recognizer erroring in a loop — and the UI cannot
+ * honestly claim to be listening.
+ */
+export interface StreamDiagnostics {
+  role: SourceRole;
+  label: string;
+  /** 0..1 RMS of the last analysis frame. */
+  level: number;
+  /** Seconds of audio above the voice threshold since capture began. */
+  voicedSeconds: number;
+  finals: number;
+  interims: number;
+  restarts: number;
+  started: boolean;
+  lastError?: string;
+}
+
 export interface LiveCaptureOptions {
   sessionId: string;
   /** Set once the user has explicitly chosen cloud. Never inferred. */
@@ -49,6 +68,8 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
   private running = false;
   private seq = 0;
   private t0 = 0;
+  private audio: AudioContext | undefined;
+  readonly diagnostics: Record<string, StreamDiagnostics> = {};
 
   constructor(private readonly opts: LiveCaptureOptions) {}
 
@@ -104,7 +125,39 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     const micTrack = this.mic.getAudioTracks()[0];
     this.attach(tabTrack, 'remote', 'SPEAKER', processing === 'on-device');
     if (micTrack) this.attach(micTrack, 'you', 'YOU', processing === 'on-device');
+    this.meter(this.display, 'remote');
+    this.meter(this.mic, 'you');
     this.setStatus({ kind: 'running', processing });
+  }
+
+  /** RMS meter per stream: distinguishes "nothing said" from "nothing arriving". */
+  private meter(stream: MediaStream, key: string): void {
+    try {
+      this.audio ??= new AudioContext();
+      const analyser = this.audio.createAnalyser();
+      analyser.fftSize = 512;
+      this.audio.createMediaStreamSource(stream).connect(analyser);
+      const buf = new Float32Array(analyser.fftSize);
+      let last = performance.now();
+      const loop = () => {
+        if (!this.running) return;
+        analyser.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) sum += buf[i]! * buf[i]!;
+        const rms = Math.sqrt(sum / buf.length);
+        const now = performance.now();
+        const d = this.diagnostics[key];
+        if (d) {
+          d.level = rms;
+          if (rms > 0.01) d.voicedSeconds += (now - last) / 1000;
+        }
+        last = now;
+        setTimeout(loop, 100);
+      };
+      loop();
+    } catch {
+      // A meter is diagnostic only; never let it take capture down.
+    }
   }
 
   private attach(track: MediaStreamTrack, role: SourceRole, label: string, local: boolean): void {
@@ -115,10 +168,20 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     try { rec.processLocally = local; } catch { /* older builds */ }
 
     const entry = { rec, track, stopping: false };
+    const key = role;
+    this.diagnostics[key] = {
+      role, label, level: 0, voicedSeconds: 0,
+      finals: 0, interims: 0, restarts: 0, started: false,
+    };
+    rec.addEventListener('start', () => {
+      const d = this.diagnostics[key]; if (d) d.started = true;
+    });
 
     rec.onresult = (e: any) => {
       const r = e.results[e.results.length - 1];
       const text = String(r[0].transcript).trim();
+      const d = this.diagnostics[key];
+      if (d) { if (r.isFinal) d.finals++; else d.interims++; }
       if (!text) return;
       this.emit({
         id: `live-${this.seq++}`,
@@ -133,9 +196,17 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     };
 
     rec.onerror = (e: any) => {
+      // Record every error. Swallowing the non-fatal ones made a broken capture
+      // look identical to a quiet room.
+      const d = this.diagnostics[key];
+      if (d && e.error !== 'no-speech') d.lastError = String(e.error);
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         this.running = false;
         this.setStatus({ kind: 'error', message: `Recognition was blocked (${e.error}).` });
+      }
+      if (e.error === 'language-not-supported') {
+        this.running = false;
+        this.setStatus({ kind: 'needs-consent', reason: 'on-device-unavailable' });
       }
     };
 
@@ -143,6 +214,7 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     // a dead track — that throws InvalidStateError.
     rec.onend = () => {
       if (!this.running || entry.stopping || track.readyState !== 'live') return;
+      const d = this.diagnostics[key]; if (d) d.restarts++;
       setTimeout(() => { try { rec.start(track); } catch { /* track died mid-restart */ } }, 120);
     };
 
@@ -160,6 +232,8 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     this.mic?.getTracks().forEach((t) => t.stop());
     this.display = undefined;
     this.mic = undefined;
+    void this.audio?.close().catch(() => {});
+    this.audio = undefined;
     if (this.status.kind === 'running') this.setStatus({ kind: 'idle' });
   }
 
