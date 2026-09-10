@@ -81,6 +81,8 @@ function shareError(e: Error): string {
       return 'No shareable source was found.';
     case 'AbortError':
       return 'Sharing stopped before it started. Try again.';
+    case 'InvalidStateError':
+      return 'Chrome will only start sharing while this tab is visible and focused. Bring this tab to the front and try again.';
     case 'OverconstrainedError':
       return 'That source cannot provide audio. Choose a tab rather than a window.';
     default:
