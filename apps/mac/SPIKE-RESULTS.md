@@ -1,3 +1,8 @@
+> **Where this lives now.** Stage 0's harness was promoted into the app rather than
+> kept as a second binary that would drift from the product it de-risked. It is the
+> window behind *Permissions and diagnostics…* in the menu bar, or `--gates`. Every
+> measurement below still stands; only the target name changed.
+
 # Excerpt for macOS — Stage 0 gate
 
 Xcode 26.6 · Swift 6.3.3 · macOS 26.5.2 · MacBook Air (Apple silicon)

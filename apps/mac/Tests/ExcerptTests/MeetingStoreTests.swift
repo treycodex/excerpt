@@ -1,0 +1,149 @@
+import CoreMedia
+import Foundation
+import Testing
+@testable import Excerpt
+
+/// The journal is the mechanism behind the one gate that was never negotiable: an
+/// interruption may stop capture, but it must not silently lose what was already
+/// transcribed. These run against a real directory in a temporary folder, because
+/// what is being tested is what survives on disk.
+@MainActor
+struct MeetingStoreTests {
+
+    private func makeStore() throws -> (MeetingStore, URL) {
+        let root = URL(filePath: NSTemporaryDirectory())
+            .appending(path: "excerpt-tests-\(UUID().uuidString)")
+        return (try MeetingStore(root: root), root)
+    }
+
+    private func event(_ index: Int, text: String) -> TranscriptEvent {
+        TranscriptEvent(
+            id: "e\(index)", sessionId: "m-1", role: index.isMultiple(of: 2) ? .remote : .you,
+            speakerLabel: index.isMultiple(of: 2) ? "SPEAKER" : "YOU",
+            text: text, isFinal: true, tArrived: Double(index) * 1000,
+            tStart: Double(index), tEnd: Double(index) + 2
+        )
+    }
+
+    private func meeting(id: String = "m-1", items: [Item] = []) -> Meeting {
+        Meeting(id: id, title: "Meeting · test", startedAt: "2026-09-10T15:20:00Z",
+                endedAt: nil, processing: .onDevice,
+                events: [event(0, text: "Let's move the launch to October.")], items: items)
+    }
+
+    @Test func `a saved meeting comes back the way it went in`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let original = meeting()
+        try store.save(original)
+        #expect(try store.load(id: original.id) == original)
+        #expect(store.list().map(\.id) == [original.id])
+
+        try store.delete(id: original.id)
+        #expect(store.list().isEmpty)
+    }
+
+    @Test func `the library survives one unreadable file`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try store.save(meeting(id: "m-good"))
+        try "{ not json".write(
+            to: root.appending(path: "meetings/m-broken.json"), atomically: true, encoding: .utf8)
+
+        // One corrupt file must not take the whole library down with it.
+        #expect(store.list().map(\.id) == ["m-good"])
+    }
+
+    @Test func `journalled events replay in the order they settled`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let written = (0..<5).map { event($0, text: "line \($0)") }
+        for item in written { store.append(item, toJournalFor: "m-1") }
+        store.closeJournal(id: "m-1")
+
+        let replayed = store.replayJournal(id: "m-1")
+        #expect(replayed == written)
+        // Audio alignment has to survive the round trip, or recovered evidence would
+        // scrub to the wrong words.
+        #expect(replayed.first?.tStart == 0)
+    }
+
+    @Test func `a half-written last line is dropped, not fatal`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        store.append(event(0, text: "complete"), toJournalFor: "m-1")
+        store.closeJournal(id: "m-1")
+
+        // The shape a crash leaves: a line that was being written when power went.
+        let journal = root.appending(path: "journal/m-1.ndjson")
+        let handle = try FileHandle(forWritingTo: journal)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(#"{"id":"e1","text":"trunc"#.utf8))
+        try handle.close()
+
+        let replayed = store.replayJournal(id: "m-1")
+        #expect(replayed.count == 1)
+        #expect(replayed.first?.text == "complete")
+    }
+
+    @Test func `a journal with no meeting beside it is recoverable`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        store.append(event(0, text: "interrupted"), toJournalFor: "m-lost")
+        store.closeJournal(id: "m-lost")
+        #expect(store.recoverable() == ["m-lost"])
+
+        // Once the meeting is saved there is nothing left to recover.
+        try store.save(meeting(id: "m-lost"))
+        #expect(store.recoverable().isEmpty)
+
+        store.discardJournal(id: "m-lost")
+        #expect(store.replayJournal(id: "m-lost").isEmpty)
+    }
+}
+
+/// Gate 8 in miniature: two analyzers counting from their own first frame, related
+/// by the capture clock.
+struct MeetingClockTests {
+
+    private func time(_ seconds: Double) -> CMTime {
+        CMTime(seconds: seconds, preferredTimescale: 1000)
+    }
+
+    @Test func `the first source to arrive defines zero`() {
+        var clock = MeetingClock()
+        clock.adopt(firstBufferAt: time(100))
+        clock.adopt(firstBufferAt: time(140))     // the other source, later — ignored
+        #expect(clock.origin == time(100))
+        #expect(clock.offsetSeconds(forSourceStartingAt: time(100)) == 0)
+    }
+
+    @Test func `a source that started later is offset by exactly that much`() {
+        var clock = MeetingClock()
+        clock.adopt(firstBufferAt: time(100))
+
+        // 1.4s into the microphone's own audio is 3.9s into the meeting, because the
+        // microphone did not start producing until 2.5s in.
+        let range = clock.meetingRange(localStart: 1.4, localEnd: 3.0, sourceStartingAt: time(102.5))
+        #expect(abs(range.start - 3.9) < 0.001)
+        #expect(abs(range.end - 5.5) < 0.001)
+    }
+
+    @Test func `a source cannot start before the meeting did`() {
+        var clock = MeetingClock()
+        clock.adopt(firstBufferAt: time(100))
+        // Impossible, and a negative offset would put evidence before the recording.
+        #expect(clock.offsetSeconds(forSourceStartingAt: time(90)) == 0)
+    }
+
+    @Test func `with no audio yet there is no offset to apply`() {
+        let clock = MeetingClock()
+        #expect(clock.origin == nil)
+        #expect(clock.offsetSeconds(forSourceStartingAt: time(100)) == 0)
+    }
+}
