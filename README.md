@@ -211,3 +211,10 @@ packages, and `Captions/CaptionTokens.generated.swift` comes from
 architecture before anything was built on it, and it records what was measured
 rather than assumed — including the three failures that turned out to be bugs in
 the harness itself.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). The coastline photograph on the landing page is
+from Unsplash under its own licence; see `apps/web/public/media/CREDITS.md`.
