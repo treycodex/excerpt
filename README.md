@@ -55,9 +55,22 @@ If macOS has not granted Chrome screen recording, sharing fails with an unhelpfu
 browser error; Excerpt explains it and tells you Chrome must be fully quit and
 reopened afterwards.
 
-Verified on a real two-minute capture: on-device throughout, 21 transcript rows at
-roughly one every six seconds, accurate recognition, and no invented decisions from
-two minutes of unrelated speech.
+Both modes are verified against real audio, on-device throughout:
+
+| | tab audio | system audio |
+|---|---|---|
+| captured | 2:00 | 1:34 |
+| transcript rows | 21 | 18 |
+| recognition | accurate | accurate |
+| invented decisions | none | none |
+
+Across roughly four minutes of speech containing no decisions, Excerpt extracted
+none. That is the behaviour the whole design is for.
+
+**Wear headphones in system-audio mode.** Through speakers your microphone hears
+the far side as well, so both streams transcribe the same words and attribution
+becomes a guess. Excerpt detects and drops what it can — the count is on screen —
+but headphones remove the problem rather than mitigating it.
 
 ---
 
