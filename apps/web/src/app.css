@@ -353,3 +353,4 @@ code {
   color: var(--ink); font: 400 14px/1.4 var(--sans); padding: 10px 12px;
 }
 .mic-pick select:focus { outline: none; border-color: var(--ember); }
+.live-credits .trace { font-size: 10px; opacity: .75; }

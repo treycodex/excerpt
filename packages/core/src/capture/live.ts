@@ -35,6 +35,9 @@ export interface StreamDiagnostics {
   restarts: number;
   started: boolean;
   lastError?: string;
+  /** Recognizer lifecycle, newest last. The only way to see what a silent
+      recognizer was actually doing. */
+  events: string[];
   /** Which device this stream came from. A silent Continuity mic looks identical
       to a quiet room unless the label is on screen. */
   device?: string;
@@ -183,9 +186,20 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     const key = role;
     this.diagnostics[key] = {
       role, label, level: 0, voicedSeconds: 0,
-      finals: 0, interims: 0, restarts: 0, started: false,
+      finals: 0, interims: 0, restarts: 0, started: false, events: [],
       ...(track.label ? { device: track.label } : {}),
     };
+
+    const trace = (what: string) => {
+      const d = this.diagnostics[key];
+      if (!d) return;
+      d.events.push(`${((performance.now() - this.t0) / 1000).toFixed(1)}s ${what}`);
+      if (d.events.length > 40) d.events.shift();
+    };
+    for (const k of ['start', 'audiostart', 'soundstart', 'speechstart',
+                     'speechend', 'soundend', 'audioend', 'end', 'nomatch']) {
+      rec.addEventListener(k, () => trace(k));
+    }
     rec.addEventListener('start', () => {
       const d = this.diagnostics[key]; if (d) d.started = true;
     });
@@ -195,6 +209,7 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       const text = String(r[0].transcript).trim();
       const d = this.diagnostics[key];
       if (d) { if (r.isFinal) d.finals++; else d.interims++; }
+      if (d && d.interims + d.finals <= 3) trace(r.isFinal ? 'FIRST FINAL' : 'first interim');
       if (!text) return;
       this.emit({
         id: `live-${this.seq++}`,
@@ -212,6 +227,7 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       // Record every error. Swallowing the non-fatal ones made a broken capture
       // look identical to a quiet room.
       const d = this.diagnostics[key];
+      trace(`ERROR ${e.error}`);
       if (d && e.error !== 'no-speech') d.lastError = String(e.error);
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         this.running = false;
@@ -228,10 +244,13 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     rec.onend = () => {
       if (!this.running || entry.stopping || track.readyState !== 'live') return;
       const d = this.diagnostics[key]; if (d) d.restarts++;
+      trace('restarting');
       setTimeout(() => { try { rec.start(track); } catch { /* track died mid-restart */ } }, 120);
     };
 
+    trace(`start(track ${track.kind}/${track.readyState})`);
     try { rec.start(track); } catch (err) {
+      trace(`start threw ${(err as Error).name}`);
       this.setStatus({ kind: 'error', message: `Could not start recognition: ${(err as Error).message}` });
     }
     this.recognizers.push(entry);

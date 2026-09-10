@@ -43,6 +43,8 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
       cloudAllowed: cloudAllowed || prefs.transcriptionChoice === 'cloud-allowed',
     });
     adapter.current = a;
+    // Exposed for live debugging from the console during a real capture.
+    (window as unknown as { __excerpt?: unknown }).__excerpt = a;
     events.current = [];
     setCaptured(0);
     a.onStatus(setStatus);
@@ -240,6 +242,9 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
                 <span className="dim"> · {d.finals} final · {d.interims} interim</span>
                 {d.restarts > 0 && <span className="dim"> · {d.restarts} restarts</span>}
                 {d.lastError && <span className="warn"> · error: {d.lastError}</span>}
+                {d.events.length > 0 && (
+                  <span className="dim trace"> · {d.events.slice(-4).join(' → ')}</span>
+                )}
                 {!d.started && <span className="warn"> · never started</span>}
               </dd>
             </Fragment>
