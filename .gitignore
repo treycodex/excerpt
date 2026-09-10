@@ -3,3 +3,5 @@ dist/
 .turbo/
 *.local
 .DS_Store
+.vercel
+.vercel/

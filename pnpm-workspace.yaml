@@ -1,5 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# esbuild needs its postinstall to fetch a platform binary. pnpm blocks build
+# scripts by default and errors rather than warns, which fails CI and Vercel.
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true

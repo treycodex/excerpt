@@ -2,6 +2,8 @@
 
 **Be in the meeting. We'll remember it.**
 
+**Demo → https://excerpt-rho.vercel.app** — 85 seconds, no install.
+
 A free, privacy-first meeting assistant. Cinematic captions while you talk, and
 structured notes afterwards where every item links back to the passage it came from.
 
@@ -50,6 +52,10 @@ pnpm install
 pnpm dev          # http://localhost:5273
 pnpm test
 ```
+
+`pnpm` blocks dependency build scripts by default and *errors* rather than warns,
+so `pnpm-workspace.yaml` carries an `allowBuilds` entry for esbuild. Without it
+every install exits 1, including on CI.
 
 ```
 apps/web        product + competition demo
