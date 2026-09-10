@@ -69,11 +69,16 @@ final class NotesWindowController: NSWindowController {
     /// the website's own hash route, so there is one router rather than a native
     /// notion of "which screen" that has to be kept in step with it.
     func show(meeting id: String? = nil) {
+        show(route: id.map { "#/m/\($0)" } ?? "#/meetings")
+    }
+
+    /// Any of the editor's own hash routes. The router is the website's, so there is
+    /// one notion of "which screen" rather than a native one kept in step with it.
+    func show(route: String) {
         guard Bundle.main.url(forResource: "notes", withExtension: nil) != nil else {
             presentMissingNotes()
             return
         }
-        let route = id.map { "#/m/\($0)" } ?? "#/meetings"
         guard let target = URL(string: "\(NotesSchemeHandler.origin)/index.html\(route)") else { return }
         webView.load(URLRequest(url: target))
 

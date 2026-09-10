@@ -70,6 +70,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showSetup()
             Task { await setupModel.jump(to: step) }
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--notes-route"),
+           let route = CommandLine.arguments.dropFirst(index + 1).first {
+            notes?.show(route: route)
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--notes") {
             let id = CommandLine.arguments.dropFirst(index + 1).first
             notes?.show(meeting: id?.hasPrefix("--") == false ? id : nil)

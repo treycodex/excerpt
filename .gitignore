@@ -10,3 +10,18 @@ dist/
 # Reinstall with: npx skills@latest add emilkowalski/skills
 .agents/
 .claude/skills/
+
+# macOS app build output. `.build` is SwiftPM's working directory (179 MB of it)
+# and `build/` is the assembled .app — both derived, both churn on every compile.
+apps/mac/.build/
+apps/mac/build/
+
+# Generated into the app bundle by the web packages, not authored here:
+#   pnpm --filter @excerpt/core build:engine
+#   pnpm --filter @excerpt/web  build:notes
+# build.sh refuses to assemble a bundle without them, with the command to run.
+apps/mac/Resources/excerpt-engine.js
+apps/mac/Resources/notes/
+
+# Local dev-server config for the browser preview tool.
+.claude/launch.json
