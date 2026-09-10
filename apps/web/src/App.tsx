@@ -106,8 +106,8 @@ export function App() {
       <button className="skip-link" onClick={() => document.querySelector<HTMLElement>('#main')?.focus()}>
         Skip to content
       </button>
-      <nav className="nav" aria-label="Main">
-        <a href="#/" className={route.name === 'landing' ? 'on' : ''}>Excerpt</a>
+      {route.name !== 'landing' && <nav className="nav" aria-label="Main">
+        <a href="#/">Excerpt</a>
         <span className="spacer" />
         {/* Inside the Mac app, recording is the menu bar's job — this screen asks the
             browser to share a tab, which is not how the Mac hears a meeting. */}
@@ -118,7 +118,7 @@ export function App() {
         <a href="#/preferences" className={route.name === 'preferences' ? 'on' : ''}>Preferences</a>
         {/* Build stamp is a debugging aid, not something a visitor should see. */}
         {import.meta.env.DEV && <span className="build" title="Build timestamp">{__BUILD__}</span>}
-      </nav>
+      </nav>}
       <main id="main" tabIndex={-1}>{body}</main>
     </>
   );

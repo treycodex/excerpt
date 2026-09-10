@@ -1,235 +1,74 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CaptionPreset } from '../captionPreset';
+import './landing.css';
 
-const CLAIMS = [
-  {
-    n: '01',
-    title: 'Free, and private',
-    body: 'Your Mac does the listening. Nothing is uploaded, no account, no subscription.',
-  },
-  {
-    n: '02',
-    title: 'Nothing made up',
-    body: 'Every note is something a person actually said, and Excerpt shows you where.',
-  },
-  {
-    n: '03',
-    title: 'Wrong sometimes',
-    body: 'So you can fix anything in a click. It tells you what it heard, and what it could not tell.',
-  },
-];
-
-const TICKER = [
-  'Decisions', 'Action items', 'Deadlines', 'Open questions',
-  'Who agreed to what', 'What you promised', 'What is still unanswered',
-];
-
-const LOOKS: { preset: CaptionPreset; name: string; why: string }[] = [
-  { preset: 'classic', name: 'Classic', why: 'White, no box. A film subtitle.' },
-  { preset: 'warm', name: 'Warm', why: 'Amber with a dark edge. Reads over bright video.' },
-  { preset: 'contrast', name: 'High contrast', why: 'On a dark bar. Reads over anything.' },
+const SOURCE = 'https://github.com/treycodex/excerpt';
+const STEPS = [
+  ['01', 'Connect your meeting.', 'Choose your meeting tab and microphone. Share the audio. You’re ready.', 'A minute to set up'],
+  ['02', 'Get live subtitles.', 'Excerpt transcribes as people speak and displays the words as cinematic subtitles.', 'Live, as you speak'],
+  ['03', 'Review your notes.', 'End the meeting to review decisions, action items, and deadlines. Check the transcript, edit your notes, and export them.', 'Yours to keep'],
 ];
 
 export function Landing({ onStart }: { onStart: () => void }) {
+  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
   return (
-    <div className="landing">
-      <HeroFilm onStart={onStart} />
+    <div className="editorial">
+      <nav className="ed-nav" aria-label="Main">
+        <a className="ed-logo" href="#/" aria-label="Excerpt home">[ e ]</a>
+        <span className="ed-nav-note">Meeting notes.<br />Free and open source.</span>
+        <div className="ed-nav-links"><button onClick={() => jump('the-experience')}>Features</button><a href={SOURCE} target="_blank" rel="noreferrer">Open source ↗</a></div>
+        <a className="ed-nav-start" href="#/record">Use it free <span>↗</span></a>
+      </nav>
 
-      {/* Genesis-style ticker: what Excerpt looks for, moving slowly. */}
-      <div className="marquee" aria-hidden>
-        <div className="marquee-track">
-          {[0, 1].map((copy) => (
-            <span className="marquee-run" key={copy}>
-              {TICKER.map((item) => (
-                <span className="marquee-item" key={item}>
-                  {item}<i />
-                </span>
-              ))}
-            </span>
-          ))}
-        </div>
-      </div>
+      <header className="ed-masthead">
+        <div className="ed-masthead-meta"><span>FREE, OPEN-SOURCE MEETING NOTES</span><span>CINEMATIC SUBTITLES. CLEAR NOTES.</span></div>
+        <div className="ed-wordmark" aria-label="Excerpt">excerpt<span>✳</span></div>
+      </header>
 
-      <section className="claims">
-        {CLAIMS.map((claim) => (
-          <article key={claim.n}>
-            <span className="claim-n">{claim.n}</span>
-            <h2>{claim.title}</h2>
-            <p>{claim.body}</p>
-          </article>
-        ))}
-      </section>
-
-      {/* The three looks, live rather than pictured: these are the real caption
-          tokens on real text, so what you see here is exactly what runs. */}
-      <section className="showcase looks-section">
-        <div className="showcase-copy">
-          <span className="eyebrow">Three looks</span>
-          <h2>Subtitles, not captions.</h2>
-          <p>
-            Two lines at most, broken where a phrase ends rather than where the box does,
-            fading in and cutting between lines the way film subtitles have always
-            worked. Pick the one that survives your meeting.
-          </p>
-        </div>
-        <div className="looks">
-          {LOOKS.map((look) => (
-            <figure className="look" key={look.preset} data-caption={look.preset}>
-              <div className="look-stage">
-                <div className="look-line">Let’s move the campaign launch to October.</div>
-              </div>
-              <figcaption>
-                <b>{look.name}</b>
-                <span>{look.why}</span>
-              </figcaption>
-            </figure>
-          ))}
+      <section className="ed-hero" aria-labelledby="ed-title">
+        <img className="ed-hero-image" src="/media/editorial-hero.jpg" alt="A quiet coastline in the last light of the day" fetchPriority="high" />
+        <div className="ed-hero-shade" />
+        <div className="ed-hero-top"><span>MADE FOR YOUR MEETINGS</span><span>FREE TO USE. OPEN SOURCE.</span></div>
+        <div className="ed-hero-bottom">
+          <div><p className="ed-label">MEET EXCERPT</p><h1 id="ed-title">Meeting notes.<br />Cinematic feel.<br /><em>Free. Open source.</em></h1></div>
+          <div className="ed-hero-aside"><p>Live subtitles while you meet.<br />Decisions and action items when you’re done.</p><a className="ed-button" href="#/record">Use Excerpt free <span>↗</span></a><button className="ed-text-button" onClick={onStart}>▷ &nbsp; Try the interactive demo</button><small>No account. No subscription.</small></div>
         </div>
       </section>
+      <div className="ed-film-caption"><span>LIVE SUBTITLES · TRANSCRIPTS · MEETING NOTES</span><span>01 / EXCERPT</span></div>
 
-      <Still
-        eyebrow="Afterwards"
-        title="Notes that point back."
-        body="Every line is a verbatim span of something somebody said, with the moment in the audio it came from. Click a note and the transcript scrolls to the passage. Nothing is summarised, because a summary is the part you cannot check."
-        src="/media/notes.jpg"
-        alt="Excerpt's notes for a meeting: a decision, its evidence quote, and the moment it was said."
-        flip
-      />
-
-      <Still
-        eyebrow="On your Mac"
-        title="Nothing to keep open."
-        body="Excerpt lives in the menu bar: no Dock icon, no window in the way, no tab to remember. It hears the meeting, draws the subtitles over whatever you are looking at, and writes the notes to a folder on your Mac that you can open yourself."
-        src="/media/menubar.jpg"
-        alt="Excerpt's setup, finished: start listening, show captions, open notes, and show where notes are kept."
-      />
-
-      <section className="closing">
-        <h2 className="closing-line">
-          Most meeting tools hand you a confident summary you cannot check.
-          <span className="closing-em"> This one shows its work.</span>
-        </h2>
-        <button className="cta" onClick={onStart}>See it in 85 seconds</button>
+      <section className="ed-intro" id="the-experience">
+        <span className="ed-label">[ MEETING NOTES, SIMPLIFIED ]</span>
+        <div><h2>Your meeting.<br /><em>Already in notes.</em></h2><div className="ed-intro-bottom"><p>Excerpt is a free, open-source alternative to Granola and Tactiq. It transcribes your meetings and extracts decisions, action items, deadlines, and open questions.</p><button className="ed-link" onClick={() => jump('how-it-works')}>How it works <span>↓</span></button></div></div>
       </section>
+
+      <section className="ed-product" aria-labelledby="product-title">
+        <div className="ed-section-line"><span className="ed-label">[ DURING YOUR MEETING ]</span><span className="ed-label">01 — LIVE SUBTITLES</span></div>
+        <div className="ed-section-heading"><h2 id="product-title">Live subtitles.<br /><em>A cinematic touch.</em></h2><p>Follow your meeting with film-style subtitles.<br />Two lines at a time, updated as people speak.</p></div>
+        <ProductFilm />
+        <div className="ed-film-caption"><span>REAL PRODUCT FOOTAGE · EXCERPT IN SESSION</span><button onClick={onStart}>Try the demo ↗</button></div>
+      </section>
+
+      <section className="ed-notes">
+        <div className="ed-notes-copy"><span className="ed-label">[ AFTER YOUR MEETING ]</span><h2>Meeting notes<br /><em>you can check.</em></h2><p>Review decisions, action items, and deadlines. Each note links to the passage in your transcript it came from.</p><p>Check what was said, edit any note, and export to Markdown.</p><button className="ed-link" onClick={onStart}>See how the notes work <span>↗</span></button></div>
+        <figure><img src="/media/notes.jpg" alt="Excerpt meeting notes with decisions and supporting transcript passages" loading="lazy" /><figcaption>02 — NOTES LINKED TO YOUR TRANSCRIPT</figcaption></figure>
+      </section>
+
+      <section className="ed-how" id="how-it-works"><div className="ed-section-line"><span className="ed-label">[ HOW IT WORKS ]</span><span className="ed-label">THREE SIMPLE STEPS</span></div><h2>Meeting notes in <em>three steps.</em></h2><div className="ed-steps">{STEPS.map(([n, title, body, meta]) => <article key={n}><span className="ed-step-number">{n}</span><h3>{title}</h3><p>{body}</p><span className="ed-label">{meta}</span></article>)}</div><div className="ed-how-footer"><span>Live capture works in Chrome on macOS. The demo works in any modern browser.</span><a className="ed-button" href="#/record">Start your first meeting <span>↗</span></a></div></section>
+
+      <section className="ed-manifesto"><span className="ed-label">[ FREE AND OPEN SOURCE ]</span><h2>Beautiful meeting notes.<br /><em>No subscription.</em></h2><div className="ed-principles"><article><h3>Free to use.</h3><p>No account or subscription. Your notes stay in your browser, ready to export.</p></article><article><h3>Private by default.</h3><p>On-device transcription. If it needs the cloud, Excerpt asks you first.</p></article><article><h3>Open source.</h3><p>Read the code, build Excerpt yourself, or contribute on GitHub.</p><a href={SOURCE} target="_blank" rel="noreferrer">Explore the source ↗</a></article></div></section>
+
+      <footer className="ed-footer"><div className="ed-footer-top"><span className="ed-label">TRY EXCERPT FOR YOUR NEXT MEETING.</span><a href="#/record">Meeting notes.<br /><em>Start for free.</em> <span>↗</span></a><div><a className="ed-button" href="#/record">Use Excerpt free <span>↗</span></a><p>No account. No credit card. No subscription.</p></div></div><div className="ed-footer-bottom"><span>© {new Date().getFullYear()} Excerpt</span><a href="#/meetings">Your meetings</a><a href={SOURCE} target="_blank" rel="noreferrer">GitHub ↗</a><span>Free and open source.</span></div></footer>
     </div>
   );
 }
 
-/**
- * The hero is real footage of the product, not a mock-up: a screen recording of the
- * demo session with its own captions running. `apps/mac/tools/record-hero.sh`
- * regenerates it, so it can be re-shot rather than going quietly out of date.
- *
- * It is treated as film — letterboxed, grained, vignetted, drifting almost
- * imperceptibly — because that is the register, and because a still frame of a dark
- * call is a void while a framed one is a shot.
- */
-function HeroFilm({ onStart }: { onStart: () => void }) {
+function ProductFilm() {
   const video = useRef<HTMLVideoElement>(null);
-  const [reduced, setReduced] = useState(false);
-
+  const [playing, setPlaying] = useState(false);
   useEffect(() => {
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const sync = () => setReduced(query.matches);
-    sync();
-    query.addEventListener('change', sync);
+    const sync = () => { if (query.matches) video.current?.pause(); else void video.current?.play().catch(() => {}); };
+    sync(); query.addEventListener('change', sync);
     return () => query.removeEventListener('change', sync);
   }, []);
-
-  useEffect(() => {
-    const element = video.current;
-    if (!element) return;
-    if (reduced) { element.pause(); return; }
-
-    /*
-     * Autoplay gets refused for reasons that have nothing to do with what the
-     * viewer wants: a background tab, a power-saving policy, a browser waiting for
-     * a gesture. Treating one refusal as final leaves a frozen frame forever, even
-     * after the person switches to the tab — so ask again each time the page could
-     * plausibly start playing.
-     */
-    const attempt = () => { if (!document.hidden) void element.play().catch(() => {}); };
-    attempt();
-    element.addEventListener('canplay', attempt);
-    document.addEventListener('visibilitychange', attempt);
-    window.addEventListener('pointerdown', attempt);
-    return () => {
-      element.removeEventListener('canplay', attempt);
-      document.removeEventListener('visibilitychange', attempt);
-      window.removeEventListener('pointerdown', attempt);
-    };
-  }, [reduced]);
-
-  return (
-    <section className="hero">
-      <div className="film">
-        <video
-          ref={video}
-          className={reduced ? 'film-media' : 'film-media drift'}
-          poster="/media/meeting-poster.jpg"
-          muted
-          loop
-          playsInline
-          autoPlay
-          preload="auto"
-          aria-hidden
-        >
-          <source src="/media/meeting.webm" type="video/webm" />
-          <source src="/media/meeting.mp4" type="video/mp4" />
-        </video>
-        <div className="film-grain" aria-hidden />
-        <div className="film-vignette" aria-hidden />
-        <Brackets />
-      </div>
-
-      <div className="hero-scrim" aria-hidden />
-
-      <div className="hero-copy">
-        <h1>
-          Be in the meeting.<br />
-          <span className="hero-em">We’ll remember it.</span>
-        </h1>
-        <p className="lede">
-          Beautiful live subtitles while you talk. Afterwards, notes you can actually
-          trust — every line points back at what was said.
-        </p>
-        <div className="cta-row">
-          <button className="cta" onClick={onStart}>Watch a meeting</button>
-          <a className="cta ghost" href="#/record">Record a real one</a>
-        </div>
-        <p className="runtime">85 seconds · nothing to install</p>
-      </div>
-    </section>
-  );
-}
-
-/**
- * A framed still. Motif 3: selection is four corner brackets, never a border — so the
- * product's own images are framed the way the product frames a moment.
- */
-function Still({ eyebrow, title, body, src, alt, flip }: {
-  eyebrow: string; title: string; body: string; src: string; alt: string; flip?: boolean;
-}) {
-  return (
-    <section className={flip ? 'showcase flip' : 'showcase'}>
-      <div className="showcase-copy">
-        <span className="eyebrow">{eyebrow}</span>
-        <h2>{title}</h2>
-        <p>{body}</p>
-      </div>
-      <figure className="film still">
-        <img className="film-media" src={src} alt={alt} loading="lazy" decoding="async" />
-        <div className="film-grain" aria-hidden />
-        <Brackets />
-      </figure>
-    </section>
-  );
-}
-
-function Brackets() {
-  return (
-    <div className="brackets" aria-hidden>
-      <i /><i /><i /><i />
-    </div>
-  );
+  return <div className="ed-product-film"><video ref={video} poster="/media/meeting-poster.jpg" muted loop playsInline preload="metadata" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} aria-label="Excerpt demonstration with live meeting subtitles"><source src="/media/meeting.webm" type="video/webm" /><source src="/media/meeting.mp4" type="video/mp4" /></video><button className="ed-video-toggle" onClick={() => { if (playing) video.current?.pause(); else void video.current?.play().catch(() => {}); }} aria-label={playing ? 'Pause product video' : 'Play product video'}>{playing ? 'Ⅱ Pause' : '▷ Play'}</button></div>;
 }
