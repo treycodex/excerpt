@@ -41,6 +41,17 @@ final class MeetingSession {
     private(set) var suppressedEchoes = 0
     var shouldSuggestHeadphones: Bool { suppressedEchoes >= 3 }
 
+    /// What each source actually did, kept after the meeting ends.
+    ///
+    /// A meeting with no notes in it has several completely different causes — nothing
+    /// was playing, the microphone was muted, the recogniser failed, or nobody said
+    /// anything worth noting — and they need completely different things from the user.
+    /// "Nothing worth noting was said" is the right answer to exactly one of them, and
+    /// saying it for all four is how a broken app looks like a working one.
+    private(set) var diagnosis = ""
+    private var audioStats: [SourceKind: SourceStats] = [:]
+    private var speechStats: [SourceKind: TranscriptStats] = [:]
+
     private let engine: CoreEngine
     private let store: MeetingStore
     private let overlay: OverlayController
@@ -143,15 +154,10 @@ final class MeetingSession {
 
         let role: SourceRole = kind == .microphone ? .you : .remote
 
-        // Echo suppression, carried over from the web build because ScreenCaptureKit
-        // does not solve it either: without headphones the microphone hears the far
-        // side, and the same words arrive on both streams. `echoCancellation` is no
-        // help — it cancels a render stream, not a room.
-        if role == .you, isEcho(segment.text) {
-            suppressedEchoes += 1
-            return
-        }
-
+        // Echoes are not judged here. The two sources settle independently and
+        // interleave, so the far side's copy of these words may not have arrived yet —
+        // measured, and it is why the first real capture labelled the speakers' words
+        // YOU. TranscriptAssembly decides it over the finished transcript instead.
         eventCounter += 1
         let event = TranscriptEvent(
             id: "\(meetingId)-e\(eventCounter)",
@@ -169,31 +175,6 @@ final class MeetingSession {
         events.append(event)
         // Journalled the moment it settles, not at Stop. This is the whole of gate 12.
         store.append(event, toJournalFor: meetingId)
-    }
-
-    /// A microphone segment that repeats what the far side just said.
-    private func isEcho(_ text: String) -> Bool {
-        let recent = events.suffix(12).filter {
-            $0.role == .remote && clock.arrivedMilliseconds() - $0.tArrived < 6000
-        }
-        guard !recent.isEmpty else { return false }
-
-        let tokens = Set(Self.tokens(of: text))
-        guard tokens.count >= 3 else { return false }        // too short to judge
-
-        return recent.contains { remote in
-            let other = Set(Self.tokens(of: remote.text))
-            guard !other.isEmpty else { return false }
-            let shared = tokens.intersection(other).count
-            return Double(shared) / Double(tokens.count) >= 0.6
-        }
-    }
-
-    private static func tokens(of text: String) -> [String] {
-        text.lowercased()
-            .split { !$0.isLetter && !$0.isNumber }
-            .map(String.init)
-            .filter { $0.count > 2 }
     }
 
     // MARK: - The live edge drives the overlay
@@ -243,12 +224,20 @@ final class MeetingSession {
         status = "Writing your notes…"
 
         captionTicker?.cancel(); captionTicker = nil
+        // Read the meters before tearing anything down, or the evidence goes with it.
+        audioStats = capture.statistics()
+        for (kind, transcriber) in transcribers { speechStats[kind] = await transcriber.statistics() }
         await capture.stop()
         // Stopping the transcribers promotes the tail, which flows through the pumps
         // as ordinary settled speech and lands in the journal like everything else.
         for (_, transcriber) in transcribers { await transcriber.stop() }
         for pump in pumps { _ = await pump.value }
         pumps = []
+
+        // Re-read: stopping a transcriber promotes its tail, so the counts change.
+        for (kind, transcriber) in transcribers { speechStats[kind] = await transcriber.statistics() }
+        diagnosis = describeSources()
+        log.info("meeting \(self.meetingId) ended — \(self.diagnosis)")
 
         overlay.update(speaker: "", text: "")
 
@@ -269,7 +258,10 @@ final class MeetingSession {
     }
 
     private func buildMeeting(interrupted: Bool) -> Meeting {
-        let finals = events.filter(\.isFinal)
+        // Raw settled segments are what the journal holds; sentences are what a
+        // transcript is. Assembly joins the first and resolves the far side's echo.
+        let finals = TranscriptAssembly.assemble(events.filter(\.isFinal))
+        suppressedEchoes = events.count - finals.count
         // The meeting's own start decides what "Thursday" meant, not today's date.
         let items = (try? engine.extract(events: finals, reference: clock.startedAt)) ?? []
         if items.isEmpty, !finals.isEmpty {
@@ -299,19 +291,53 @@ final class MeetingSession {
         return "Meeting · \(date.formatted(format))"
     }
 
+    /// One line per source, in numbers, for the log and the diagnostics window.
+    private func describeSources() -> String {
+        SourceKind.allCases.map { kind in
+            let audio = audioStats[kind] ?? SourceStats()
+            let speech = speechStats[kind] ?? TranscriptStats()
+            let error = speech.error ?? audio.lastError
+            return String(
+                format: "%@: %.1fs voiced, %d buffers, %@, %dv/%df%@",
+                kind.rawValue, audio.voicedSeconds, audio.buffers, audio.format,
+                speech.volatileResults, speech.finalizedResults,
+                error.map { " · \($0)" } ?? "")
+        }.joined(separator: " | ")
+    }
+
     /// The end-of-meeting line: what was found, in the user's terms.
+    ///
+    /// Only one of these endings is "nothing worth noting was said". The others are
+    /// failures, and each one names the thing the user can actually go and change.
     private func summary(of meeting: Meeting) -> String {
-        guard !meeting.items.isEmpty else {
-            return meeting.events.isEmpty
-                ? "Nothing was heard — check the microphone and try again"
-                : "Nothing worth noting was said"
+        guard meeting.items.isEmpty else {
+            let decided = meeting.items.filter { $0.state == .decided }.count
+            let yours = meeting.items.filter { $0.assignee == .you }.count
+            var parts = ["\(meeting.items.count) note\(meeting.items.count == 1 ? "" : "s")"]
+            if decided > 0 { parts.append("\(decided) settled") }
+            if yours > 0 { parts.append("\(yours) for you") }
+            return parts.joined(separator: " · ")
         }
-        let decided = meeting.items.filter { $0.state == .decided }.count
-        let yours = meeting.items.filter { $0.assignee == .you }.count
-        var parts = ["\(meeting.items.count) note\(meeting.items.count == 1 ? "" : "s")"]
-        if decided > 0 { parts.append("\(decided) settled") }
-        if yours > 0 { parts.append("\(yours) for you") }
-        return parts.joined(separator: " · ")
+
+        let system = audioStats[.system] ?? SourceStats()
+        let microphone = audioStats[.microphone] ?? SourceStats()
+        let heardSomething = system.voicedSeconds + microphone.voicedSeconds > 1
+
+        if let failure = (speechStats[.system]?.error ?? speechStats[.microphone]?.error) {
+            return "Speech recognition stopped working — \(failure)"
+        }
+        if system.buffers == 0 && microphone.buffers == 0 {
+            return "No audio reached Excerpt at all — check its permissions"
+        }
+        if !heardSomething {
+            return system.buffers == 0
+                ? "Your microphone was heard but the meeting's audio was silent"
+                : "Everything was silent — was anything actually playing?"
+        }
+        if meeting.events.isEmpty {
+            return "Heard \(Int(system.voicedSeconds + microphone.voicedSeconds))s of sound but recognised no words"
+        }
+        return "Nothing worth noting was said"
     }
 
     // MARK: - Recovery
@@ -322,7 +348,9 @@ final class MeetingSession {
 
     @discardableResult
     func recover(id: String) -> Meeting? {
-        let recovered = store.replayJournal(id: id)
+        // The same assembly the live path uses, so a recovered meeting reads like one
+        // that ended normally rather than like a pile of fragments.
+        let recovered = TranscriptAssembly.assemble(store.replayJournal(id: id))
         guard !recovered.isEmpty else {
             store.discardJournal(id: id)
             return nil

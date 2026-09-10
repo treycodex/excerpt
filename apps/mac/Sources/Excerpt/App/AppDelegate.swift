@@ -59,6 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notes?.show(meeting: id?.hasPrefix("--") == false ? id : nil)
         }
         if CommandLine.arguments.contains("--captions") { overlay.show() }
+        if let index = CommandLine.arguments.firstIndex(of: "--diagnose") {
+            let seconds = CommandLine.arguments.dropFirst(index + 1).first.flatMap(Double.init) ?? 15
+            Task { await runDiagnosis(seconds: seconds) }
+        }
         refresh()
     }
 
@@ -285,6 +289,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func choosePosition(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let position = CaptionPosition(rawValue: raw) else { return }
         overlay.setPosition(position)
+    }
+
+    /// Records one unattended meeting and writes down what every part of it did.
+    ///
+    /// The app has to be launched through LaunchServices for TCC to attribute
+    /// permissions to it rather than to a terminal, which means stdout goes nowhere —
+    /// so the report goes to a file next to the meetings.
+    private func runDiagnosis(seconds: Double) async {
+        var report = ["Excerpt diagnosis — \(Date().formatted())"]
+
+        for permission in Permission.allCases {
+            report.append("  \(permission.rawValue): \(await Permissions.state(of: permission).rawValue)")
+        }
+
+        guard let session else {
+            report.append("  session unavailable — the engine or the meetings folder failed to open")
+            writeDiagnosis(report)
+            NSApp.terminate(nil)
+            return
+        }
+
+        await session.start()
+        report.append("  after start: \(session.status)")
+        try? await Task.sleep(for: .seconds(seconds))
+        await session.stop()
+
+        report.append("  sources: \(session.diagnosis)")
+        report.append("  events: \(session.lastSaved?.events.count ?? 0)")
+        report.append("  items: \(session.lastSaved?.items.count ?? 0)")
+        report.append("  verdict: \(session.status)")
+        for event in session.lastSaved?.events.prefix(8) ?? [] {
+            report.append(String(format: "    %@ %.2f–%.2f “%@”",
+                                 event.speakerLabel, event.tStart ?? -1, event.tEnd ?? -1, event.text))
+        }
+
+        writeDiagnosis(report)
+        NSApp.terminate(nil)
+    }
+
+    private func writeDiagnosis(_ lines: [String]) {
+        guard let folder = store?.folder else { return }
+        try? lines.joined(separator: "\n").appending("\n")
+            .write(to: folder.appending(path: "diagnose.txt"), atomically: true, encoding: .utf8)
     }
 
     // MARK: - Recovery

@@ -289,7 +289,23 @@ and pivoting to one mid-competition is an architecture change, not a fallback.
    callbacks, no error. `apps/mac/spike/Sources/ExcerptSpike/main.swift` is an explicit
    entry point for that reason, and it also keeps the delegate alive, since
    `NSApplication.delegate` is a weak reference.
-9. **`NSWindow.sharingType = .none` makes the overlay invisible to screen recording.**
+9. **The recogniser settles on a clock, not on a sentence.** `finalize(through:)`
+   cuts wherever the timer falls, so one sentence arrives as `"Let's move."` then
+   `"the campaign launch to October."` — and extraction read the first fragment as a
+   complete decision. `TranscriptAssembly` rejoins them; do not try to fix it by
+   settling at detected pauses, which was tried and reverted (an RMS gate read
+   ordinary speech as silence about half the time and the cuts landed inside words:
+   `"Okay. . let's move the... , to."`).
+10. **Without headphones the microphone hears the far side, and its copy is labelled
+    YOU.** Measured on the first real capture: the loudspeakers saying *"I'll take the
+    revised deck"* became an action assigned to the user — the one rule the product
+    does not bend. Echoes are resolved over the finished transcript, never as results
+    arrive: the two sources settle independently and interleave, so at arrival time
+    the counterpart may not exist yet. On the Mac the test is overlapping audio ranges
+    plus word similarity; the website has no timestamps, so it does not guess.
+11. **A longer overlapping segment is a revision, not a repeat.** Dropping it as a
+    duplicate lost `"by Thursday"` — and the deadline with it.
+12. **`NSWindow.sharingType = .none` makes the overlay invisible to screen recording.**
    It looks like the right privacy default until the captions are missing from every
    demo video and every screenshot, with no error to explain it. The overlay is
    deliberately left capturable.

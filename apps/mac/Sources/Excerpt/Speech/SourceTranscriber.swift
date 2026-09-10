@@ -67,7 +67,14 @@ actor SourceTranscriber {
     /// Seconds of trailing audio left volatile, so the overlay still has live text
     /// while everything older is settled.
     private static let volatileTail: Double = 2.0
+    /// Every four seconds, which is what Stage 0 measured and what produced legible
+    /// text. Settling at detected pauses instead was tried and reverted: an RMS gate
+    /// read ordinary speech as silence about half the time, so the cut landed inside
+    /// words rather than between sentences and the transcript came back as
+    /// `"Okay. . let's move the... , to."` The cut has to land somewhere, and
+    /// TranscriptAssembly is what makes the seam not matter.
     private static let settleEvery: Duration = .seconds(4)
+    private var settledThrough: Double = 0
     private var sourceOffset: CMTime = .zero
     private var haveOffset = false
 
@@ -174,8 +181,11 @@ actor SourceTranscriber {
         return recentlyEmitted.contains { previous in
             let overlap = min(previous.end, segment.end) - max(previous.start, segment.start)
             guard overlap > 0 else { return false }
-            let existing = Self.normalized(previous.text)
-            return existing.contains(incoming) || incoming.contains(existing)
+            // Only a segment that ADDS nothing is a repeat. Dropping the longer of the
+            // two loses the revision: measured, `"…and get it over by Thursday"` was
+            // discarded as a duplicate of `"…and get it over"`, and the deadline with
+            // it. A longer overlapping segment is the recogniser having heard more.
+            return Self.normalized(previous.text).contains(incoming)
         }
     }
 
@@ -195,9 +205,11 @@ actor SourceTranscriber {
         guard let analyzer else { return }
         let fedSeconds = Double(framesFed) / feedRate
         let through = fedSeconds - Self.volatileTail
-        guard through > 0 else { return }
+        guard through > settledThrough + 0.5 else { return }
+
         do {
             try await analyzer.finalize(through: CMTime(seconds: through, preferredTimescale: 1000))
+            settledThrough = through
             stats.settleCalls += 1
         } catch {
             record(error: "finalize: \(error)")
