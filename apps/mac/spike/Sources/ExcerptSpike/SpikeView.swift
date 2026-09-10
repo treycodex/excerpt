@@ -25,11 +25,14 @@ struct SpikeView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             // The menu bar is the only way back once there is no Dock icon.
-            OverlayBridge.shared.toggle = {
-                if session.overlay.visible { session.overlay.hide() } else { showOverlay() }
-            }
+            OverlayBridge.shared.controller = session.overlay
         }
         .task {
+            // --overlay puts a caption on screen at launch, so the look can be judged
+            // from a screenshot instead of from a description of it.
+            if CommandLine.arguments.contains("--overlay") {
+                showOverlay()
+            }
             // --auto runs the gates that need no human in the loop, so a run can be
             // driven and read from a terminal. Permission gates still need clicks.
             guard CommandLine.arguments.contains("--auto") else { return }
@@ -112,6 +115,30 @@ struct SpikeView: View {
                 Button("10 · clicks passed through") { board.set("10", .pass, "ignoresMouseEvents: clicks reached the app underneath") }
                 Button("9 · readable over fullscreen") { board.set("9", .pass, "transparent, no panel, readable over a fullscreen meeting") }
                 Button("9 · FAILS over fullscreen") { board.set("9", .fail, "windowed: yes · fullscreen: no — elevation \(session.overlay.elevation.rawValue), accessory \(session.overlay.accessoryMode)") }
+            }
+            HStack(spacing: 8) {
+                Text("look").font(.system(size: 11, design: .monospaced)).foregroundStyle(.tertiary)
+                Picker("", selection: Binding(
+                    get: { session.overlay.preset },
+                    set: { session.overlay.setPreset($0) }
+                )) {
+                    ForEach(CaptionPreset.allCases) { Text($0.title).tag($0) }
+                }
+                .labelsHidden().frame(width: 140)
+                Picker("", selection: Binding(
+                    get: { session.overlay.size },
+                    set: { session.overlay.setSize($0) }
+                )) {
+                    ForEach(CaptionSize.allCases) { Text($0.title).tag($0) }
+                }
+                .labelsHidden().frame(width: 110)
+                Picker("", selection: Binding(
+                    get: { session.overlay.position },
+                    set: { session.overlay.setPosition($0) }
+                )) {
+                    ForEach(CaptionPosition.allCases) { Text($0.title).tag($0) }
+                }
+                .labelsHidden().frame(width: 120)
             }
             HStack(spacing: 8) {
                 Text("elevation").font(.system(size: 11, design: .monospaced)).foregroundStyle(.tertiary)

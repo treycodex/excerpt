@@ -5,6 +5,15 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 CONFIG=${1:-debug}
+
+# The caption presets are generated from the web token file. Catch drift here rather
+# than discovering it as two products that disagree about what "Warm" means.
+if command -v node >/dev/null 2>&1; then
+  node tools/sync-caption-tokens.mjs --check
+else
+  echo "warning: node not found; skipping the caption-token sync check"
+fi
+
 swift build -c "$CONFIG" 2>&1 | tail -20
 
 APP="build/Excerpt Spike.app"

@@ -9,6 +9,12 @@ let package = Package(
             name: "ExcerptSpike",
             path: "Sources/ExcerptSpike",
             swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "ExcerptSpikeTests",
+            dependencies: ["ExcerptSpike"],
+            path: "Tests/ExcerptSpikeTests",
+            swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]
 )

@@ -173,7 +173,28 @@ packages/core/src/
 packages/ui/src/     Strip, Frame, tokens.css, strip.css
 spike/               Day 0 feasibility harness + SPIKE-RESULTS.md (kept deliberately)
 POLISH-PLAN.md        implemented polish review, acceptance checks, release proof
+
+apps/mac/spike/
+  tools/sync-caption-tokens.mjs   reads packages/ui/src/tokens.css, writes the Swift
+  Sources/ExcerptSpike/
+    CaptionTokens.generated.swift GENERATED — never edit; run the tool instead
+    CaptionStyle.swift            presets, sizes, positions, accessibility precedence
+    CaptionOverlayView.swift      Motif 1 in SwiftUI: the subtitle over the meeting
+    OverlayWindow.swift           borderless click-through window + OverlayController
+    SpikeAppDelegate.swift        menu bar — the app's only chrome
+    CaptureEngine/SourceTranscriber/CaptureSession/Permissions/ModelProvisioning
+  Tests/ExcerptSpikeTests/        9 tests over CaptionStyle.resolve
 ```
+
+**The caption presets are generated, not copied.** `tokens.css` is the one definition
+of what Classic, Warm and Contrast mean; `build.sh` fails if the Swift is out of date.
+Change a preset in the CSS and re-run the tool — never edit the Swift by hand.
+
+One thing genuinely does not carry across: **Archivo**. Only a `.woff2` exists, which
+CoreText cannot load, so the Mac caption is the system font. That is also what Apple's
+own guidance asks for, and SF ships the optical sizing and tracking tables a subtitle
+needs — but it does mean the two surfaces are not the same face, only the same metrics,
+colour, shadow, wrapping rule and fade.
 
 ---
 
@@ -241,6 +262,15 @@ and pivoting to one mid-competition is an architecture change, not a fallback.
 6. **Vercel preview URLs are auth-protected**; only the production URL is public.
 7. **Deploys are CLI-driven**, not GitHub-connected. Pushing does not deploy;
    run `vercel deploy --prod --yes`.
+8. **`@main` on an `NSApplicationDelegate` class silently does not wire the delegate.**
+   The app launches with a menu bar and nothing else — no window, no status item, no
+   callbacks, no error. `apps/mac/spike/Sources/ExcerptSpike/main.swift` is an explicit
+   entry point for that reason, and it also keeps the delegate alive, since
+   `NSApplication.delegate` is a weak reference.
+9. **`NSWindow.sharingType = .none` makes the overlay invisible to screen recording.**
+   It looks like the right privacy default until the captions are missing from every
+   demo video and every screenshot, with no error to explain it. The overlay is
+   deliberately left capturable.
 
 ---
 
@@ -253,6 +283,12 @@ pnpm --filter @excerpt/core exec vitest run
 pnpm --filter @excerpt/core exec tsc --noEmit -p tsconfig.json
 pnpm --filter @excerpt/web  exec tsc --noEmit -p tsconfig.json
 vercel deploy --prod --yes     # from repo root
+
+cd apps/mac/spike
+node tools/sync-caption-tokens.mjs      # after changing a --cap-* token in the CSS
+./build.sh                              # checks token sync, builds, signs the .app
+swift test                              # 9 caption-style tests
+"./build/Excerpt Spike.app/Contents/MacOS/ExcerptSpike" --overlay   # caption at launch
 ```
 
 `pnpm` lives at `~/.local/bin` — ensure it is on PATH.
