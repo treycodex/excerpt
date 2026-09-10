@@ -11,7 +11,7 @@ export function Preferences() {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => { void loadPreferences().then(setPrefs); }, []);
+  useEffect(() => { void loadPreferences().catch(() => DEFAULT_PREFERENCES).then(setPrefs); }, []);
   if (!prefs) return <div className="notes"><p className="rubric">Reading…</p></div>;
 
   const commit = (next: Prefs) => {

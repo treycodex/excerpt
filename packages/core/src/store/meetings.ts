@@ -7,23 +7,32 @@ import type { Meeting } from '@excerpt/types';
  */
 const store = createStore('excerpt', 'meetings');
 
+/**
+ * IndexedDB is not always there: private windows, blocked site data, a browser
+ * with storage disabled. A rejected read used to leave the UI on "Reading..."
+ * forever, so every read degrades to an empty result instead.
+ */
 export async function saveMeeting(m: Meeting): Promise<void> {
   await set(m.id, m, store);
 }
 
 export async function loadMeeting(id: string): Promise<Meeting | undefined> {
-  return get<Meeting>(id, store);
+  try { return await get<Meeting>(id, store); } catch { return undefined; }
 }
 
 export async function deleteMeeting(id: string): Promise<void> {
-  await del(id, store);
+  try { await del(id, store); } catch { /* nothing to remove */ }
 }
 
 /** Newest first. Meetings are few, so reading them all is fine. */
 export async function listMeetings(): Promise<Meeting[]> {
-  const ids = await keys(store);
-  const all = await Promise.all(ids.map((k) => get<Meeting>(k as string, store)));
-  return all
-    .filter((m): m is Meeting => !!m)
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  try {
+    const ids = await keys(store);
+    const all = await Promise.all(ids.map((k) => get<Meeting>(k as string, store)));
+    return all
+      .filter((m): m is Meeting => !!m)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  } catch {
+    return [];
+  }
 }

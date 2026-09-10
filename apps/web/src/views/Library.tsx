@@ -8,7 +8,7 @@ const when = (iso: string) =>
 export function Library({ onOpen }: { onOpen: (id: string) => void }) {
   const [meetings, setMeetings] = useState<Meeting[] | null>(null);
 
-  const refresh = () => { void listMeetings().then(setMeetings); };
+  const refresh = () => { void listMeetings().catch(() => []).then(setMeetings); };
   useEffect(refresh, []);
 
   return (

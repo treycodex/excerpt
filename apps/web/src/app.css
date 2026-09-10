@@ -355,3 +355,43 @@ code {
 .mic-pick select:focus { outline: none; border-color: var(--ember); }
 .live-credits .trace { font-size: 10px; opacity: .75; }
 .nav .build { color: var(--line-strong); font-size: 10px; letter-spacing: .1em; }
+
+/* --- Narrow screens --------------------------------------------------------
+   Fixed grid columns in the claims and credits blocks, plus a nav and CTA row
+   that could not wrap, pushed the body wider than the viewport and clipped the
+   copy. Wide content scrolls inside its own container; the page never does. */
+@media (max-width: 720px) {
+  .nav { padding: 16px 20px; gap: 16px; flex-wrap: wrap; }
+  .nav .build { display: none; }
+
+  .landing { padding: 56px 20px 80px; }
+  .notes   { padding: 48px 20px 96px; }
+  .session { padding: 28px 20px 56px; }
+
+  .claims div { grid-template-columns: 1fr; gap: 8px; }
+  .credits    { grid-template-columns: 1fr; gap: 2px 0; }
+  .credits dt { padding-top: 12px; }
+  .credits dd { padding-bottom: 6px; }
+
+  .cta-row { flex-direction: column; align-items: stretch; }
+  .cta     { width: 100%; text-align: center; }
+
+  .item .state    { flex-wrap: wrap; gap: 10px; }
+  .controls       { flex-wrap: wrap; opacity: 1; }   /* no hover on touch */
+  .edit           { flex-wrap: wrap; }
+  .edit input     { min-width: 0; flex: 1 1 100%; }
+
+  .line-row       { flex-direction: column; gap: 4px; padding: 10px 8px; margin: 0 -8px; }
+  .line-row .meta { flex: none; }
+
+  .transport      { flex-wrap: wrap; gap: 12px; }
+  .transport-strip { flex: 1 1 100%; order: -1; }
+
+  .mic-pick       { flex-direction: column; align-items: stretch; gap: 8px; }
+  .meeting-row    { flex-wrap: wrap; }
+  .pref-order li  { gap: 12px; }
+  .dismissed-row  { flex-wrap: wrap; gap: 10px; }
+}
+
+/* Long unbroken strings (URLs, recognition artefacts) must not widen the page. */
+.item .title, .item blockquote, .line-row span, .rubric { overflow-wrap: anywhere; }

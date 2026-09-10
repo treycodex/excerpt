@@ -86,13 +86,18 @@ export function applyPreferences(items: Item[], prefs: Preferences): Item[] {
 
 const KEY = 'excerpt:preferences';
 
+/** Falls back to defaults rather than hanging when storage is unavailable. */
 export async function loadPreferences(): Promise<Preferences> {
-  const stored = await get<Preferences>(KEY);
-  return stored ? { ...DEFAULT_PREFERENCES, ...stored } : DEFAULT_PREFERENCES;
+  try {
+    const stored = await get<Preferences>(KEY);
+    return stored ? { ...DEFAULT_PREFERENCES, ...stored } : DEFAULT_PREFERENCES;
+  } catch {
+    return DEFAULT_PREFERENCES;
+  }
 }
 
 export async function savePreferences(prefs: Preferences): Promise<void> {
-  await set(KEY, prefs);
+  try { await set(KEY, prefs); } catch { /* preferences are a convenience, not data loss */ }
 }
 
 export function orderCategories(prefs: Preferences): Category[] {
