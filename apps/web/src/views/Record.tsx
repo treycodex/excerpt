@@ -5,7 +5,8 @@ import {
   loadPreferences, saveMeeting, savePreferences,
 } from '@excerpt/core';
 import type { AdapterStatus, Meeting, ProcessingMode, TranscriptEvent } from '@excerpt/types';
-import type { StreamDiagnostics } from '@excerpt/core';
+import type { AudioInput, StreamDiagnostics } from '@excerpt/core';
+import { listMicrophones, preferredMicrophone } from '@excerpt/core';
 import { Captions } from './CallFrame';
 import type { Spoken } from './CallFrame';
 import { Strip } from '@excerpt/ui';
@@ -26,6 +27,8 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
   const [pendingMode, setPendingMode] = useState<Mode>('tab');
   const [captured, setCaptured] = useState(0);
   const [diag, setDiag] = useState<StreamDiagnostics[]>([]);
+  const [mics, setMics] = useState<AudioInput[]>([]);
+  const [micId, setMicId] = useState<string>('');
 
   const adapter = useRef<LiveCaptureAdapter | null>(null);
   const events = useRef<TranscriptEvent[]>([]);
@@ -36,6 +39,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
     const a = new LiveCaptureAdapter({
       sessionId: `live-${Date.now()}`,
       captureMode: mode,
+      ...(micId ? { microphoneDeviceId: micId } : {}),
       cloudAllowed: cloudAllowed || prefs.transcriptionChoice === 'cloud-allowed',
     });
     adapter.current = a;
@@ -52,7 +56,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
     startedAt.current = performance.now();
     setPendingMode(mode);
     await a.start();
-  }, []);
+  }, [micId]);
 
   useEffect(() => {
     if (status.kind !== 'running') return;
@@ -64,6 +68,24 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
   }, [status.kind]);
 
   useEffect(() => () => { void adapter.current?.stop(); }, []);
+
+  // Device labels are hidden until microphone permission is granted, so ask once
+  // on arrival and release immediately. Usually silent — permission persists.
+  useEffect(() => {
+    if (status.kind !== 'idle') return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+        probe.getTracks().forEach((t) => t.stop());
+      } catch { /* declined; we can still list devices without labels */ }
+      const found = await listMicrophones().catch(() => []);
+      if (cancelled) return;
+      setMics(found);
+      setMicId((current) => current || preferredMicrophone(found)?.deviceId || '');
+    })();
+    return () => { cancelled = true; };
+  }, [status.kind]);
 
   const stop = async () => {
     await adapter.current?.stop();
@@ -211,6 +233,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
               <dt>{d.role === 'you' ? 'Your microphone' : 'Shared audio'}</dt>
               <dd>
                 <Level level={d.level} />
+                {d.device && <span className="dim">{d.device} · </span>}
                 <span className={d.voicedSeconds > 1 ? '' : 'warn'}>
                   {d.voicedSeconds < 1 ? 'no sound reaching Excerpt' : `${d.voicedSeconds.toFixed(0)}s of sound`}
                 </span>
@@ -284,10 +307,26 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
             </span>
           </button>
         </div>
+        <label className="mic-pick">
+          <span>Microphone</span>
+          <select value={micId} onChange={(e) => setMicId(e.target.value)}>
+            {mics.length === 0 && <option value="">System default</option>}
+            {mics.map((m) => (
+              <option key={m.deviceId} value={m.deviceId}>
+                {m.label}{m.suspect ? ' — often captures nothing' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
         <p className="rubric">
           Your microphone is captured separately, which is how Excerpt can tell what you
           said from what everyone else said. It is the only thing it can tell about who
           is speaking.
+        </p>
+        <p className="rubric">
+          Check the device above. A Mac will happily default to an iPhone’s microphone
+          or a virtual device installed by another app, and either one records silence
+          while looking perfectly healthy.
         </p>
       </section>
     </div>

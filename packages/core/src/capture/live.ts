@@ -35,10 +35,16 @@ export interface StreamDiagnostics {
   restarts: number;
   started: boolean;
   lastError?: string;
+  /** Which device this stream came from. A silent Continuity mic looks identical
+      to a quiet room unless the label is on screen. */
+  device?: string;
 }
 
 export interface LiveCaptureOptions {
   sessionId: string;
+  /** Explicit microphone. Without one the browser default may be a Continuity or
+      virtual device that captures nothing. */
+  microphoneDeviceId?: string;
   /** Set once the user has explicitly chosen cloud. Never inferred. */
   cloudAllowed?: boolean;
   captureMode?: 'tab' | 'system';
@@ -101,7 +107,13 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
 
     try {
       this.mic = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
+        audio: {
+          ...(this.opts.microphoneDeviceId
+            ? { deviceId: { exact: this.opts.microphoneDeviceId } }
+            : {}),
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
       });
     } catch (e) {
       return this.setStatus({ kind: 'error', message: `Microphone was declined (${(e as Error).name}).` });
@@ -172,6 +184,7 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     this.diagnostics[key] = {
       role, label, level: 0, voicedSeconds: 0,
       finals: 0, interims: 0, restarts: 0, started: false,
+      ...(track.label ? { device: track.label } : {}),
     };
     rec.addEventListener('start', () => {
       const d = this.diagnostics[key]; if (d) d.started = true;

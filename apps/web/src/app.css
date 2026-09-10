@@ -342,3 +342,14 @@ code {
 .level i.on { background: var(--ember); }
 
 .stalled { border-left: 1px solid var(--warn); padding-left: 14px; margin-top: 18px; }
+
+.mic-pick { display: flex; align-items: center; gap: 16px; margin: 4px 0 20px; }
+.mic-pick span {
+  font: var(--label); letter-spacing: var(--label-track);
+  text-transform: uppercase; color: var(--faint);
+}
+.mic-pick select {
+  flex: 1; background: var(--raise); border: 1px solid var(--line-strong);
+  color: var(--ink); font: 400 14px/1.4 var(--sans); padding: 10px 12px;
+}
+.mic-pick select:focus { outline: none; border-color: var(--ember); }
