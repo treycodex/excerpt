@@ -21,6 +21,13 @@ function parse(hash: string): Route {
   if (path === 'preferences') return { name: 'preferences' };
   if (path === 'record') return { name: 'record' };
   if (path.startsWith('welcome/')) return { name: 'onboarding', id: path.slice(8) };
+
+  // Anything else is the landing page — but say so in the address bar too. Rendering
+  // the home page under a URL that claims to be somewhere else leaves a visitor with
+  // a link that does not do what it says when they share it.
+  if (path !== '') {
+    try { window.history.replaceState(null, '', `${window.location.pathname}#/`); } catch { /* no history */ }
+  }
   return { name: 'landing' };
 }
 

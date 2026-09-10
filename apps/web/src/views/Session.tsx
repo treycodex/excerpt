@@ -8,6 +8,8 @@ import { CallFrame, Captions } from './CallFrame';
 import type { Spoken } from './CallFrame';
 import { openCaptionWindow, supportsPiP } from '../pip';
 import { CAPTION_PRESETS, applyPreset, currentPreset } from '../captionPreset';
+import { Wordmark } from './Wordmark';
+import './player.css';
 import type { CaptionPreset } from '../captionPreset';
 import { createAmbience } from '../ambience';
 import type { Ambience } from '../ambience';
@@ -98,11 +100,22 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
     .sort((a, b) => a.at - b.at);
 
   return (
-    <div className="session">
+    <div className="player">
+      <nav className="setup-nav" aria-label="Main">
+        <a href="#/" aria-label="Excerpt home"><Wordmark /></a>
+        <span className="ed-label">A SCRIPTED DEMO · NOT A REAL MEETING</span>
+      </nav>
+
+      <div className="player-head">
+        <span className="ed-label">WATCH A MEETING</span>
+        <span className="ed-label">SUBTITLES AS THEY ARE SAID</span>
+      </div>
+
       <CallFrame fresh={fresh} elapsed={elapsed} />
 
       {pip && createPortal(<Captions fresh={fresh} standalone />, pip.body)}
 
+      <div className="transport-rows">
       <div className="transport">
         <button className="play" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? 'Pause' : 'Play'}
@@ -110,6 +123,9 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
         <div className="transport-strip">
           <Strip duration={duration} position={elapsed} onScrub={seek} />
         </div>
+      </div>
+
+      <div className="transport-more">
         <button
           className="sound"
           aria-pressed={sound}
@@ -150,7 +166,9 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
             {pip ? 'Close float' : 'Float captions'}
           </button>
         )}
+        <span className="spacer" />
         <button className="skip" onClick={finish}>Skip to notes</button>
+      </div>
       </div>
     </div>
   );
