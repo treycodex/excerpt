@@ -50,19 +50,36 @@ launch() {
   park_pointer
 }
 
-# id x y w h for Excerpt's window — and it exits non-zero if Excerpt is not actually
-# the frontmost app, so a run can never quietly photograph something else.
+# id x y w h for Excerpt's window, or a non-zero status if Excerpt is not actually
+# the frontmost app — so a run can never quietly photograph something else.
+#
+# It returns rather than exits: an `exit` inside a `$(...)` only ends the subshell,
+# so the first version announced the error and then carried on to run screencapture
+# with an empty rectangle. The caller has to check.
 window_geometry() {
-  if ! swift tools/window-id.swift "Excerpt"; then
-    echo "error: Excerpt's window is not frontmost. Nothing was recorded." >&2
-    exit 1
-  fi
+  local geo
+  for _ in 1 2 3; do
+    if geo=$(swift tools/window-id.swift "Excerpt" 2>/dev/null); then
+      printf '%s\n' "$geo"
+      return 0
+    fi
+    # Something else took the front. Ask for Excerpt again and look once more.
+    open "$APP" >/dev/null 2>&1 || true
+    sleep 2
+  done
+  return 1
 }
+
+# NOTE for the caller: use `GEO=$(window_geometry) || exit 1`. An `exit` *inside* a
+# command substitution only ends the subshell — the first two attempts at this guard
+# printed their error and then let the script run screencapture with an empty
+# rectangle anyway. The status has to be checked where the assignment happens.
 
 if [ "$WHAT" = all ] || [ "$WHAT" = hero ]; then
   echo "recording the demo session…"
   launch --notes-route "#/session"
-  read -r _ WX WY WW WH <<< "$(window_geometry)"
+  GEO=$(window_geometry) || { echo "error: Excerpt's window never came to the front. Nothing was recorded." >&2; exit 1; }
+  read -r _ WX WY WW WH <<< "$GEO"
   FRAME=$(awk -v x="$WX" -v y="$WY" -v w="$WW" -v h="$WH" \
     -v l=$FRAME_LEFT -v t=$FRAME_TOP -v fw=$FRAME_WIDTH -v fh=$FRAME_HEIGHT \
     'BEGIN { printf "%d,%d,%d,%d", x + w*l, y + h*t, w*fw, h*fh }')
@@ -90,7 +107,8 @@ if [ "$WHAT" = all ] || [ "$WHAT" = stills ]; then
   # Captured by window id rather than by rectangle: -l gives the window's own rounded
   # corners with transparency behind them, so the shot drops onto the site's dark
   # figure without a rectangle of desktop around it. PNG, because JPEG has no alpha.
-  read -r WINDOW_ID _ <<< "$(window_geometry)"
+  GEO=$(window_geometry) || { echo "error: Excerpt's window never came to the front. Nothing was recorded." >&2; exit 1; }
+  read -r WINDOW_ID _ <<< "$GEO"
   screencapture -x -o -l "$WINDOW_ID" -t png "$MEDIA/notes.png"
 fi
 

@@ -66,7 +66,7 @@ export function Captions({ fresh, standalone }: { fresh: Spoken[]; standalone?: 
 function Tile({ name, role, live }: { name: string; role: string; live: boolean }) {
   return (
     <div className={`tile${live ? ' live' : ''}`}>
-      <div className="initial">{name[0]}</div>
+      <div className="avatar"><Silhouette /></div>
       <div className="nameplate">
         {name}
         {/* The tile knows who somebody is; Excerpt only knows who spoke. Show the
@@ -74,6 +74,30 @@ function Tile({ name, role, live }: { name: string; role: string; live: boolean 
         {role !== name.toUpperCase() && <span className="role">{role}</span>}
       </div>
     </div>
+  );
+}
+
+/**
+ * The generic participant: a head and shoulders, the convention every product uses
+ * for somebody whose picture it does not have.
+ *
+ * It replaced an initial taken from the tile's name, which quietly claimed more than
+ * Excerpt knows. Two audio streams tell it who *spoke* — never who they are — so a
+ * letter standing for a person was the interface asserting an identity the product
+ * cannot see. A silhouette says "a participant", which is exactly true.
+ *
+ * Drawn rather than a font glyph or an emoji so it keeps its weight against the
+ * frame at any size, and inherits colour from the tile's live state.
+ */
+function Silhouette() {
+  return (
+    <svg viewBox="0 0 48 48" width="100%" height="100%" aria-hidden focusable="false">
+      <circle cx="24" cy="18" r="8.4" fill="currentColor" />
+      {/* The shoulders run off the bottom of the frame and the round avatar clips
+          them, which is what makes the figure sit *in* the circle rather than float
+          inside it. Drawing them to fit would leave the gap the first pass had. */}
+      <path d="M7.5 49a16.5 16.5 0 0 1 33 0Z" fill="currentColor" />
+    </svg>
   );
 }
 

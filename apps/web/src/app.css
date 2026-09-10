@@ -286,13 +286,16 @@
 .tiles { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
 .tile { position: relative; background: #0D0D0D; display: grid; place-items: center; transition: background .2s var(--ease-out); }
 .tile.live { background: #131313; }
-.tile .initial {
-  width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center;
-  background: #1B1B1B; color: var(--faint);
-  font: 400 30px/1 var(--serif);
+.tile .avatar {
+  width: 84px; height: 84px; border-radius: 50%;
+  display: grid; place-items: center; overflow: hidden;
+  background: #1B1B1B; color: #4A4A4A;
   transition: color .2s var(--ease-out), box-shadow .2s var(--ease-out);
 }
-.tile.live .initial { color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+/* Speaking lifts the figure out of the ground rather than ringing the circle only —
+   the tile is dark and a ring alone is easy to miss at a glance. */
+.tile.live .avatar { color: #9A9A9A; box-shadow: 0 0 0 1px var(--ink); }
+.tile .avatar svg { display: block; }
 .tile .nameplate {
   position: absolute; left: 16px; bottom: 14px;
   font: var(--label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim);

@@ -231,6 +231,17 @@ engine, notes in a WKWebView — plus the guided setup, the menu bar, and the un
 distribution notes. 82 TypeScript tests, 43 Swift.
 
 ### Owed, in order — start here
+0. **The hero footage still shows letter avatars.** The call tiles now draw a
+   silhouette instead of an initial, but `apps/web/public/media/meeting.{mp4,webm}`
+   and its poster were recorded before that, so the homepage video and the live demo
+   disagree. One command fixes it, and it has to be run by a human because
+   `screencapture -v` records a screen region and needs Excerpt frontmost — an agent
+   driving the terminal keeps the focus and the tool refuses rather than photographing
+   the wrong window:
+
+   ```
+   cd apps/mac && ./tools/record-media.sh hero   # then don't touch the machine ~45s
+   ```
 1. **`assigned to you` from a real human voice.** Still the one unproven claim, on
    both surfaces. On the Mac: wear headphones (or the microphone hears the speakers
    and its copy is correctly suppressed as an echo, which is what happened in every
