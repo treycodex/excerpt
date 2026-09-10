@@ -12,15 +12,22 @@
 .setup-description { color: var(--muted); font-size: 16px; line-height: 1.7; max-width: 56ch; }
 .get-started { max-width: 1060px; padding: 65px 30px 100px; margin: auto; }
 .setup-platforms { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 42px; }
-.setup-platform { display: flex; flex-direction: column; padding: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--raise); }
-.setup-platform.mac { background: #20241d; }
+.setup-platform { position: relative; display: flex; flex-direction: column; padding: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--raise); }
+/* The recommended card carries the weight: a lighter ground, a brighter edge, and
+   the only filled button on the screen. Two identical cards make a choice out of
+   something that is not really one. */
+.setup-platform.mac { background: #20241d; border-color: #6c7160; box-shadow: 0 0 0 1px #6c716033; }
+.setup-badge { position: absolute; top: 26px; right: 26px; background: var(--paper); color: #141711; font: 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 7px 10px; border-radius: 2px; }
 .setup-platform-icon { font-size: 32px; margin-bottom: 24px; color: var(--paper); }
 .setup-page h2 { font-size: 28px; font-weight: 500; letter-spacing: -.035em; margin: 12px 0; color: var(--paper); }
 .setup-platform p { color: var(--muted); font-size: 15px; line-height: 1.7; }
 .setup-platform ul { padding: 0 0 20px 18px; font-size: 14px; line-height: 2; color: #c0c2b4; }
 .setup-primary { display: inline-flex; align-items: center; justify-content: space-between; gap: 25px; padding: 14px 20px; background: var(--paper); color: #141711 !important; border: 1px solid var(--paper); border-radius: 0; font-size: 14px; min-height: 48px; }
 .setup-primary:hover { background: #fff; }
-.setup-platform > .setup-primary { margin-top: auto; }
+/* Same shape, no fill — the fallback should read as available, not as equal. */
+.setup-secondary { display: inline-flex; align-items: center; justify-content: space-between; gap: 25px; padding: 14px 20px; background: none; color: var(--paper) !important; border: 1px solid #55574d; border-radius: 0; font-size: 14px; min-height: 48px; }
+.setup-secondary:hover { border-color: var(--paper); }
+.setup-platform > .setup-primary, .setup-platform > .setup-secondary { margin-top: auto; }
 .setup-platform small { color: #989c8d; font-size: 12px; margin: 13px 0 0; }
 .setup-platform .setup-release-note { font-size: 12px; margin: 18px 0 0; }
 .setup-demo-link { font-size: 13px; margin-top: 22px; color: var(--paper) !important; }
@@ -66,4 +73,4 @@
 .setup-terms p { color: #898d82; font-size: 13px; }
 .setup-error { color: #f08a76; font-size: 13px; line-height: 1.6; }
 @media (max-width: 900px) { .setup-wizard { margin: 25px 20px; grid-template-columns: 210px minmax(0,1fr); } .setup-rail { padding: 30px 20px; } .setup-wizard-content { padding: 30px 24px; } .setup-presets { grid-template-columns: 1fr; } .setup-presets span { display: none; } }
-@media (max-width: 640px) { .setup-nav { padding: 20px; } .setup-nav > :last-child { font-size: 11px; } .get-started { padding: 40px 20px; } .setup-platforms, .setup-install ol { grid-template-columns: 1fr; } .setup-platform { padding: 26px; } .setup-wizard { display: block; margin: 20px 12px; } .setup-rail { padding: 20px; } .setup-rail h2, .setup-rail p, .setup-rail > .setup-eyebrow:last-child { display: none; } .setup-rail ol { display: flex; flex-wrap: wrap; gap: 18px; margin: 16px 0 0; } .setup-wizard-content { padding: 26px 20px; } .setup-wizard-footer { flex-wrap: wrap; } .setup-subtitle-scene { height: 195px; } }
+@media (max-width: 640px) { .setup-badge { top: 20px; right: 20px; } .setup-nav { padding: 20px; } .setup-nav > :last-child { font-size: 11px; } .get-started { padding: 40px 20px; } .setup-platforms, .setup-install ol { grid-template-columns: 1fr; } .setup-platform { padding: 26px; } .setup-wizard { display: block; margin: 20px 12px; } .setup-rail { padding: 20px; } .setup-rail h2, .setup-rail p, .setup-rail > .setup-eyebrow:last-child { display: none; } .setup-rail ol { display: flex; flex-wrap: wrap; gap: 18px; margin: 16px 0 0; } .setup-wizard-content { padding: 26px 20px; } .setup-wizard-footer { flex-wrap: wrap; } .setup-subtitle-scene { height: 195px; } }
