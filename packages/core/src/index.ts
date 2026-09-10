@@ -1,4 +1,6 @@
 export { splitIntoSubtitleLines, dashDialogue } from './caption/lines';
+export { toTurns } from './transcript/turns';
+export type { Turn } from './transcript/turns';
 export { DemoTranscriptAdapter } from './capture/demo';
 export type { ScriptedLine } from './capture/demo';
 export { LiveCaptureAdapter } from './capture/live';

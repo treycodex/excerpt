@@ -95,6 +95,32 @@ Window level also matters: `maximum` rather than `screenSaver`.
 This is the product's intended architecture rather than a workaround — Excerpt is a
 menu-bar app — but it means the overlay and the Dock icon are mutually exclusive.
 
+**9b. Re-measured when the Dock icon was added back (Sept 10).** `DockPresence` now
+switches policy at runtime: `.regular` while a notes or setup window is open,
+`.accessory` whenever the overlay is showing. Measured with `lsappinfo`:
+
+| state | ApplicationType |
+|---|---|
+| notes window open | `Foreground` |
+| setup window open | `Foreground` |
+| window open **and** captions showing | `UIElement` |
+| no windows | `UIElement` |
+
+Two results worth keeping:
+
+- **The overlay survives a runtime policy switch.** After promoting to regular and
+  demoting again, the caption still draws over every window on screen.
+- **Demoting does NOT remove the Dock tile.** The policy reads `UIElement` and the icon
+  stays in the Dock for the life of the process. So the honest description of the
+  behaviour is "Excerpt appears in the Dock the first time you open a window, and stays
+  there until you quit" — not "it comes and goes". The tile is LaunchServices UI, not
+  Space ownership, so it should not affect finding 9's mechanism.
+
+**Still unmeasured:** whether captions draw over a *fullscreen* app after the app has
+been promoted to regular and demoted again. Finding 9 was measured on an app that was
+accessory from launch. The mechanism says it should hold — a demoted app owns no Space —
+but that is reasoning, not a measurement, and everything else in this file was measured.
+
 **10. Gate 13 must be judged on resources held, not on a state transition.**
 After an interruption the engine is already stopped, so a `running → stopped` check
 reports a false failure for a stop that worked correctly. Judged on whether any

@@ -135,8 +135,15 @@ final class OverlayController {
     /// so this is the target configuration, not a workaround.
     func setAccessoryMode(_ on: Bool) {
         accessoryMode = on
-        NSApp.setActivationPolicy(on ? .accessory : .regular)
-        if on { NSApp.activate(ignoringOtherApps: false) }
+        // Pinned, not set: DockPresence owns the policy, and the diagnostics window is
+        // the one caller allowed to overrule the rule while it measures each mode.
+        DockPresence.shared.force(on ? .accessory : .regular)
+        rebuild()
+    }
+
+    /// The overlay window carries the activation policy in its collection behaviour, so
+    /// a policy change has to rebuild it. Called by DockPresence, which owns the policy.
+    func policyDidChange() {
         rebuild()
     }
 
@@ -177,6 +184,7 @@ final class OverlayController {
         window.orderFrontRegardless()
         visible = true
         screenName = target.localizedName
+        DockPresence.shared.overlay(isShowing: true)
 
         // Gate 11: follow display changes rather than being stranded on a screen
         // that no longer exists.
@@ -200,6 +208,7 @@ final class OverlayController {
     func hide() {
         window?.orderOut(nil)
         visible = false
+        DockPresence.shared.overlay(isShowing: false)
     }
 
     func toggle() {

@@ -22,6 +22,15 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/$CONFIG/Excerpt" "$APP/Contents/MacOS/Excerpt"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 
+# The app icon. Generated from the [ e ] mark by apps/web/tools/render-brand.mjs;
+# without it macOS draws a blank generic document next to Excerpt in the Microphone
+# and Screen Recording panes, which is a poor look for an app asking for both.
+if [ -f Resources/AppIcon.icns ]; then
+  cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+else
+  echo "warning: Resources/AppIcon.icns missing — run: node ../web/tools/render-brand.mjs"
+fi
+
 # The extraction engine is the web package's build output, not a Swift port. If it
 # is missing the app has no notes at all, so refuse to assemble a bundle without it.
 if [ ! -f Resources/excerpt-engine.js ]; then

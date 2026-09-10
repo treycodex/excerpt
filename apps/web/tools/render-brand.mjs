@@ -13,7 +13,7 @@
  * Needs Chrome and ffmpeg, so it is a developer tool, not part of the build.
  */
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync, copyFileSync, existsSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, existsSync, rmSync, statSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 const web = join(dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = join(web, 'public');
+const macResources = join(web, '../mac/Resources');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const PAPER = '#f1f0dd';
@@ -71,9 +72,10 @@ writeFileSync(join(work, 'og.html'), `<!doctype html><meta charset="utf-8"><styl
  * hangs the script forever if you wait for it. Wait for the file instead, then end
  * the process.
  */
-async function shoot(page, out, size) {
+async function shoot(page, out, size, transparent = false) {
   const chrome = spawn(CHROME, [
     '--headless=new', '--disable-gpu', '--hide-scrollbars',
+    ...(transparent ? ['--default-background-color=00000000'] : []),
     '--force-device-scale-factor=1', `--window-size=${size}`,
     `--screenshot=${out}`, '--virtual-time-budget=2500',
     '--allow-file-access-from-files', `--user-data-dir=${join(work, 'chrome')}`,
@@ -105,5 +107,34 @@ for (const [name, px] of [['favicon-32', 32], ['apple-touch-icon', 180], ['icon-
 }
 ff(['-i', mark, '-vf', 'scale=512:512', join(publicDir, 'icon-512.png'), '-y']);
 
+/*
+ * The macOS app icon.
+ *
+ * Not the favicon at a bigger size: a Dock icon sits on Apple's grid, which is an
+ * 824pt rounded square centred on a 1024pt canvas — roughly a tenth of the canvas as
+ * margin on every side. A full-bleed square looks oversized next to every other icon
+ * in the Dock, which is the tell that someone exported a logo rather than made an icon.
+ */
+writeFileSync(join(work, 'appicon.html'), `<!doctype html><meta charset="utf-8"><style>${face}
+  html,body{margin:0;background:transparent}
+  body{width:1024px;height:1024px;display:grid;place-items:center}
+  .tile{width:824px;height:824px;border-radius:185px;background:${GROUND};
+        display:grid;place-items:center;box-shadow:0 10px 26px rgba(0,0,0,.28)}
+  .mark{font-family:"Archivo",sans-serif;color:${PAPER};font-size:430px;font-weight:600;
+        letter-spacing:-0.133em;line-height:1;white-space:nowrap;text-indent:-0.133em}
+</style><div class="tile"><div class="mark">[ e ]</div></div>`);
+
+const tile = join(work, 'appicon1024.png');
+await shoot(join(work, 'appicon.html'), tile, '1024,1024', true);
+
+const iconset = join(work, 'AppIcon.iconset');
+mkdirSync(iconset, { recursive: true });
+for (const [base, scale] of [[16, 1], [16, 2], [32, 1], [32, 2], [128, 1], [128, 2], [256, 1], [256, 2], [512, 1], [512, 2]]) {
+  const px = base * scale;
+  const name = `icon_${base}x${base}${scale === 2 ? '@2x' : ''}.png`;
+  ff(['-i', tile, '-vf', `scale=${px}:${px}:flags=lanczos`, join(iconset, name), '-y']);
+}
+execFileSync('iconutil', ['-c', 'icns', iconset, '-o', join(macResources, 'AppIcon.icns')], { stdio: 'inherit' });
+
 rmSync(work, { recursive: true, force: true });
-console.log('wrote favicon-32, apple-touch-icon, icon-192, icon-512 and og.png');
+console.log('wrote favicon-32, apple-touch-icon, icon-192, icon-512, og.png and AppIcon.icns');

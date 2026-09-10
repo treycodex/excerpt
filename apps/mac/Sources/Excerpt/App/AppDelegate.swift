@@ -27,12 +27,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var previewTimeout: Task<Void, Never>?
     private lazy var setupModel = SetupModel(overlay: overlay)
 
-    /// Before the first frame, not after. Demoting to accessory in
+    /// Before the first frame, not after. Coming up as a regular app and demoting in
     /// applicationDidFinishLaunching puts a Dock icon on screen for a moment and then
-    /// takes it away, which reads as a glitch in an app whose whole point is that it
-    /// is not in the way.
+    /// takes it away, which reads as a glitch. Excerpt starts with no windows, so the
+    /// rule starts it at accessory and the icon appears when a window does.
     func applicationWillFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        DockPresence.shared.onChange = { [weak self] in self?.overlay.policyDidChange() }
+        DockPresence.shared.apply()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -328,6 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         gateWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        if let gateWindow { DockPresence.shared.track(gateWindow) }
     }
 
     @objc private func choosePreset(_ sender: NSMenuItem) {

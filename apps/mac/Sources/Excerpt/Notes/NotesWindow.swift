@@ -81,9 +81,16 @@ final class NotesWindowController: NSWindowController {
         }
         guard let target = URL(string: "\(NotesSchemeHandler.origin)/index.html\(route)") else { return }
         webView.load(URLRequest(url: target))
+        present()
+    }
 
+    /// Ordering front and telling DockPresence are the same act: a visible window is
+    /// exactly what the Dock icon follows, and tracking one before it is on screen
+    /// reports a window the rule cannot see.
+    private func present() {
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        if let window { DockPresence.shared.track(window) }
     }
 
     /// Navigates an already-open window without reloading it, so opening a second
@@ -91,8 +98,7 @@ final class NotesWindowController: NSWindowController {
     func navigate(toMeeting id: String) {
         guard webView.url != nil else { show(meeting: id); return }
         webView.evaluateJavaScript("location.hash = '#/m/\(id)'")
-        window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        present()
     }
 
     private func presentMissingNotes() {

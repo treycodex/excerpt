@@ -34,6 +34,7 @@ final class SetupWindowController: NSWindowController {
     func present() {
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        if let window { DockPresence.shared.track(window) }
     }
 
     /// The preview overlay is the setup's, not the meeting's. Leaving a sample caption
@@ -42,5 +43,6 @@ final class SetupWindowController: NSWindowController {
         model.overlay.update(speaker: "", text: "")
         model.overlay.hide()
         window?.close()
+        DockPresence.shared.apply()
     }
 }

@@ -280,15 +280,44 @@
 .notebook .passage-context p { grid-template-columns: 92px 1fr; }
 .notebook .passage-context::before, .notebook .passage-context::after { display: none; }
 
-.notebook .line-row { margin: 0; padding: 15px 0; border-bottom: 1px solid var(--line-soft); }
-.notebook .line-row .meta {
-  flex-basis: 104px; font: var(--label); letter-spacing: 0.08em; text-transform: uppercase;
+/* ── Transcript ───────────────────────────────────────────────────────────────
+   A document, not a chat log. Each turn is one person speaking without
+   interruption: the label and the time sit in a hanging gutter and are said once,
+   and the words run as paragraphs. Your own turns take ink-weight labels and a rule
+   in the gutter, because telling you from everyone else is the whole claim. */
+.notebook .transcript { margin-top: 12px; }
+.notebook .turn {
+  display: grid; grid-template-columns: 118px minmax(0, 1fr);
+  gap: 0 20px; padding: 16px 0; border-bottom: 1px solid var(--line-soft);
+}
+.notebook .turn > header { display: flex; flex-direction: column; gap: 3px; padding-top: 2px; }
+.notebook .turn .who {
+  font: 500 10px/1.6 var(--mono); letter-spacing: 0.13em; text-transform: uppercase;
   color: var(--faint);
 }
-.notebook .line-row.focused {
-  padding-left: 12px; margin-left: -14px; border-radius: 6px;
-  background: var(--select); box-shadow: inset 2px 0 var(--settled);
+.notebook .turn.mine .who { color: var(--settled); }
+.notebook .turn .at {
+  font: 400 11px/1.5 var(--mono); color: var(--faint);
+  font-variant-numeric: tabular-nums;
 }
+/* The rule marks your turns without colouring them — the far side is the default,
+   and you are the exception worth spotting. */
+.notebook .turn.mine > header { border-left: 2px solid var(--line-strong, #c9c7ae); margin-left: -12px; padding-left: 10px; }
+
+.notebook .line-row {
+  display: block; margin: 0; padding: 0; border: 0;
+  font: 400 15.5px/1.72 var(--sans); color: var(--ink-soft);
+  /* The toolbar floats over the page, so a row scrolled to by evidence has to stop
+     below it rather than under it. */
+  scroll-margin-top: 96px;
+}
+.notebook .turn.mine .line-row { color: var(--ink); }
+.notebook .line-row + .line-row { margin-top: 7px; }
+.notebook .line-row.focused {
+  margin: 0 -10px; padding: 3px 10px; border-radius: 5px;
+  background: var(--select); color: var(--ink);
+}
+.notebook .line-row + .line-row.focused { margin-top: 4px; }
 .notebook .nudge { font-size: 13px; margin-top: 30px; color: var(--dim); }
 .notebook .nudge a { text-decoration: underline; text-underline-offset: 3px; }
 
@@ -337,7 +366,8 @@
   .notebook .notes { padding: 26px 20px 90px; }
   .notebook .passage-context p { display: block; }
   .notebook .passage-context p span { display: block; margin-bottom: 4px; }
-  .notebook .line-row { display: block; }
-  .notebook .line-row .meta { display: block; margin-bottom: 5px; }
+  .notebook .turn { grid-template-columns: 1fr; gap: 8px; }
+  .notebook .turn > header { flex-direction: row; align-items: baseline; gap: 10px; }
+  .notebook .turn.mine > header { margin-left: 0; padding-left: 8px; }
   .notebook .meeting-row { flex-wrap: wrap; }
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { NotesWorkspace } from './NotesWorkspace';
-import { applyPreferences, bridge, matchedBoosts, orderCategories, saveMeeting, toMarkdown } from '@excerpt/core';
+import { applyPreferences, bridge, matchedBoosts, orderCategories, saveMeeting, toMarkdown, toTurns } from '@excerpt/core';
 import { Frame, Strip } from '@excerpt/ui';
 import type { StripMark } from '@excerpt/ui';
 import type { Category, Item, Meeting, Preferences as Prefs } from '@excerpt/types';
@@ -234,18 +234,29 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
       )}
 
       </div>
-      <section hidden={tab !== 'transcript'}>
-        <h2>Transcript</h2>
+      {/* No heading: the segmented control directly above already says Transcript.
+          Turns rather than lines — one speaker label per stretch of speech, because a
+          settled result is not a unit anybody reads in. */}
+      <section className="transcript" hidden={tab !== 'transcript'}>
         {meeting.events.length === 0 && <p className="rubric">No transcript was captured for this meeting.</p>}
-        {meeting.events.map((e) => (
-          <div
-            key={e.id}
-            ref={(el) => { rows.current[e.id] = el; }}
-            className={`line-row${focusedEvent === e.id ? ' focused' : ''}`}
-          >
-            <span className="meta">{e.speakerLabel} {stamp(e)}</span>
-            <span>{e.text}</span>
-          </div>
+        {toTurns(meeting.events).map((turn) => (
+          <article className={`turn${turn.role === 'you' ? ' mine' : ''}`} key={turn.id}>
+            <header>
+              <span className="who">{turn.speakerLabel}</span>
+              <span className="at">{stamp(turn.events[0]!)}</span>
+            </header>
+            <div className="said">
+              {turn.events.map((e) => (
+                <p
+                  key={e.id}
+                  ref={(el) => { rows.current[e.id] = el; }}
+                  className={`line-row${focusedEvent === e.id ? ' focused' : ''}`}
+                >
+                  {e.text}
+                </p>
+              ))}
+            </div>
+          </article>
         ))}
       </section>
     </div>
