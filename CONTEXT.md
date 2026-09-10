@@ -222,8 +222,33 @@ colour, shadow, wrapping rule and fade.
 
 ## 6. Status
 
-**All nine planned phases plus the polish pass built.** 68 tests, both typechecks and
-the production build clean. The polish pass is local and has not been deployed.
+**Web:** all nine planned phases plus the polish pass built. The polish pass is local
+and has not been deployed.
+
+**macOS: Stage 1 complete and running.** One meeting journey end to end — capture,
+two transcribers, one clock, journal, assembly, extraction through the shared engine,
+notes in a WKWebView. 82 TypeScript tests, 33 Swift.
+
+### Owed, in order — start here
+1. **`assigned to you` from a real human voice.** Still the one unproven claim, on
+   both surfaces. On the Mac: wear headphones (or the microphone hears the speakers
+   and its copy is correctly suppressed as an echo, which is what happened in every
+   test so far), then `open apps/mac/build/Excerpt.app`, Start listening, say
+   *"I'll send the revised deck by Thursday"*, Stop. Expect one action **assigned to
+   you** with a due date. `--diagnose 25` does the same run unattended and writes
+   `~/Library/Application Support/Excerpt/diagnose.txt`.
+2. **A meeting longer than 30 seconds.** Everything measured so far is a 13-second
+   script spoken by `say` through the speakers. Recognition quality, the journal under
+   load, and the overlay during a real call are all unmeasured at length.
+3. **The overlay over an actual fullscreen meeting.** Judged only against this desktop.
+4. Still untested from Stage 0: multiple displays, sleep/wake, gate 1's offline check.
+5. Stage 2 — guided setup (preview → permissions → model → ready), and the unsigned
+   distribution notes.
+
+Recognition text is imperfect and expected to be: `"get it over by."` lost its
+Thursday in one run and kept it in another. Extraction is deliberately conservative
+about what that means — a truncated action stays an action with no due date rather
+than inventing one.
 
 ### Verified against real audio, not assumed
 | | tab audio | system audio |
