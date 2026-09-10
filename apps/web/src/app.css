@@ -109,12 +109,13 @@
 }
 
 .tiles { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
-.tile { position: relative; background: #0D0D0D; display: grid; place-items: center; transition: background .3s; }
+.tile { position: relative; background: #0D0D0D; display: grid; place-items: center; transition: background .2s var(--ease-out); }
 .tile.live { background: #131313; }
 .tile .initial {
   width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center;
   background: #1B1B1B; color: var(--faint);
-  font: 400 30px/1 var(--serif); transition: color .3s, box-shadow .3s;
+  font: 400 30px/1 var(--serif);
+  transition: color .2s var(--ease-out), box-shadow .2s var(--ease-out);
 }
 .tile.live .initial { color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
 .tile .nameplate {
@@ -145,7 +146,7 @@
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
-.fade { opacity: 0; transition: opacity var(--cap-fade) ease; }
+.fade { opacity: 0; transition: opacity var(--cap-fade) var(--ease-out); }
 .fade.in { opacity: 1; }
 
 .call-chrome {
@@ -434,7 +435,7 @@ code {
 .live-credits .warn { color: var(--warn); }
 
 .level { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; }
-.level i { width: 3px; height: 4px; background: var(--line-strong); transition: background .1s, height .1s; }
+.level i { width: 3px; height: 4px; background: var(--line-strong); transition: background .1s linear; }
 .level i:nth-child(2) { height: 6px; }
 .level i:nth-child(3) { height: 8px; }
 .level i:nth-child(4) { height: 10px; }
@@ -605,3 +606,23 @@ code {
 .diagnostics summary::before { content: "▸ "; }
 .diagnostics[open] summary::before { content: "▾ "; }
 .diagnostics summary:hover { color: var(--dim); }
+
+
+/* --- Press feedback ---------------------------------------------------------
+   Every pressable thing should acknowledge the press. Subtle on purpose: this is
+   tactile response, not decoration, and the caption's "fades only" rule is about
+   the subtitle, not about buttons. */
+button, .cta, .mode, .preset-card, .meeting-row .open {
+  transition: transform var(--press) var(--ease-out),
+              background .15s, color .15s, border-color .15s, opacity .15s;
+}
+button:active, .cta:active, .mode:active, .preset-card:active, .meeting-row .open:active {
+  transform: scale(var(--press-scale));
+}
+/* Large surfaces need far less travel than small controls or they feel rubbery. */
+.mode:active, .preset-card:active, .meeting-row .open:active { transform: scale(0.993); }
+
+@media (prefers-reduced-motion: reduce) {
+  button, .cta, .mode, .preset-card, .meeting-row .open { transition: background .15s, color .15s; }
+  button:active, .cta:active, .mode:active, .preset-card:active, .meeting-row .open:active { transform: none; }
+}

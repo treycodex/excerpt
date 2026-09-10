@@ -5,3 +5,8 @@ dist/
 .DS_Store
 .vercel
 .vercel/
+
+# Third-party agent skills (dev tooling, like node_modules).
+# Reinstall with: npx skills@latest add emilkowalski/skills
+.agents/
+.claude/skills/

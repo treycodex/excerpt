@@ -31,15 +31,17 @@
   border: 0;
   background: var(--faint);
   transform: translateX(-0.5px);
+  transform-origin: bottom;
   cursor: pointer;
-  transition: background .15s, height .15s;
+  /* scaleY rather than height: height relayouts, transform composites. */
+  transition: background .15s var(--ease-out), transform .15s var(--ease-out);
 }
 .strip-rail .mark::after {          /* generous hit area, invisible */
   content: ""; position: absolute; inset: -8px -6px;
 }
-.strip-rail .mark:hover { background: var(--ink); height: 22px; }
-.strip-rail .mark.settled { background: var(--ember); height: 22px; }
-.strip-rail .mark.settled:hover { height: 27px; }
+.strip-rail .mark:hover { background: var(--ink); transform: translateX(-0.5px) scaleY(1.375); }
+.strip-rail .mark.settled { background: var(--ember); transform: translateX(-0.5px) scaleY(1.375); }
+.strip-rail .mark.settled:hover { transform: translateX(-0.5px) scaleY(1.69); }
 
 /* One ember dot. The playhead is the only round thing on the page. */
 .strip-rail .playhead {
@@ -50,7 +52,7 @@
   border-radius: 50%;
   background: var(--ember);
   transform: translateX(-3.5px);
-  transition: left .28s cubic-bezier(.22,.61,.36,1);
+  transition: left .28s var(--ease-out);
   pointer-events: none;
 }
 
