@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import { matchedBoosts, orderCategories, saveMeeting, toMarkdown } from '@excerpt/core';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { applyPreferences, matchedBoosts, orderCategories, saveMeeting, toMarkdown } from '@excerpt/core';
 import { Frame, Strip } from '@excerpt/ui';
 import type { StripMark } from '@excerpt/ui';
 import type { Category, Item, Meeting, Preferences as Prefs } from '@excerpt/types';
@@ -16,27 +16,40 @@ const HEADING: Record<Category, string> = {
   question: 'Open questions',
 };
 const ORDER: Category[] = ['decision', 'action', 'deadline', 'question'];
+type ItemPatch = Omit<Partial<Item>, 'due'> & { due?: string | undefined };
 
-export function Notes({ meeting: initial, prefs, onReplay }:
-  { meeting: Meeting; prefs?: Prefs | null; onReplay?: () => void }) {
+export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = false }:
+  { meeting: Meeting; prefs?: Prefs | null; onReplay?: () => void; initialSaveFailed?: boolean }) {
   const [meeting, setMeeting] = useState(initial);
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [focusedEvent, setFocusedEvent] = useState<string | null>(null);
   const [position, setPosition] = useState<number | undefined>(undefined);
   const [copied, setCopied] = useState(false);
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'failed'>(initialSaveFailed ? 'failed' : 'saved');
   const rows = useRef<Record<string, HTMLDivElement | null>>({});
   const cards = useRef<Record<string, HTMLElement | null>>({});
 
-  const update = (id: string, patch: Partial<Item>) => {
+  useEffect(() => {
+    if (initial.id !== meeting.id) setMeeting(initial);
+  }, [initial.id, meeting.id]);
+
+  const update = (id: string, patch: ItemPatch) => {
     const next = {
       ...meeting,
-      items: meeting.items.map((i) => (i.id === id ? { ...i, ...patch, userEdited: true } : i)),
+      items: meeting.items.map((i): Item => {
+        if (i.id !== id) return i;
+        const updated = { ...i, ...patch, userEdited: true } as Item & { due?: string | undefined };
+        if ('due' in patch && !patch.due) delete updated.due;
+        return updated;
+      }),
     };
     setMeeting(next);
-    void saveMeeting(next);
+    setSaveState('saving');
+    void saveMeeting(next).then(() => setSaveState('saved')).catch(() => setSaveState('failed'));
   };
 
-  const live = meeting.items.filter((i) => !i.dismissed);
+  const visible = meeting.items.filter((i) => !i.dismissed);
+  const live = prefs ? applyPreferences(visible, prefs) : visible;
   const duration = meeting.events.at(-1)?.tArrived ?? 1;
   const decided = live.filter((i) => i.state === 'decided' && i.category === 'decision');
   const mine = live.filter((i) => i.assignee === 'you');
@@ -58,6 +71,9 @@ export function Notes({ meeting: initial, prefs, onReplay }:
     label: i.title,
   }));
 
+  const scrollBehavior = () =>
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' as const : 'smooth' as const;
+
   /** One gesture: select an item, move the playhead, frame its passage. */
   const selectItem = (id: string) => {
     const item = meeting.items.find((i) => i.id === id);
@@ -66,14 +82,18 @@ export function Notes({ meeting: initial, prefs, onReplay }:
     setActiveItem(id);
     setPosition(ev.tArrived);
     setFocusedEvent(ev.eventIds[0] ?? null);
-    cards.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    cards.current[id]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
   };
 
   const revealEvidence = (itemId: string, eventId: string, at: number) => {
     setActiveItem(itemId);
     setPosition(at);
     setFocusedEvent(eventId);
-    rows.current[eventId]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    cards.current[itemId]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
+  };
+
+  const openTranscript = (eventId: string) => {
+    rows.current[eventId]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
   };
 
   /** Scrubbing the rail lands on the nearest thing actually said. */
@@ -82,17 +102,17 @@ export function Notes({ meeting: initial, prefs, onReplay }:
     const nearest = meeting.events.reduce((best, e) =>
       Math.abs(e.tArrived - ms) < Math.abs(best.tArrived - ms) ? e : best, meeting.events[0]!);
     setFocusedEvent(nearest.id);
-    rows.current[nearest.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    rows.current[nearest.id]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
   };
 
   const copy = async () => {
-    await navigator.clipboard.writeText(toMarkdown(meeting));
+    await navigator.clipboard.writeText(toMarkdown({ ...meeting, items: [...live, ...dismissed] }));
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
 
   const download = () => {
-    const blob = new Blob([toMarkdown(meeting)], { type: 'text/markdown' });
+    const blob = new Blob([toMarkdown({ ...meeting, items: [...live, ...dismissed] })], { type: 'text/markdown' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `${meeting.title.replace(/\W+/g, '-').toLowerCase()}.md`;
@@ -101,19 +121,31 @@ export function Notes({ meeting: initial, prefs, onReplay }:
   };
 
   return (
-    <div className="notes">
+    <div className="notes notes-reading">
       <header className="masthead">
         <div className="eyebrow">Excerpt</div>
         <h1>{meeting.title}</h1>
 
-        <dl className="credits">
-          <dt>Attendees</dt><dd>You + 1 other</dd>
+        <dl className="credits summary-credits">
+          <dt>Audio sources</dt><dd>Your microphone + shared audio</dd>
           <dt>Duration</dt><dd>{clock(duration)}</dd>
-          <dt>Decided</dt><dd>{decided.length}</dd>
-          <dt>Assigned to you</dt><dd>{mine.length}</dd>
-          <dt>Needs review</dt><dd>{review.length}</dd>
           <dt>Processing</dt><dd>{meeting.processing}</dd>
         </dl>
+
+        <div className="note-counts" aria-label="Meeting note counts">
+          <span><b>{decided.length}</b> decided</span>
+          <span><b>{mine.length}</b> assigned to you</span>
+          <span><b>{review.length}</b> needs review</span>
+        </div>
+
+        <div className="actions masthead-actions">
+          <button onClick={copy}>{copied ? 'Copied' : 'Copy Markdown'}</button>
+          <button onClick={download}>Download .md</button>
+          {onReplay && <button onClick={onReplay}>Replay demo</button>}
+          <span className={`save-state ${saveState}`} role="status">
+            {saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Not saved — download now or edit to retry' : ''}
+          </span>
+        </div>
 
         <Strip
           duration={duration}
@@ -127,20 +159,14 @@ export function Notes({ meeting: initial, prefs, onReplay }:
           measured when text arrived, not from audio.
         </p>
 
-        {(!prefs || !prefs.instruction) && (
-          <p className="rubric nudge">
-            These are in default order. <a href="#/preferences">Tell Excerpt what you
-            care about</a> and it will rank them your way — and show you exactly which
-            of your words did the ranking.
-          </p>
-        )}
-
-        <div className="actions">
-          <button onClick={copy}>{copied ? 'Copied' : 'Copy Markdown'}</button>
-          <button onClick={download}>Download .md</button>
-          {onReplay && <button onClick={onReplay}>Replay the meeting</button>}
-        </div>
       </header>
+
+      {live.length === 0 && (
+        <section className="empty-notes">
+          <h2>No structured notes found</h2>
+          <p>Excerpt could not identify a clear decision, action, deadline, or open question. The transcript is intact below; it leaves ambiguous speech alone rather than guessing.</p>
+        </section>
+      )}
 
       {grouped.map(([category, group]) => (
         <section key={category}>
@@ -150,14 +176,22 @@ export function Notes({ meeting: initial, prefs, onReplay }:
               <ItemCard
                 item={item}
                 active={activeItem === item.id}
+                context={activeItem === item.id ? transcriptContext(meeting, item) : []}
                 boosts={prefs ? matchedBoosts(item, prefs) : []}
                 onEvidence={revealEvidence}
+                onFullTranscript={openTranscript}
                 onUpdate={update}
               />
             </div>
           ))}
         </section>
       ))}
+
+      {(!prefs || !prefs.instruction) && live.length > 0 && (
+        <p className="rubric nudge">
+          Notes use the default order. <a href="#/preferences">Choose what matters to you</a> to rank them using visible, editable terms.
+        </p>
+      )}
 
       {dismissed.length > 0 && (
         <section>
@@ -189,13 +223,15 @@ export function Notes({ meeting: initial, prefs, onReplay }:
 }
 
 function ItemCard({
-  item, active, boosts, onEvidence, onUpdate,
+  item, active, context, boosts, onEvidence, onFullTranscript, onUpdate,
 }: {
   item: Item;
   active: boolean;
+  context: Meeting['events'];
   boosts: string[];
   onEvidence: (itemId: string, eventId: string, at: number) => void;
-  onUpdate: (id: string, patch: Partial<Item>) => void;
+  onFullTranscript: (eventId: string) => void;
+  onUpdate: (id: string, patch: ItemPatch) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.title);
@@ -225,7 +261,7 @@ function ItemCard({
 
         {editing ? (
           <div className="edit">
-            <input value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
+            <input aria-label="Note title" value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
             <button onClick={() => { onUpdate(item.id, { title: draft }); setEditing(false); }}>Save</button>
             <button onClick={() => { setDraft(item.title); setEditing(false); }}>Cancel</button>
           </div>
@@ -234,18 +270,49 @@ function ItemCard({
         )}
 
         {item.evidence.map((e, i) => (
-          <blockquote key={i} onClick={() => onEvidence(item.id, e.eventIds[0]!, e.tArrived)}>
+          <blockquote key={i}>
             {e.quote}
             <cite>{e.speakerLabel} · ~{clock(e.tArrived)}</cite>
+            <button className="view-passage" onClick={() => onEvidence(item.id, e.eventIds[0]!, e.tArrived)}>
+              View passage
+            </button>
           </blockquote>
         ))}
 
+        {active && context.length > 0 && (
+          <div className="passage-context" role="region" aria-label="Source passage">
+            <div className="passage-label">Source passage</div>
+            {context.map((event) => (
+              <p key={event.id} className={item.evidence.some((e) => e.eventIds.includes(event.id)) ? 'source' : ''}>
+                <span>{event.speakerLabel} · ~{clock(event.tArrived)}</span>{event.text}
+              </p>
+            ))}
+            <button onClick={() => onFullTranscript(item.evidence[0]?.eventIds[0] ?? '')}>View in full transcript</button>
+          </div>
+        )}
+
         <div className="controls">
           <button onClick={() => setEditing(true)}>Edit</button>
-          {item.assignee === 'unassigned'
+          {item.category === 'action' && (item.assignee === 'unassigned'
             ? <button onClick={() => onUpdate(item.id, { assignee: 'you' })}>Assign to me</button>
-            : <button onClick={() => onUpdate(item.id, { assignee: 'unassigned' })}>Unassign</button>}
-          <select value={item.category} onChange={(e) => onUpdate(item.id, { category: e.target.value as Category })}>
+            : <button onClick={() => onUpdate(item.id, { assignee: 'unassigned' })}>Unassign</button>)}
+          {item.category === 'decision' && (
+            <select aria-label="Decision state" value={item.state} onChange={(e) => onUpdate(item.id, { state: e.target.value as Item['state'] })}>
+              <option value="discussed">Discussed</option><option value="proposed">Proposed</option><option value="decided">Decided</option>
+            </select>
+          )}
+          {(item.category === 'action' || item.category === 'deadline') && (
+            <label className="due-edit">Due <input aria-label="Due date" type="date" value={item.due ?? ''} onChange={(e) => onUpdate(item.id, { due: e.target.value || undefined })} /></label>
+          )}
+          <select aria-label="Note category" value={item.category} onChange={(e) => {
+            const category = e.target.value as Category;
+            onUpdate(item.id, {
+              category,
+              assignee: category === 'action' ? item.assignee : 'unassigned',
+              state: category === 'decision' ? item.state : 'discussed',
+              due: category === 'action' || category === 'deadline' ? item.due : undefined,
+            });
+          }}>
             {ORDER.map((c) => <option key={c} value={c}>{HEADING[c]}</option>)}
           </select>
           <button onClick={() => onUpdate(item.id, { dismissed: true })}>Dismiss</button>
@@ -253,4 +320,11 @@ function ItemCard({
       </article>
     </Frame>
   );
+}
+
+function transcriptContext(meeting: Meeting, item: Item): Meeting['events'] {
+  const eventId = item.evidence[0]?.eventIds[0];
+  const index = meeting.events.findIndex((event) => event.id === eventId);
+  if (index < 0) return [];
+  return meeting.events.slice(Math.max(0, index - 1), index + 2);
 }

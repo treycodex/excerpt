@@ -14,17 +14,21 @@ export function App() {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [missing, setMissing] = useState(false);
   const [prefs, setPrefs] = useState<Prefs | null>(null);
+  const [meetingSaveFailed, setMeetingSaveFailed] = useState(false);
 
   useEffect(() => { void loadPreferences().then(setPrefs); }, [route]);
 
   useEffect(() => {
     if (route.name !== 'meeting') return;
+    if (meeting?.id === route.id) return;
     setMissing(false);
+    setMeeting(null);
     // A resolved-but-empty read is "no such meeting", not "still loading". Treating
     // them the same left a stale link on Reading... forever.
     void loadMeeting(route.id).then((m) => {
       setMeeting(m ?? null);
       setMissing(!m);
+      setMeetingSaveFailed(false);
     });
   }, [route]);
 
@@ -39,7 +43,8 @@ export function App() {
       events,
       items: applyPreferences(extractItems(events, new Date()), p),
     };
-    await saveMeeting(m);
+    try { await saveMeeting(m); setMeetingSaveFailed(false); }
+    catch { setMeetingSaveFailed(true); }
     setMeeting(m);
     go(`/m/${m.id}`);
   }, [go]);
@@ -77,7 +82,8 @@ export function App() {
           <Notes
             meeting={prefs ? { ...meeting, items: applyPreferences(meeting.items, prefs) } : meeting}
             prefs={prefs}
-            onReplay={() => go('/session')}
+            initialSaveFailed={meetingSaveFailed}
+            {...(meeting.processing === 'demo' ? { onReplay: () => go('/session') } : {})}
           />
         );
       default:
@@ -87,16 +93,18 @@ export function App() {
 
   return (
     <>
-      <a className="skip-link" href="#main">Skip to content</a>
+      <button className="skip-link" onClick={() => document.querySelector<HTMLElement>('#main')?.focus()}>
+        Skip to content
+      </button>
       <nav className="nav" aria-label="Main">
         <a href="#/" className={route.name === 'landing' ? 'on' : ''}>Excerpt</a>
         <span className="spacer" />
-        <a href="#/record" className={route.name === 'record' ? 'on' : ''}>Record</a>
+        <a href="#/record" className={route.name === 'record' ? 'on' : ''}>Capture</a>
         <a href="#/meetings" className={route.name === 'library' ? 'on' : ''}>Meetings</a>
         <a href="#/preferences" className={route.name === 'preferences' ? 'on' : ''}>Preferences</a>
         <span className="build" title="Build timestamp">{__BUILD__}</span>
       </nav>
-      <main id="main">{body}</main>
+      <main id="main" tabIndex={-1}>{body}</main>
     </>
   );
 }

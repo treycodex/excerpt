@@ -17,7 +17,8 @@ function clock(ms: number): string {
 function renderItem(item: Item): string {
   const lines: string[] = [];
   const state = item.state === 'decided' ? '' : ` _(${item.state})_`;
-  lines.push(`- **${item.title}**${state}`);
+  const edited = item.userEdited ? ' _(edited)_' : '';
+  lines.push(`- **${item.title}**${state}${edited}`);
 
   for (const e of item.evidence) {
     // Timing is approximate — measured at event arrival, never from the audio.
@@ -39,10 +40,12 @@ export function toMarkdown(meeting: Meeting): string {
 
   out.push(`# ${meeting.title}`, '');
   out.push(`${new Date(meeting.startedAt).toLocaleString()}`);
-  const decided = live.filter((i) => i.state === 'decided').length;
+  const decided = live.filter((i) => i.category === 'decision' && i.state === 'decided').length;
   out.push(`${live.length} items · ${decided} decided · transcription: ${meeting.processing}`, '');
 
-  const order: Category[] = ['decision', 'action', 'deadline', 'question'];
+  const fallback: Category[] = ['decision', 'action', 'deadline', 'question'];
+  const order = Array.from(new Set(live.map((i) => i.category))) as Category[];
+  for (const category of fallback) if (!order.includes(category)) order.push(category);
   for (const cat of order) {
     const group = live.filter((i) => i.category === cat);
     if (!group.length) continue;

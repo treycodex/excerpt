@@ -97,7 +97,7 @@ export async function loadPreferences(): Promise<Preferences> {
 }
 
 export async function savePreferences(prefs: Preferences): Promise<void> {
-  try { await set(KEY, prefs); } catch { /* preferences are a convenience, not data loss */ }
+  await set(KEY, prefs);
 }
 
 export function orderCategories(prefs: Preferences): Category[] {

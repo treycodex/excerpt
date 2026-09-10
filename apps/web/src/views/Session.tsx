@@ -29,19 +29,21 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
   const finish = useCallback(() => {
     ambience.current?.stop();
     ambience.current = null;
+    pip?.defaultView?.close();
     void adapter.stop();
     onEnd(adapter.finalsUpTo(adapter.duration));
-  }, [adapter, onEnd]);
+  }, [adapter, onEnd, pip]);
 
   // The bed never outlives the session, and never starts without a click.
   useEffect(() => () => { ambience.current?.stop(); ambience.current = null; }, []);
+  useEffect(() => () => { pip?.defaultView?.close(); }, [pip]);
 
   useEffect(() => {
     const off = adapter.onEvent((e) => {
       if (e.isFinal) collected.current.push(e);
       setSpoken((prev) => ({
         ...prev,
-        [e.role]: { text: e.text, at: performance.now(), label: e.speakerLabel },
+        [e.role]: { text: e.text, at: performance.now(), label: e.speakerLabel, final: e.isFinal },
       }));
     });
     void adapter.start(0);
@@ -121,7 +123,12 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
         <button
           className="contrast"
           aria-pressed={contrast}
-          onClick={() => { setContrast(!contrast); document.documentElement.classList.toggle('caption-contrast'); }}
+          onClick={() => {
+            const next = !contrast;
+            setContrast(next);
+            document.documentElement.classList.toggle('caption-contrast', next);
+            pip?.documentElement.classList.toggle('caption-contrast', next);
+          }}
         >
           {contrast ? 'Plain captions' : 'High contrast'}
         </button>

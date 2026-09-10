@@ -1,0 +1,32 @@
+#!/bin/bash
+# Assembles a real .app bundle. A bare executable cannot carry the usage strings
+# TCC needs, and screen-recording permission is keyed to a bundle identity.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+CONFIG=${1:-debug}
+swift build -c "$CONFIG" 2>&1 | tail -20
+
+APP="build/Excerpt Spike.app"
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp ".build/$CONFIG/ExcerptSpike" "$APP/Contents/MacOS/ExcerptSpike"
+cp Resources/Info.plist "$APP/Contents/Info.plist"
+
+# TCC keys permissions to code identity. Ad-hoc signing (-s -) produces a new hash
+# every build, so macOS treats each build as a different app and drops every grant —
+# measured, not assumed: gate 14 saw microphone and speech fall back to undetermined
+# and screen recording stay denied after a rebuild.
+#
+# A locally created self-signed identity keeps the identity stable across rebuilds.
+# It is NOT an Apple-issued certificate and does nothing for Gatekeeper; it only
+# stops the permission churn. See tools/dev-identity.sh to recreate it.
+IDENTITY=${EXCERPT_IDENTITY:-"Excerpt Dev Local"}
+if security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
+  codesign --force --sign "$IDENTITY" --timestamp=none "$APP" 2>&1 | tail -2 || true
+else
+  echo "warning: '$IDENTITY' not found; falling back to ad-hoc (permissions will reset every build)"
+  codesign --force --sign - --timestamp=none "$APP" 2>&1 | tail -2 || true
+fi
+
+echo "built: $APP"

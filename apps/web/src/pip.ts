@@ -31,5 +31,8 @@ export async function openCaptionWindow(): Promise<Document | null> {
 
   w.document.body.style.cssText =
     'margin:0;background:#000;height:100vh;overflow:hidden;display:grid;place-items:center';
+  w.document.documentElement.classList.toggle(
+    'caption-contrast', document.documentElement.classList.contains('caption-contrast'),
+  );
   return w.document as Document;
 }

@@ -105,6 +105,8 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
   private seq = 0;
   private t0 = 0;
   private audio: AudioContext | undefined;
+  /** Invalidates every continuation and timer belonging to an older start. */
+  private attempt = 0;
   /** Recent remote finals, for detecting the microphone hearing the speakers. */
   private recentRemote: { text: string; at: number }[] = [];
   private echoes = 0;
@@ -114,6 +116,7 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
 
   async start(): Promise<void> {
     if (!SR) return this.setStatus({ kind: 'error', message: 'This browser has no SpeechRecognition.' });
+    const attempt = ++this.attempt;
     this.setStatus({ kind: 'starting' });
 
     try {
@@ -124,8 +127,10 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
         selfBrowserSurface: 'exclude',
       } as DisplayMediaStreamOptions);
     } catch (e) {
+      if (attempt !== this.attempt) return;
       return this.setStatus({ kind: 'error', message: shareError(e as Error) });
     }
+    if (attempt !== this.attempt) { this.display.getTracks().forEach((t) => t.stop()); return; }
 
     const tabTrack = this.display.getAudioTracks()[0];
     if (!tabTrack) {
@@ -136,7 +141,10 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       return this.setStatus({ kind: 'needs-reshare', reason: 'no-audio-track' });
     }
     // Ending the share is a first-class recoverable state.
-    tabTrack.onended = () => { void this.stop(); this.setStatus({ kind: 'needs-reshare', reason: 'share-stopped' }); };
+    tabTrack.onended = () => {
+      if (attempt !== this.attempt || !this.running) return;
+      void this.stop().then(() => this.setStatus({ kind: 'needs-reshare', reason: 'share-stopped' }));
+    };
 
     try {
       this.mic = await navigator.mediaDevices.getUserMedia({
@@ -149,13 +157,23 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
         },
       });
     } catch (e) {
+      this.display?.getTracks().forEach((t) => t.stop());
+      this.display = undefined;
+      if (attempt !== this.attempt) return;
       return this.setStatus({ kind: 'error', message: `Microphone was declined (${(e as Error).name}).` });
+    }
+    if (attempt !== this.attempt) {
+      this.display?.getTracks().forEach((t) => t.stop());
+      this.mic.getTracks().forEach((t) => t.stop());
+      this.display = undefined; this.mic = undefined;
+      return;
     }
 
     // install() -> start() -> catch. Never available().
     let processing: ProcessingMode = 'on-device';
     let onDevice = false;
     try { onDevice = await SR.install({ langs: ['en-US'], processLocally: true }); } catch { onDevice = false; }
+    if (attempt !== this.attempt) return;
 
     if (!onDevice) {
       if (!this.opts.cloudAllowed) {
@@ -168,8 +186,15 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     this.t0 = performance.now();
     this.running = true;
     const micTrack = this.mic.getAudioTracks()[0];
-    this.attach(tabTrack, 'remote', 'SPEAKER', processing === 'on-device');
-    if (micTrack) this.attach(micTrack, 'you', 'YOU', processing === 'on-device');
+    const remoteStarted = this.attach(tabTrack, 'remote', 'SPEAKER', processing === 'on-device', attempt);
+    const micStarted = !!micTrack && this.attach(micTrack, 'you', 'YOU', processing === 'on-device', attempt);
+    if (!remoteStarted || !micStarted || attempt !== this.attempt) {
+      if (this.status.kind !== 'error') {
+        this.setStatus({ kind: 'error', message: 'Could not start both speech sources.' });
+      }
+      await this.stop();
+      return;
+    }
     this.meter(this.display, 'remote');
     this.meter(this.mic, 'you');
     this.setStatus({ kind: 'running', processing });
@@ -250,7 +275,9 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
   /** Commit at least this often even if the speaker never pauses. */
   private static readonly MAX_HOLD_MS = 6000;
 
-  private attach(track: MediaStreamTrack, role: SourceRole, label: string, local: boolean): void {
+  private attach(
+    track: MediaStreamTrack, role: SourceRole, label: string, local: boolean, attempt: number,
+  ): boolean {
     const rec = new SR!();
     rec.lang = 'en-US';
     rec.continuous = true;
@@ -338,7 +365,7 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     };
 
     const tick = () => {
-      if (!this.running) return;
+      if (!this.running || attempt !== this.attempt) return;
       const now = performance.now();
       const pending = words.length - committed;
       if (pending > 0 && now - lastGrowth > LiveCaptureAdapter.SETTLE_MS) {
@@ -381,33 +408,39 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       const deliberate = e.error === 'aborted' && !this.running;
       if (d && e.error !== 'no-speech' && !deliberate) d.lastError = String(e.error);
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        this.running = false;
-        this.setStatus({ kind: 'error', message: `Recognition was blocked (${e.error}).` });
+        const message = `Recognition was blocked (${e.error}).`;
+        void this.stop().then(() => this.setStatus({ kind: 'error', message }));
       }
       if (e.error === 'language-not-supported') {
-        this.running = false;
-        this.setStatus({ kind: 'needs-consent', reason: 'on-device-unavailable' });
+        void this.stop().then(() => this.setStatus({ kind: 'needs-consent', reason: 'on-device-unavailable' }));
       }
     };
 
     // Web Speech stops itself (~60s idle, no-speech). Restart, but never against
     // a dead track — that throws InvalidStateError.
     rec.onend = () => {
-      if (!this.running || entry.stopping || track.readyState !== 'live') return;
+      if (!this.running || attempt !== this.attempt || entry.stopping || track.readyState !== 'live') return;
       const d = this.diagnostics[key]; if (d) d.restarts++;
       trace('restarting');
-      setTimeout(() => { try { rec.start(track); } catch { /* track died mid-restart */ } }, 120);
+      setTimeout(() => {
+        if (!this.running || attempt !== this.attempt || entry.stopping || track.readyState !== 'live') return;
+        try { rec.start(track); } catch { /* track died mid-restart */ }
+      }, 120);
     };
 
     trace(`start(track ${track.kind}/${track.readyState})`);
     try { rec.start(track); } catch (err) {
       trace(`start threw ${(err as Error).name}`);
       this.setStatus({ kind: 'error', message: `Could not start recognition: ${(err as Error).message}` });
+      entry.stopping = true;
+      return false;
     }
     this.recognizers.push(entry);
+    return true;
   }
 
   async stop(): Promise<void> {
+    this.attempt++;
     this.running = false;
     for (const e of this.recognizers) {
       e.stopping = true;

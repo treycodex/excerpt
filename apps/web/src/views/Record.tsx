@@ -2,7 +2,8 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   LiveCaptureAdapter, applyPreferences, extractItems,
-  loadPreferences, saveMeeting, savePreferences,
+  loadPreferences, saveMeeting, savePreferences, toMarkdown,
+  saveCaptureDraft, loadCaptureDraft, clearCaptureDraft,
 } from '@excerpt/core';
 import type { AdapterStatus, Meeting, ProcessingMode, TranscriptEvent } from '@excerpt/types';
 import type { AudioInput, StreamDiagnostics } from '@excerpt/core';
@@ -29,10 +30,28 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
   const [diag, setDiag] = useState<StreamDiagnostics[]>([]);
   const [mics, setMics] = useState<AudioInput[]>([]);
   const [micId, setMicId] = useState<string>('');
+  const [checkingMic, setCheckingMic] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [micMessage, setMicMessage] = useState('');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'failed'>('idle');
+  const [unsaved, setUnsaved] = useState<Meeting | null>(null);
+  const [recovered, setRecovered] = useState(false);
 
   const adapter = useRef<LiveCaptureAdapter | null>(null);
   const events = useRef<TranscriptEvent[]>([]);
   const startedAt = useRef<number>(0);
+  const segmentOffset = useRef(0);
+  const draftStartedAt = useRef(new Date().toISOString());
+  const processingUsed = useRef<ProcessingMode>('on-device');
+  const draftWrite = useRef<Promise<void>>(Promise.resolve());
+
+  const checkpoint = useCallback((nextEvents: TranscriptEvent[], nextElapsed: number) => {
+    const snapshot = [...nextEvents];
+    draftWrite.current = draftWrite.current.catch(() => {}).then(() => saveCaptureDraft({
+      id: 'active', startedAt: draftStartedAt.current, elapsed: nextElapsed,
+      processing: processingUsed.current, events: snapshot,
+    }));
+  }, []);
 
   const begin = useCallback(async (mode: Mode, cloudAllowed: boolean) => {
     // Tear the previous session down first. Overwriting adapter.current leaves the
@@ -42,6 +61,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
       await adapter.current.stop();
       adapter.current = null;
     }
+    if (events.current.length === 0) draftStartedAt.current = new Date().toISOString();
     const prefs = await loadPreferences();
     const a = new LiveCaptureAdapter({
       sessionId: `live-${Date.now()}`,
@@ -52,75 +72,159 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
     adapter.current = a;
     // Exposed for live debugging from the console during a real capture.
     (window as unknown as { __excerpt?: unknown }).__excerpt = a;
-    events.current = [];
-    setCaptured(0);
-    a.onStatus(setStatus);
+    segmentOffset.current = elapsed;
+    startedAt.current = performance.now();
+    a.onStatus((next) => {
+      if (adapter.current !== a) return;
+      if (next.kind === 'running') processingUsed.current = next.processing;
+      setStatus(next);
+    });
     a.onEvent((e) => {
-      if (e.isFinal) { events.current.push(e); setCaptured(events.current.length); }
+      if (adapter.current !== a) return;
+      const adjusted = { ...e, id: `${e.sessionId}:${e.id}`, tArrived: e.tArrived + segmentOffset.current };
+      if (e.isFinal) {
+        events.current.push(adjusted);
+        setCaptured(events.current.length);
+        checkpoint(events.current, adjusted.tArrived);
+      }
       setSpoken((prev) => ({
         ...prev,
-        [e.role]: { text: e.text, at: performance.now(), label: e.speakerLabel },
+        [e.role]: { text: e.text, at: performance.now(), label: e.speakerLabel, final: e.isFinal },
       }));
     });
-    startedAt.current = performance.now();
     setPendingMode(mode);
     await a.start();
-  }, [micId]);
+  }, [micId, elapsed, checkpoint]);
 
   useEffect(() => {
     if (status.kind !== 'running') return;
     const id = setInterval(() => {
-      setElapsed(performance.now() - startedAt.current);
+      setElapsed(segmentOffset.current + performance.now() - startedAt.current);
       setDiag(Object.values(adapter.current?.diagnostics ?? {}));
     }, 200);
     return () => clearInterval(id);
   }, [status.kind]);
 
   useEffect(() => () => { void adapter.current?.stop(); }, []);
+  useEffect(() => () => { pip?.defaultView?.close(); }, [pip]);
 
-  // Device labels are hidden until microphone permission is granted, so ask once
-  // on arrival and release immediately. Usually silent — permission persists.
   useEffect(() => {
-    if (status.kind !== 'idle') return;
     let cancelled = false;
     void (async () => {
-      try {
-        const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
-        probe.getTracks().forEach((t) => t.stop());
-      } catch { /* declined; we can still list devices without labels */ }
       const found = await listMicrophones().catch(() => []);
       if (cancelled) return;
       setMics(found);
       setMicId((current) => current || preferredMicrophone(found)?.deviceId || '');
     })();
     return () => { cancelled = true; };
-  }, [status.kind]);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadCaptureDraft().then((draft) => {
+      if (cancelled || !draft?.events.length) return;
+      events.current = draft.events;
+      draftStartedAt.current = draft.startedAt;
+      processingUsed.current = draft.processing;
+      segmentOffset.current = draft.elapsed;
+      setElapsed(draft.elapsed);
+      setCaptured(draft.events.length);
+      setRecovered(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const checkMicrophone = async () => {
+    setCheckingMic(true);
+    setMicMessage('Listening for 3 seconds…');
+    let probe: MediaStream | undefined;
+    let context: AudioContext | undefined;
+    try {
+      probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const found = await listMicrophones().catch(() => []);
+      setMics(found);
+      setMicId((current) => current || preferredMicrophone(found)?.deviceId || '');
+      context = new AudioContext();
+      const analyser = context.createAnalyser(); analyser.fftSize = 512;
+      context.createMediaStreamSource(probe).connect(analyser);
+      const data = new Float32Array(analyser.fftSize);
+      let peak = 0;
+      await new Promise<void>((resolve) => {
+        const started = performance.now();
+        const timer = setInterval(() => {
+          analyser.getFloatTimeDomainData(data);
+          let sum = 0; for (const sample of data) sum += sample * sample;
+          const level = Math.sqrt(sum / data.length); peak = Math.max(peak, level); setMicLevel(level);
+          if (performance.now() - started > 2800) { clearInterval(timer); resolve(); }
+        }, 100);
+      });
+      setMicLevel(0);
+      setMicMessage(peak > 0.01 ? 'Microphone is receiving audio.' : 'No speech detected. Try another microphone.');
+    } catch {
+      setMicMessage('Microphone access was not granted. You can try again when ready.');
+    } finally {
+      probe?.getTracks().forEach((t) => t.stop());
+      await context?.close().catch(() => {});
+      setMicLevel(0);
+      setCheckingMic(false);
+    }
+  };
 
   const stop = async () => {
     await adapter.current?.stop();
     const captured = events.current;
     if (!captured.length) { setStatus({ kind: 'idle' }); return; }
 
+    setSaveState('saving');
     const prefs = await loadPreferences();
-    const processing: ProcessingMode =
-      status.kind === 'running' ? status.processing : 'on-device';
     const meeting: Meeting = {
       id: `m-${Date.now()}`,
       title: `Meeting · ${new Date().toLocaleDateString()}`,
-      startedAt: new Date(Date.now() - elapsed).toISOString(),
+      startedAt: draftStartedAt.current,
       endedAt: new Date().toISOString(),
-      processing,
+      processing: processingUsed.current,
       events: captured,
       items: applyPreferences(extractItems(captured, new Date()), prefs),
     };
-    await saveMeeting(meeting);
-    onSaved(meeting.id);
+    setUnsaved(meeting);
+    try {
+      await saveMeeting(meeting);
+      await draftWrite.current.catch(() => {});
+      await clearCaptureDraft();
+      setSaveState('idle');
+      setUnsaved(null);
+      onSaved(meeting.id);
+    } catch {
+      setSaveState('failed');
+      setStatus({ kind: 'idle' });
+    }
+  };
+
+  const downloadUnsaved = () => {
+    if (!unsaved) return;
+    const url = URL.createObjectURL(new Blob([toMarkdown(unsaved)], { type: 'text/markdown' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'excerpt-recovered.md'; a.click();
+    URL.revokeObjectURL(url);
   };
 
   const now = performance.now();
   const fresh = Object.values(spoken)
     .filter((s) => now - s.at < LINGER)
     .sort((a, b) => a.at - b.at);
+
+  if (saveState === 'saving') {
+    return <div className="notes"><header className="masthead"><div className="eyebrow">Excerpt</div><h1>Saving your notes…</h1><p className="rubric">The finalised transcript is still kept as a recoverable draft on this device.</p></header></div>;
+  }
+
+  if (saveState === 'failed' && unsaved) {
+    return (
+      <div className="notes"><header className="masthead">
+        <div className="eyebrow">Excerpt</div><h1>Your notes are ready, but not saved</h1>
+        <p className="rubric">This browser could not write to its meeting library. Your transcript is still here and can be retried or downloaded now.</p>
+        <div className="actions"><button onClick={() => { void stop(); }}>Retry save</button><button onClick={downloadUnsaved}>Download .md</button></div>
+      </header></div>
+    );
+  }
 
   if (!supported()) {
     return (
@@ -161,7 +265,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
               className="primary-choice"
               onClick={async () => {
                 const p = await loadPreferences();
-                await savePreferences({ ...p, transcriptionChoice: 'on-device-only' });
+                await savePreferences({ ...p, transcriptionChoice: 'on-device-only' }).catch(() => {});
                 setStatus({ kind: 'idle' });
               }}
             >
@@ -187,7 +291,8 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
           </p>
           <div className="actions">
             <button onClick={() => { void begin(pendingMode, false); }}>Share again</button>
-            <button onClick={() => setStatus({ kind: 'idle' })}>Cancel</button>
+            {captured > 0 && <button onClick={() => { void stop(); }}>Save captured notes</button>}
+            <button onClick={() => setStatus({ kind: 'idle' })}>Back</button>
           </div>
         </header>
       </div>
@@ -254,26 +359,29 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
               <dt>{d.role === 'you' ? 'Your microphone' : 'Shared audio'}</dt>
               <dd>
                 <Level level={d.level} />
-                {d.device && <span className="dim">{d.device} · </span>}
                 <span className={d.voicedSeconds > 1 ? '' : 'warn'}>
-                  {d.voicedSeconds < 1 ? 'no sound reaching Excerpt' : `${d.voicedSeconds.toFixed(0)}s of sound`}
+                  {d.voicedSeconds < 1 ? 'waiting for audio' : 'receiving audio'}
                 </span>
-                <span className="dim"> · {d.finals} final · {d.interims} interim</span>
-                {d.restarts > 0 && <span className="dim"> · {d.restarts} restarts</span>}
                 {d.lastError && <span className="warn"> · error: {d.lastError}</span>}
                 {!!d.echoesDropped && (
                   <span className="dim" title="Your microphone repeating the far side. Dropped so it cannot be mistaken for you.">
                     {' '}· {d.echoesDropped} echo{d.echoesDropped === 1 ? '' : 'es'} dropped
                   </span>
                 )}
-                {d.events.length > 0 && (
-                  <span className="dim trace"> · {d.events.slice(-4).join(' → ')}</span>
-                )}
-                {!d.started && <span className="warn"> · never started</span>}
+                {!d.started && <span className="warn"> · speech engine starting</span>}
               </dd>
             </Fragment>
           ))}
         </dl>
+
+        {diag.length > 0 && (
+          <details className="diagnostics">
+            <summary>Troubleshooting details</summary>
+            {diag.map((d) => (
+              <p key={d.role}>{d.label}: {d.device || 'default device'} · {d.voicedSeconds.toFixed(0)}s sound · {d.finals} final · {d.interims} interim · {d.restarts} restarts{d.events.length ? ` · ${d.events.slice(-4).join(' → ')}` : ''}</p>
+            ))}
+          </details>
+        )}
 
         {/* An honest listening indicator: if sound is arriving but nothing is being
             recognised, say so rather than showing a hopeful spinner forever. */}
@@ -309,16 +417,44 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
     <div className="notes">
       <header className="masthead">
         <div className="eyebrow">Excerpt</div>
-        <h1>Record a meeting</h1>
+        <h1>Capture a meeting</h1>
         <p className="rubric">
           Excerpt listens to what your computer is playing and to your microphone,
-          transcribes both on this machine, and writes notes when you stop. Nothing is
-          uploaded and nothing is recorded — only the transcript is kept, here.
+          keeps the two sources separate, and writes notes when you stop. Audio is not
+          recorded. Transcription stays on-device by default; cloud processing is used
+          only if local transcription fails and you explicitly choose it.
         </p>
+        {recovered && captured > 0 && (
+          <div className="draft-banner" role="status">
+            <p><b>Recovered draft</b> · {captured} finalised {captured === 1 ? 'line' : 'lines'} from this device.</p>
+            <div className="actions"><button onClick={() => { void stop(); }}>Write notes now</button></div>
+          </div>
+        )}
       </header>
 
       <section>
-        <h2>How should Excerpt listen?</h2>
+        <h2>1 · Check your microphone</h2>
+        <p className="rubric setup-copy">Choose a physical microphone. Continuity and virtual devices can appear healthy while delivering silence.</p>
+        <div className="mic-check-row">
+          <button onClick={() => { void checkMicrophone(); }} disabled={checkingMic}>
+            {checkingMic ? 'Checking…' : mics.some((m) => !!m.label) ? 'Check again' : 'Check microphone'}
+          </button>
+          <Level level={micLevel} />
+          <span className="rubric" role="status">{micMessage || 'Permission is requested only when you check or start.'}</span>
+        </div>
+        <label className="mic-pick">
+          <span>Microphone</span>
+          <select aria-label="Microphone" value={micId} onChange={(e) => setMicId(e.target.value)}>
+            {mics.length === 0 && <option value="">System default</option>}
+            {mics.map((m) => (
+              <option key={m.deviceId} value={m.deviceId}>
+                {m.label || 'Microphone'}{m.suspect ? ' — often captures nothing' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <h2>2 · Choose what to share</h2>
         <div className="modes">
           <button className="mode" onClick={() => { void begin('tab', false); }}>
             <span className="mtitle">A browser tab</span>
@@ -326,6 +462,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
               Meet, Zoom on the web, anything playing in Chrome. Choose the meeting tab
               and tick “Also share tab audio”.
             </span>
+            <span className="mwarn">Wear headphones so shared voices cannot leak back into your microphone.</span>
           </button>
           <button className="mode" onClick={() => { void begin('system', false); }}>
             <span className="mtitle">Anything on this Mac</span>
@@ -341,26 +478,10 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
             </span>
           </button>
         </div>
-        <label className="mic-pick">
-          <span>Microphone</span>
-          <select value={micId} onChange={(e) => setMicId(e.target.value)}>
-            {mics.length === 0 && <option value="">System default</option>}
-            {mics.map((m) => (
-              <option key={m.deviceId} value={m.deviceId}>
-                {m.label}{m.suspect ? ' — often captures nothing' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
         <p className="rubric">
           Your microphone is captured separately, which is how Excerpt can tell what you
           said from what everyone else said. It is the only thing it can tell about who
           is speaking.
-        </p>
-        <p className="rubric">
-          Check the device above. A Mac will happily default to an iPhone’s microphone
-          or a virtual device installed by another app, and either one records silence
-          while looking perfectly healthy.
         </p>
       </section>
     </div>

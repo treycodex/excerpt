@@ -64,9 +64,32 @@ export function Strip({ duration, position, marks = [], onScrub, onSelect }: Str
     if (Number.isFinite(ms)) onScrub(ms);
   };
 
+  const keyScrub = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!onScrub) return;
+    const step = Math.max(1000, Math.min(15_000, duration / 20));
+    const current = position ?? 0;
+    let next: number | undefined;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = current - step;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = current + step;
+    if (e.key === 'Home') next = 0;
+    if (e.key === 'End') next = duration;
+    if (next === undefined) return;
+    e.preventDefault();
+    onScrub(Math.max(0, Math.min(duration, next)));
+  };
+
   return (
     <div className="strip">
-      <div className="strip-rail" ref={rail} onClick={scrub}>
+      <div
+        className="strip-rail" ref={rail} onClick={scrub} onKeyDown={keyScrub}
+        tabIndex={onScrub ? 0 : undefined}
+        role={onScrub ? 'slider' : undefined}
+        aria-label={onScrub ? 'Approximate transcript position' : undefined}
+        aria-valuemin={onScrub ? 0 : undefined}
+        aria-valuemax={onScrub ? Math.round(duration / 1000) : undefined}
+        aria-valuenow={onScrub ? Math.round((position ?? 0) / 1000) : undefined}
+        aria-valuetext={onScrub ? `Approximately ${stamp(position ?? 0)}` : undefined}
+      >
         {ticks.map((t) => (
           <i
             key={t.at}
@@ -82,7 +105,7 @@ export function Strip({ duration, position, marks = [], onScrub, onSelect }: Str
             className={`mark${m.settled ? ' settled' : ''}`}
             style={{ left: pct(m.at) }}
             title={m.label ?? ''}
-            aria-label={m.label ?? 'Moment'}
+            aria-label={`${m.label ?? 'Moment'}, approximately ${stamp(m.at)}`}
             onClick={(e) => { e.stopPropagation(); onSelect?.(m.id); }}
           />
         ))}

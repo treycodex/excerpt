@@ -167,18 +167,20 @@ packages/core/src/
   capture/devices.ts microphone listing, suspect-device flagging
   caption/lines.ts   subtitle line breaking
   extract/           sentences, decisions, actions, deadlines, questions, pipeline
-  store/meetings.ts  IndexedDB; all reads degrade rather than reject
+  store/meetings.ts  IndexedDB meetings + recoverable finalised capture draft
   preferences.ts     boosts, salience
   export/markdown.ts
 packages/ui/src/     Strip, Frame, tokens.css, strip.css
 spike/               Day 0 feasibility harness + SPIKE-RESULTS.md (kept deliberately)
+POLISH-PLAN.md        implemented polish review, acceptance checks, release proof
 ```
 
 ---
 
 ## 6. Status
 
-**All nine planned phases built.** 64 tests, both typecheck clean, deployed.
+**All nine planned phases plus the polish pass built.** 68 tests, both typechecks and
+the production build clean. The polish pass is local and has not been deployed.
 
 ### Verified against real audio, not assumed
 | | tab audio | system audio |

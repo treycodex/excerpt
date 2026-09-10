@@ -1,6 +1,6 @@
 import { splitIntoSubtitleLines } from '@excerpt/core';
 
-export interface Spoken { text: string; at: number; label: string }
+export interface Spoken { text: string; at: number; label: string; final?: boolean }
 
 /**
  * A generic video-call frame. Deliberately not a replica of any product's UI —
@@ -23,7 +23,7 @@ export function CallFrame({ fresh, elapsed }: { fresh: Spoken[]; elapsed: number
       <Captions fresh={fresh} />
 
       <div className="call-chrome">
-        <span className="rec"><i /> Excerpt is listening</span>
+        <span className="rec demo-label">Scripted demo</span>
         <span className="elapsed">{stamp(elapsed)}</span>
       </div>
     </div>
@@ -39,24 +39,25 @@ export function CallFrame({ fresh, elapsed }: { fresh: Spoken[]; elapsed: number
  */
 export function Captions({ fresh, standalone }: { fresh: Spoken[]; standalone?: boolean }) {
   if (!fresh.length) return null;
-  const overlapping = fresh.length > 1;
+  const visible = fresh.slice(-2);
+  const overlapping = visible.length > 1;
+  const finalAnnouncement = visible.filter((s) => s.final).map((s) => s.text).join(' ');
   return (
     <div
       className={standalone ? 'caption standalone' : 'caption'}
-      key={fresh.map((f) => f.text).join('|')}
       role="region"
       aria-label="Live captions"
-      aria-live="polite"
     >
       <div className="fade in">
-        {!overlapping && fresh[0] && <div className="who">{fresh[0].label}</div>}
-        {fresh.flatMap((s, i) => {
+        {!overlapping && visible[0] && <div className="who">{visible[0].label}</div>}
+        {visible.flatMap((s, i) => {
           const lines = splitIntoSubtitleLines(s.text, { maxChars: overlapping ? 40 : 42 });
           return overlapping
-            ? [<div className="line" key={i}>– {lines.join(' ')}</div>]
-            : lines.map((l, j) => <div className="line" key={`${i}-${j}`}>{l}</div>);
+            ? [<div className="line" key={i}>– {lines.at(-1)}</div>]
+            : lines.slice(-2).map((l, j) => <div className="line" key={`${i}-${j}`}>{l}</div>);
         })}
       </div>
+      <span className="sr-only" aria-live="polite">{finalAnnouncement}</span>
     </div>
   );
 }

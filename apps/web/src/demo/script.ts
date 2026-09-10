@@ -1,7 +1,7 @@
 import type { ScriptedLine } from '@excerpt/core';
 
 /**
- * The demo script. ~85 seconds, which is the window a judge will actually give it.
+ * The demo script. ~102 seconds including its closing beat.
  *
  * Every beat earns its place:
  *  - small talk that the extractor correctly ignores

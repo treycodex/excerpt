@@ -4,10 +4,11 @@
 
 .strip-rail {
   position: relative;
-  height: 42px;
+  height: 34px;
   cursor: crosshair;
   border-bottom: 1px solid var(--line);
 }
+.strip-rail:focus-visible { outline: 1px solid var(--ember); outline-offset: 5px; }
 
 /* Ticks hang from the rail like frame edges on a strip of film. */
 .strip-rail .tick {
@@ -55,7 +56,7 @@
 
 .strip-labels {
   position: relative;
-  height: 18px;
+  height: 16px;
   font: var(--label);
   letter-spacing: 0.16em;
   color: var(--faint);

@@ -1,3 +1,7 @@
+import { DEMO_SCRIPT } from '../demo/script';
+
+const demoSeconds = Math.ceil(((DEMO_SCRIPT.at(-1)?.at ?? 0) + 2000) / 1000);
+
 export function Landing({ onStart }: { onStart: () => void }) {
   return (
     <div className="landing">
@@ -8,10 +12,24 @@ export function Landing({ onStart }: { onStart: () => void }) {
         back at the passage it came from — so you can check it, and correct it.
       </p>
 
+      <div className="cta-row">
+        <button className="cta" onClick={onStart}>Watch the demo →</button>
+        <a className="cta ghost" href="#/record">Capture a meeting</a>
+      </div>
+      <p className="runtime">
+        {demoSeconds} seconds · scripted demo · no microphone access
+      </p>
+
+      <figure className="proof">
+        <figcaption><span>Decision</span><b>Every note keeps its source in frame.</b></figcaption>
+        <blockquote>“Let’s move the campaign launch to October.”</blockquote>
+        <p>Speaker · approximate 1:02 · View passage</p>
+      </figure>
+
       <div className="claims">
         <div>
           <dt>Free to run</dt>
-          <dd>Transcribed on your machine by Chrome’s own speech engine. No API keys, no backend, no account.</dd>
+          <dd>On-device by default, with cloud transcription only after explicit consent. No API keys, backend, or account.</dd>
         </div>
         <div>
           <dt>Nothing invented</dt>
@@ -23,13 +41,6 @@ export function Landing({ onStart }: { onStart: () => void }) {
         </div>
       </div>
 
-      <div className="cta-row">
-        <button className="cta" onClick={onStart}>Watch a meeting →</button>
-        <a className="cta ghost" href="#/record">Record a real one</a>
-      </div>
-      <p className="runtime">
-        85 seconds · no install · recording needs Chrome on macOS
-      </p>
     </div>
   );
 }

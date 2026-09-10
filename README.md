@@ -2,7 +2,7 @@
 
 **Be in the meeting. We'll remember it.**
 
-**Demo → https://excerpt-rho.vercel.app** — 85 seconds, nothing to install.
+**Demo → https://excerpt-rho.vercel.app** — 102 seconds, nothing to install.
 
 A free, privacy-first meeting assistant. Cinematic captions while you talk, and
 structured notes afterwards where every item points back at the passage it came
@@ -15,8 +15,9 @@ Built for The Build Games as a replacement for paid AI meeting-note software.
 ## How it works
 
 Excerpt listens to a tab (or to everything your Mac is playing) and to your
-microphone, and transcribes both **on your machine** with Chrome's built-in
-on-device speech engine. No API keys, no backend, no account, no recurring cost.
+microphone, and transcribes both on your machine by default with Chrome's built-in
+on-device speech engine. If that model is unavailable, cloud transcription is
+offered only after explicit consent. No API keys, backend, account, or recurring cost.
 
 ```
 tab or system audio  = everyone else  ─┐
@@ -32,13 +33,13 @@ left unassigned rather than guessed at.
 Notes are extracted deterministically — by grammar, not by a language model. Every
 line in your notes is a verbatim span of something a person actually said. It also
 means Excerpt is wrong sometimes, so every item can be edited, reassigned,
-recategorised or dismissed.
+recategorised, given a corrected state or due date, or dismissed.
 
 ---
 
-## Record a real meeting
+## Capture a real meeting
 
-Chrome on macOS. Go to **Record**, then:
+Chrome on macOS. Go to **Capture**, then:
 
 1. **Check the microphone** shown in the picker. A Mac will happily default to an
    iPhone's Continuity microphone or a virtual device installed by another app, and
@@ -93,8 +94,8 @@ but headphones remove the problem rather than mitigating it.
 - **Cinematic captions** — two lines maximum, broken on phrase boundaries rather
   than width, fading rather than sliding, with the film dash convention when two
   people overlap. Optional always-on-top window so they float over your meeting.
-- **The Strip** — the meeting as a film strip. Items are marks on it; clicking a
-  note scrubs the transcript to the moment it came from.
+- **The Strip** — the meeting as a film strip. Items are marks on it; selecting a
+  note reveals its surrounding transcript passage and approximate position.
 - **Four categories** — decisions, action items, deadlines, open questions. Chosen
   because they have crisp linguistic signatures. Ideas, quotes and risks were cut
   for having none.
@@ -103,8 +104,8 @@ but headphones remove the problem rather than mitigating it.
   decision to talk, not a decision.
 - **Preferences** — tell Excerpt what you care about; it shows you the exact terms
   it extracted and which of them lifted each note. Ordering only, never filtering.
-- **Local library and Markdown export** — copy or download, plain enough to paste
-  anywhere.
+- **Local recovery, library and Markdown export** — finalised capture text is
+  checkpointed through interruptions; notes remain plain enough to paste anywhere.
 
 ---
 

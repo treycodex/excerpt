@@ -9,16 +9,17 @@ const LABEL: Record<Category, string> = {
 
 export function Preferences() {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
 
   useEffect(() => { void loadPreferences().catch(() => DEFAULT_PREFERENCES).then(setPrefs); }, []);
   if (!prefs) return <div className="notes"><p className="rubric">Reading…</p></div>;
 
   const commit = (next: Prefs) => {
     setPrefs(next);
-    void savePreferences(next);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    setSaved('saving');
+    void savePreferences(next)
+      .then(() => { setSaved('saved'); setTimeout(() => setSaved('idle'), 1500); })
+      .catch(() => setSaved('failed'));
   };
 
   const move = (index: number, by: number) => {
@@ -69,6 +70,7 @@ export function Preferences() {
           exactly what they are.
         </p>
         <textarea
+          aria-label="What matters to you in meetings"
           className="instruction"
           rows={4}
           value={prefs.instruction}
@@ -93,7 +95,9 @@ export function Preferences() {
 
         <div className="actions">
           <button onClick={() => commit({ ...DEFAULT_PREFERENCES })}>Reset</button>
-          <span className="rubric">{saved ? 'Saved' : ''}</span>
+          <span className="rubric" role="status">
+            {saved === 'saving' ? 'Saving…' : saved === 'saved' ? 'Saved' : saved === 'failed' ? 'Could not save in this browser' : ''}
+          </span>
         </div>
       </section>
     </div>
