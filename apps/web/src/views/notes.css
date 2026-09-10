@@ -1,75 +1,343 @@
-.notebook { --ground: #faf9f5; --raise: #f1f0e9; --ink: #282b26; --dim: #62655c; --faint: #72766b; --line: #e4e5dd; --line-strong: #c9cdbf; --ember: #61734c; --warn: #886b26; --bad: #b23a2c; --label: 400 12px/1.6 var(--sans); display: grid; grid-template-columns: 256px minmax(0, 1fr); min-height: 100vh; color: var(--ink); background: var(--ground); }
+/* ── The notes workspace ───────────────────────────────────────────────────────
+   Three influences, in this order of authority:
+
+   1. Apple Notes, for restraint. A list, a page, and almost nothing else. No card
+      borders, no coloured chips, no decorative rules. What is on screen is the
+      meeting; the interface is the margin around it.
+   2. The Excerpt home page, for identity. The same paper and ink as the manifesto
+      section — `--paper: #f1f0dd` on `#24281f` — Archivo for interface, Instrument
+      Serif where you read rather than are sold to, and mono at wide tracking for
+      labels. Nothing here invents a colour the marketing site does not have.
+   3. macOS, for the chrome. A tinted sidebar that reads as a separate material, a
+      scroll-edge fade instead of a hard divider under the toolbar, a segmented
+      control, and rounded selection fills rather than outlines.
+
+   The previous version used a green accent that appears nowhere else in the
+   product. Hierarchy here comes from weight, size and the paper/ink contrast, so
+   the one place colour is still spent is state — decided, needs review — where it
+   carries meaning rather than decoration. */
+
+.notebook {
+  /* Paper, from the home page's own light section. */
+  --paper:      #f4f3e6;
+  --paper-deep: #eae8d5;
+  --ink:        #1d201a;
+  --ink-soft:   #4c5045;
+  --dim:        #6b6f60;
+  --faint:      #85897a;
+  --line:       #dedcc5;
+  --line-soft:  #e7e5d2;
+  /* State, spent sparingly. Settled is the ink itself; the rest are muted. */
+  --settled:    #24281f;
+  --warn:       #7d6420;
+  --bad:        #a13a2b;
+  --select:     #dedbc2;
+
+  --label: 400 11px/1.6 var(--mono);
+
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  min-height: 100vh;
+  color: var(--ink);
+  background: var(--paper);
+  font-synthesis-weight: none;
+}
 .notebook a { color: inherit; text-decoration: none; }
 .notebook button, .notebook summary { cursor: pointer; }
-.notebook :is(button, a, input, select, summary):focus-visible { outline: 2px solid #6e8057; outline-offset: 3px; }
-.notebook-sidebar { position: sticky; top: 0; height: 100vh; padding: 30px 18px 22px; background: #edeee6; border-right: 1px solid #dfe1d6; display: flex; flex-direction: column; gap: 16px; }
-.notebook-brand { display: flex; gap: 14px; align-items: center; font-size: 22px; letter-spacing: -2px; padding: 0 10px 22px; }
-.notebook-brand span { font-size: 25px; letter-spacing: -1px; font-weight: 600; }
-.notebook-new { display: flex; gap: 12px; align-items: center; justify-content: center; border-radius: 8px; background: #303c2c; color: #fafbef !important; padding: 12px; font-size: 14px; }
-.notebook-new:hover { background: #435039; }
-.notebook-search input { width: 100%; min-width: 0; padding: 11px 12px; font: 13px var(--sans); border: 1px solid #daddcf; border-radius: 7px; background: #f5f6ef; color: #323a2d; }
-.notebook-all { display: flex; justify-content: space-between; padding: 11px 12px; border-radius: 7px; font-size: 14px; }
-.notebook-all span { color: #737969; }
-.notebook .selected { background: #dce2d1; }
-.notebook-sidebar-label { font: 11px var(--mono); letter-spacing: .12em; color: #777e6c; padding: 10px 12px 0; }
-.notebook-recent { overflow-y: auto; flex: 1; }
-.notebook-recent a { display: block; padding: 14px 12px; border-radius: 7px; margin-bottom: 4px; }
-.notebook-recent a:hover { background: #e0e4d7; }
-.notebook-recent strong { font-size: 14px; line-height: 1.4; font-weight: 500; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.notebook-recent span { display: block; margin-top: 6px; font-size: 12px; color: #727969; }
-.notebook-recent p { padding: 0 12px; font-size: 13px; line-height: 1.6; color: var(--faint); }
-.notebook-sidebar-footer { display: grid; gap: 14px; padding: 16px 12px 0; border-top: 1px solid #d6dacc; font-size: 13px; }
+.notebook :is(button, a, input, select, summary):focus-visible {
+  outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px;
+}
+
+/* ── Sidebar: a material, not a column ─────────────────────────────────────── */
+.notebook-sidebar {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 26px 12px 16px;
+  background: var(--paper-deep);
+  border-right: 1px solid var(--line);
+  /* Real translucency where the host gives us something to blur against. */
+  backdrop-filter: saturate(140%) blur(20px);
+  -webkit-backdrop-filter: saturate(140%) blur(20px);
+}
+/* Inside Excerpt's own window the title bar is transparent and sits over the page,
+   so the sidebar has to start below the traffic lights rather than under them. */
+[data-host="mac"] .notebook-sidebar { padding-top: 46px; }
+
+.notebook-brand {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 0 10px 18px; font-size: 19px; letter-spacing: -0.09em;
+}
+.notebook-brand span { font-size: 21px; font-weight: 600; letter-spacing: -0.045em; }
+
+.notebook-new {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px; margin-bottom: 4px;
+  border-radius: 7px; background: var(--ink); color: var(--paper) !important;
+  font-size: 13px; font-weight: 500;
+  transition: background .15s;
+}
+.notebook-new:hover { background: #33372c; }
+
+.notebook-search input {
+  width: 100%; min-width: 0; padding: 8px 11px;
+  font: 13px var(--sans); color: var(--ink);
+  background: #fbfaf1;
+  border: 1px solid var(--line); border-radius: 7px;
+}
+.notebook-search input::placeholder { color: var(--faint); }
+
+.notebook-all {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 11px; border-radius: 7px; font-size: 13.5px;
+}
+.notebook-all span { color: var(--faint); font-variant-numeric: tabular-nums; }
+.notebook .selected { background: var(--select); }
+
+.notebook-sidebar-label {
+  font: var(--label); letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--faint); padding: 14px 11px 4px;
+}
+
+/* The list. Two lines each, like Apple Notes: what it is, then when and how much. */
+.notebook-recent { overflow-y: auto; flex: 1; margin: 0 -2px; padding: 0 2px; }
+.notebook-recent a { display: block; padding: 9px 11px; border-radius: 7px; }
+.notebook-recent strong {
+  display: block; font-size: 13.5px; font-weight: 500; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.notebook-recent span {
+  display: block; margin-top: 3px; font-size: 12px; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.notebook-recent p { padding: 4px 11px; font-size: 13px; line-height: 1.6; color: var(--faint); }
+@media (hover: hover) and (pointer: fine) {
+  .notebook-recent a:hover { background: #e2e0ca; }
+  .notebook-recent a.selected:hover { background: var(--select); }
+}
+
+.notebook-sidebar-footer {
+  display: grid; gap: 8px; margin-top: 10px; padding: 14px 11px 0;
+  border-top: 1px solid var(--line); font-size: 13px;
+}
 .notebook-sidebar-footer span { color: var(--faint); font-size: 11px; }
-.notebook-main { min-width: 0; }
-.notebook-toolbar { min-height: 76px; display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 16px 32px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--faint); }
-.notebook-toolbar > a span { padding: 0 12px; color: #a8ad9e; }
-.notebook-toolbar > div { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.notebook-toolbar button { border: 1px solid #dadfd0; padding: 8px 13px; border-radius: 6px; color: #48543d; background: transparent; font: 13px var(--sans); }
-.notebook-toolbar button:hover { background: #edf0e5; }
-.notebook .notes { max-width: 860px; padding: 62px 48px 120px; }
-.notebook-date { font-size: 12px; color: #83877c; margin-bottom: 22px; display: flex; gap: 10px; flex-wrap: wrap; }
-.notebook .notes h1 { font-family: var(--serif); font-size: clamp(36px, 3.8vw, 54px); letter-spacing: -.025em; line-height: 1.08; margin-bottom: 18px; }
-.notebook-description { color: var(--faint); font-size: 15px; line-height: 1.6; }
-.notebook .note-counts { border: none; font: 12px var(--sans); text-transform: none; letter-spacing: 0; margin: 22px 0 30px; gap: 10px; padding: 0; }
-.notebook .note-counts span { padding: 7px 10px; border-radius: 5px; background: #eff1e7; color: #6b745f; }
-.notebook .note-counts b { color: #4b593e; font-weight: 600; }
-.notebook-tabs { display: flex; gap: 26px; align-items: center; border-bottom: 1px solid var(--line); }
-.notebook-tabs button { padding: 14px 0; background: none; border: 0; border-bottom: 2px solid transparent; font: 14px var(--sans); color: var(--faint); }
-.notebook-tabs button[aria-pressed="true"] { color: #35452c; border-bottom-color: #64784d; }
-.notebook-tabs button span { font-size: 11px; margin-left: 6px; background: #eceee4; padding: 2px 5px; border-radius: 4px; }
-.notebook-tabs .notebook-replay { margin-left: auto; font-size: 12px; }
-.notebook-timeline { padding: 18px 0; border-bottom: 1px solid var(--line); }
-.notebook summary { font: 12px/1.6 var(--sans); color: #79816d; }
-.notebook-timeline > summary { color: #737a68; }
-.notebook .notes h2 { font: 600 18px/1.4 var(--sans); text-transform: none; letter-spacing: -.025em; color: #38402f; border: none; margin: 32px 0 4px; padding: 0 0 8px; }
-.notebook .item { padding: 18px 0; border-bottom: 1px solid var(--line); }
-.notebook .item .state { gap: 10px; flex-wrap: wrap; font-size: 10px; letter-spacing: .025em; margin-bottom: 9px; }
-.notebook .item .state > span { text-transform: none; }
-.notebook .item .badge { padding: 2px 7px; background: #eaf0df; border-radius: 4px; color: #63744e; }
-.notebook .item .title { font: 400 16px/1.65 var(--sans); color: #373d31; margin-bottom: 12px; }
-.note-evidence { margin: 10px 0; }
-.notebook .item blockquote { font: 400 19px/1.5 var(--serif); border-left: 2px solid #c7d1b8; padding: 4px 0 4px 16px; margin: 14px 0; }
-.notebook .item blockquote cite { text-transform: none; letter-spacing: 0; font-size: 11px; }
-.notebook .view-passage { text-transform: none; letter-spacing: 0; font-size: 12px; margin-top: 8px; color: #5f704c; }
-.notebook .controls { opacity: 1; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.notebook .controls :is(button, select), .notebook .edit button { text-transform: none; letter-spacing: 0; font-size: 12px; border-radius: 5px; background: #f2f3ec; color: #5e6953; }
-.notebook .due-edit input { color-scheme: light; border-radius: 5px; }
-.notebook .edit { flex-wrap: wrap; }
-.notebook .edit input { min-width: 0; width: 100%; font-size: 16px; border-radius: 6px; }
-.notebook .passage-context { border-radius: 6px; background: #eef1e7; }
-.notebook .passage-context p { grid-template-columns: 100px 1fr; }
+
+/* ── Toolbar: a floating strip, with a fade where content passes under ─────── */
+.notebook-main { min-width: 0; position: relative; }
+.notebook-toolbar {
+  position: sticky; top: 0; z-index: 3;
+  min-height: 56px;
+  display: flex; justify-content: space-between; align-items: center; gap: 20px;
+  padding: 10px 26px;
+  font-size: 12.5px; color: var(--faint);
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+}
+[data-host="mac"] .notebook-toolbar { min-height: 72px; padding-top: 26px; }
+/* Apple's scroll edge: content dissolves into the chrome instead of stopping at a
+   1px line. The rule only exists where floating chrome actually overlaps content. */
+.notebook-toolbar::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 22px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--paper) 88%, transparent), transparent);
+  pointer-events: none;
+}
+.notebook-toolbar > a span { padding: 0 9px; color: #b0b3a1; }
+.notebook-toolbar > div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.notebook-toolbar button {
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 12px; background: #fbfaf1; color: var(--ink-soft);
+  font: 13px var(--sans);
+  transition: background .15s, border-color .15s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .notebook-toolbar button:hover { background: #fff; border-color: var(--line-strong, #c9c7ae); }
+}
+.notebook-toolbar .save-state { color: var(--faint); }
+
+/* ── The page ─────────────────────────────────────────────────────────────── */
+.notebook .notes { max-width: 720px; padding: 40px 26px 140px; }
+
+.notebook-date {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  font: var(--label); letter-spacing: 0.11em; text-transform: uppercase;
+  color: var(--faint); margin-bottom: 18px;
+}
+.notebook .notes h1 {
+  font-family: var(--serif); font-weight: 400;
+  /* Tracking is size-specific: this is display size, so it tightens. */
+  font-size: clamp(34px, 3.4vw, 46px); line-height: 1.06; letter-spacing: -0.02em;
+  margin: 0 0 14px;
+}
+.notebook-description { color: var(--dim); font-size: 15px; line-height: 1.65; margin: 0; }
+
+/* One quiet line, not three chips. The numbers are worth reading; they are not
+   worth three boxes. */
+.notebook .note-counts {
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+  border: 0; padding: 18px 0 0; margin: 0;
+  font: 13px var(--sans); text-transform: none; letter-spacing: 0;
+  color: var(--dim);
+}
+.notebook .note-counts span { padding: 0; background: none; border-radius: 0; }
+.notebook .note-counts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Segmented control — the Mac idiom for "same content, two views". */
+.notebook-tabs {
+  display: flex; align-items: center; gap: 3px;
+  margin: 26px 0 0; padding: 3px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--paper-deep); width: fit-content; max-width: 100%;
+}
+.notebook-tabs button {
+  padding: 7px 14px; border: 0; border-radius: 6px; background: none;
+  font: 13px var(--sans); color: var(--dim);
+  transition: background .15s, color .15s;
+}
+.notebook-tabs button[aria-pressed="true"] {
+  background: #fbfaf1; color: var(--ink); font-weight: 500;
+  box-shadow: 0 1px 2px rgba(36,40,31,.09);
+}
+.notebook-tabs button span {
+  margin-left: 6px; font-size: 11px; color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.notebook-tabs button[aria-pressed="true"] span { color: var(--dim); }
+.notebook-tabs .notebook-replay {
+  margin-left: 8px; border: 0; background: none; color: var(--dim); font-size: 12.5px;
+}
+
+.notebook-timeline { margin-top: 18px; }
+.notebook summary { font: 13px/1.6 var(--sans); color: var(--dim); list-style: none; }
+.notebook summary::-webkit-details-marker { display: none; }
+.notebook summary::before { content: "▸ "; color: var(--faint); }
+.notebook details[open] > summary::before { content: "▾ "; }
+
+/* ── Items: a list of things said, not a deck of cards ────────────────────── */
+/* The group heading is structure and the state is an attribute of one item, so the
+   heading has to be the stronger of the two. First pass had it the other way round
+   and the eye read "DECIDED" as the section title. */
+.notebook .notes h2 {
+  font: 600 12px/1.4 var(--mono); letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--ink-soft); border: 0; margin: 42px 0 2px; padding: 0;
+}
+.notebook .item { padding: 20px 0; border-bottom: 1px solid var(--line-soft); }
+.notebook .item .state {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  font: 400 10px/1.6 var(--mono); letter-spacing: 0.1em; text-transform: uppercase;
+  margin-bottom: 8px; color: var(--faint);
+}
+.notebook .item .state > span { text-transform: uppercase; }
+.notebook .item .badge { padding: 0; background: none; border-radius: 0; color: var(--faint); }
+/* Settled is the only state that gets full ink. Everything else stays quiet. */
+.notebook .item.decided .badge { color: var(--ink-soft); font-weight: 500; }
+.notebook .item .mine { color: var(--settled); font-weight: 500; }
+.notebook .item .needs-review, .notebook .item .review { color: var(--warn); }
+.notebook .item .title {
+  font: 400 17px/1.6 var(--sans); color: var(--ink); margin: 0 0 10px;
+  letter-spacing: -0.005em;
+}
+.note-evidence { margin: 8px 0; }
+.notebook .item blockquote {
+  font: 400 17px/1.62 var(--serif); color: var(--ink-soft);
+  border-left: 2px solid var(--line); padding: 2px 0 2px 16px; margin: 12px 0;
+}
+.notebook .item blockquote cite {
+  display: block; margin-top: 8px;
+  font: var(--label); letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--faint); font-style: normal;
+}
+.notebook .view-passage {
+  font: 12.5px var(--sans); text-transform: none; letter-spacing: 0;
+  margin-top: 6px; color: var(--dim); border: 0; background: none; padding: 0;
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong, #c9c7ae);
+}
+
+/* Controls stay out of the way until you reach for them — but only where there is
+   a pointer to hover with. On touch there is no hover, so they are always there. */
+.notebook .controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .notebook .controls { opacity: 0; transition: opacity .15s; }
+  .notebook .item:hover .controls,
+  .notebook .item:focus-within .controls,
+  .notebook .is-active .controls { opacity: 1; }
+}
+.notebook .controls :is(button, select), .notebook .edit button {
+  font: 12.5px var(--sans); text-transform: none; letter-spacing: 0;
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px;
+  background: #fbfaf1; color: var(--dim);
+}
+@media (hover: hover) and (pointer: fine) {
+  .notebook .controls :is(button, select):hover { color: var(--ink); border-color: #c9c7ae; }
+}
+.notebook .due-edit input { color-scheme: light; border-radius: 6px; }
+.notebook .edit { display: flex; flex-wrap: wrap; gap: 8px; }
+.notebook .edit input {
+  min-width: 0; width: 100%; font: 16px var(--sans);
+  border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; background: #fbfaf1;
+}
+
+.notebook .passage-context { border-radius: 8px; background: var(--paper-deep); padding: 14px 16px; }
+.notebook .passage-context p { grid-template-columns: 92px 1fr; }
 .notebook .passage-context::before, .notebook .passage-context::after { display: none; }
-.notebook .line-row { margin: 0; padding: 18px 0; border-bottom: 1px solid var(--line); }
-.notebook .line-row .meta { flex-basis: 110px; font-size: 11px; text-transform: none; letter-spacing: 0; }
-.notebook .line-row.focused { padding-left: 12px; background: #ecf1e2; box-shadow: inset 2px 0 #788d5e; }
-.notebook .nudge { font-size: 12px; margin-top: 28px; }
-.notebook .nudge a { text-decoration: underline; }
-.notebook .meeting-row { padding: 20px 0; border-bottom: 1px solid var(--line); gap: 16px; }
-.notebook .meeting-row .mtitle { font-size: 22px; }
-.notebook .meeting-row .mmeta { margin-top: 8px; text-transform: none; letter-spacing: 0; }
-.notebook .meeting-row button { color: #59644d; }
-.notebook .meeting-row .row-actions button { border-radius: 5px; font-size: 11px; text-transform: none; letter-spacing: 0; }
-.notebook .notebook-library .eyebrow { color: #7f876f; }
+
+.notebook .line-row { margin: 0; padding: 15px 0; border-bottom: 1px solid var(--line-soft); }
+.notebook .line-row .meta {
+  flex-basis: 104px; font: var(--label); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--faint);
+}
+.notebook .line-row.focused {
+  padding-left: 12px; margin-left: -14px; border-radius: 6px;
+  background: var(--select); box-shadow: inset 2px 0 var(--settled);
+}
+.notebook .nudge { font-size: 13px; margin-top: 30px; color: var(--dim); }
+.notebook .nudge a { text-decoration: underline; text-underline-offset: 3px; }
+
+.notebook .empty-notes h2 { font: var(--serif); font-size: 22px; letter-spacing: -0.01em; color: var(--ink); text-transform: none; margin-top: 34px; }
+
+/* ── Library ──────────────────────────────────────────────────────────────── */
+.notebook .meeting-row { padding: 18px 0; border-bottom: 1px solid var(--line-soft); gap: 16px; }
+.notebook .meeting-row .mtitle { font-family: var(--serif); font-size: 21px; letter-spacing: -0.015em; }
+.notebook .meeting-row .mmeta {
+  margin-top: 6px; font: var(--label); letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint);
+}
+.notebook .meeting-row button { color: var(--dim); }
+.notebook .meeting-row .row-actions button {
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px;
+  font: 12.5px var(--sans); text-transform: none; letter-spacing: 0; background: #fbfaf1;
+}
+.notebook .notebook-library .eyebrow { color: var(--faint); }
 .notebook [hidden] { display: none !important; }
-@media (max-width: 1100px) { .notebook { grid-template-columns: 215px minmax(0,1fr); } .notebook-toolbar .save-state { display: none; } .notebook .notes { padding: 44px 30px 90px; } }
-@media (max-width: 740px) { .notebook { display: block; } .notebook-sidebar { position: relative; height: auto; padding: 16px 20px; display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 12px; border-right: 0; border-bottom: 1px solid #dfe1d6; } .notebook-brand { padding: 0; margin-right: auto; } .notebook-brand span { font-size: 22px; } .notebook-new { padding: 9px 12px; } .notebook-search, .notebook-sidebar-label, .notebook-recent, .notebook-sidebar-footer { display: none; } .notebook-all { padding: 8px; gap: 10px; } .notebook-toolbar { padding: 14px 20px; min-height: 62px; } .notebook-toolbar > a { display: none; } .notebook-toolbar > div { width: 100%; justify-content: flex-end; } .notebook .notes { padding: 32px 22px 80px; } .notebook-tabs { gap: 20px; } .notebook .passage-context p { display: block; } .notebook .passage-context p span { display: block; margin-bottom: 4px; } .notebook .line-row { display: block; } .notebook .line-row .meta { display: block; margin-bottom: 5px; } .notebook .meeting-row { flex-wrap: wrap; } }
+
+@media (prefers-reduced-transparency: reduce) {
+  .notebook-sidebar, .notebook-toolbar { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .notebook-toolbar { background: var(--paper); }
+}
+
+@media (max-width: 1100px) {
+  .notebook { grid-template-columns: 224px minmax(0, 1fr); }
+  .notebook-toolbar .save-state { display: none; }
+  .notebook .notes { padding: 34px 24px 100px; }
+}
+@media (max-width: 740px) {
+  .notebook { display: block; }
+  .notebook-sidebar {
+    position: relative; height: auto; padding: 14px 18px;
+    flex-direction: row; align-items: center; flex-wrap: wrap; gap: 12px;
+    border-right: 0; border-bottom: 1px solid var(--line);
+  }
+  [data-host="mac"] .notebook-sidebar { padding-top: 34px; }
+  .notebook-brand { padding: 0; margin-right: auto; }
+  .notebook-new { margin: 0; padding: 8px 12px; }
+  .notebook-search, .notebook-sidebar-label, .notebook-recent, .notebook-sidebar-footer { display: none; }
+  .notebook-all { padding: 7px 10px; gap: 10px; }
+  .notebook-toolbar { padding: 10px 18px; min-height: 54px; }
+  [data-host="mac"] .notebook-toolbar { padding-top: 12px; min-height: 54px; }
+  .notebook-toolbar > a { display: none; }
+  .notebook-toolbar > div { width: 100%; justify-content: flex-end; }
+  .notebook .notes { padding: 26px 20px 90px; }
+  .notebook .passage-context p { display: block; }
+  .notebook .passage-context p span { display: block; margin-bottom: 4px; }
+  .notebook .line-row { display: block; }
+  .notebook .line-row .meta { display: block; margin-bottom: 5px; }
+  .notebook .meeting-row { flex-wrap: wrap; }
+}
