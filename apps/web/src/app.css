@@ -354,3 +354,4 @@ code {
 }
 .mic-pick select:focus { outline: none; border-color: var(--ember); }
 .live-credits .trace { font-size: 10px; opacity: .75; }
+.nav .build { color: var(--line-strong); font-size: 10px; letter-spacing: .1em; }

@@ -72,6 +72,7 @@ export function App() {
         <a href="#/record" className={route.name === 'record' ? 'on' : ''}>Record</a>
         <a href="#/meetings" className={route.name === 'library' ? 'on' : ''}>Meetings</a>
         <a href="#/preferences" className={route.name === 'preferences' ? 'on' : ''}>Preferences</a>
+        <span className="build" title="Build timestamp">{__BUILD__}</span>
       </nav>
       <main id="main">{body}</main>
     </>
