@@ -35,6 +35,13 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
   const startedAt = useRef<number>(0);
 
   const begin = useCallback(async (mode: Mode, cloudAllowed: boolean) => {
+    // Tear the previous session down first. Overwriting adapter.current leaves the
+    // old recognizers running -- their restart supervisor keeps them alive, they
+    // hold the on-device engine, and every later capture silently gets nothing.
+    if (adapter.current) {
+      await adapter.current.stop();
+      adapter.current = null;
+    }
     const prefs = await loadPreferences();
     const a = new LiveCaptureAdapter({
       sessionId: `live-${Date.now()}`,

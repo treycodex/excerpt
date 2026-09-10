@@ -7,6 +7,7 @@ interface SpeechRecognitionLike extends EventTarget {
   lang: string; continuous: boolean; interimResults: boolean; processLocally: boolean;
   start(track?: MediaStreamTrack): void;
   stop(): void;
+  abort(): void;
   onresult: ((e: any) => void) | null;
   onerror: ((e: any) => void) | null;
   onend: (() => void) | null;
@@ -258,7 +259,13 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
 
   async stop(): Promise<void> {
     this.running = false;
-    for (const e of this.recognizers) { e.stopping = true; try { e.rec.stop(); } catch { /* already stopped */ } }
+    for (const e of this.recognizers) {
+      e.stopping = true;
+      // abort() releases the engine immediately; stop() waits to finalise and can
+      // leave the session held long enough to starve the next capture.
+      try { e.rec.abort(); } catch { /* not started */ }
+      try { e.rec.stop(); } catch { /* already stopped */ }
+    }
     this.recognizers = [];
     this.display?.getTracks().forEach((t) => t.stop());
     this.mic?.getTracks().forEach((t) => t.stop());
