@@ -88,6 +88,38 @@ struct SpikeView: View {
                 }
                 Button("Export results") { export() }
             }
+            HStack(spacing: 8) {
+                if session.overlay.visible {
+                    Button("Hide overlay") { session.overlay.hide(); board.set("9", .running, "hidden") }
+                } else {
+                    Button("9·10·11 · Show overlay") { showOverlay() }
+                }
+                Button("Sample caption") { sampleCaption() }
+                Button("Follow pointer") { session.overlay.followPointer() }
+                Button("10 · clicks passed through") { board.set("10", .pass, "ignoresMouseEvents: clicks reached the app underneath") }
+                Button("9 · readable over fullscreen") { board.set("9", .pass, "transparent, no panel, readable over a fullscreen meeting") }
+                Button("9 · FAILS over fullscreen") { board.set("9", .fail, "windowed: yes · fullscreen: no — elevation \(session.overlay.elevation.rawValue), accessory \(session.overlay.accessoryMode)") }
+            }
+            HStack(spacing: 8) {
+                Text("elevation").font(.system(size: 11, design: .monospaced)).foregroundStyle(.tertiary)
+                Picker("", selection: Binding(
+                    get: { session.overlay.elevation },
+                    set: { session.overlay.setElevation($0) }
+                )) {
+                    ForEach(OverlayWindow.Elevation.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .labelsHidden().frame(width: 140)
+                Toggle("menu-bar app mode", isOn: Binding(
+                    get: { session.overlay.accessoryMode },
+                    set: { session.overlay.setAccessoryMode($0) }
+                ))
+                .font(.system(size: 11, design: .monospaced))
+            }
+            if session.overlay.visible {
+                Text("overlay on \(session.overlay.screenName) — put a fullscreen meeting behind it, then try clicking through")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
             if session.running || !session.audio.isEmpty { liveStats }
             if let p = downloadProgress {
                 ProgressView(value: p) {
@@ -163,6 +195,21 @@ struct SpikeView: View {
             }
         }
         .frame(minHeight: 180)
+    }
+
+    private func showOverlay() {
+        session.overlay.show()
+        board.set("9", .running, "judge it by eye over a fullscreen meeting")
+        board.set("11", .running, "move it between displays and Spaces")
+        board.note("Overlay shown on \(session.overlay.screenName). It should be text only — no panel, no box.")
+        if session.overlay.caption == nil { sampleCaption() }
+    }
+
+    private func sampleCaption() {
+        session.overlay.update(
+            speaker: "SPEAKER",
+            text: "Okay. Let's move the campaign launch to October. That's decided."
+        )
     }
 
     // MARK: - runs

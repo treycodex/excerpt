@@ -15,6 +15,7 @@ final class CaptureSession: ObservableObject {
         .microphone: SourceTranscriber(kind: .microphone),
     ]
     private var ticker: Timer?
+    let overlay = OverlayController()
     private var startedAt: Date?
     private unowned let board: GateBoard
 
@@ -64,6 +65,21 @@ final class CaptureSession: ObservableObject {
         audio = engine.statistics()
         for (kind, t) in transcribers { speech[kind] = await t.statistics() }
         if let startedAt { elapsed = Date().timeIntervalSince(startedAt) }
+
+        // Volatile text drives the overlay — it is the live edge of speech. Finalized
+        // text is the transcript, and arrives later by design.
+        if overlay.visible {
+            let sys = speech[.system] ?? TranscriptStats()
+            let mic = speech[.microphone] ?? TranscriptStats()
+            let sysText = sys.lastVolatile.isEmpty ? sys.lastFinalized : sys.lastVolatile
+            let micText = mic.lastVolatile.isEmpty ? mic.lastFinalized : mic.lastVolatile
+            if mic.lastRangeEnd >= sys.lastRangeEnd, !micText.isEmpty {
+                overlay.update(speaker: "YOU", text: micText)
+            } else if !sysText.isEmpty {
+                overlay.update(speaker: "SPEAKER", text: sysText)
+            }
+        }
+
         judge()
     }
 

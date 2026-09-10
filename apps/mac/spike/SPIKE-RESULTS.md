@@ -15,8 +15,8 @@ Measured against real audio, not assumed.
 | 6 | Volatile → finalized | **pass** | 313 volatile superseded by 31 finalized across 23 settle calls |
 | 7 | Continuous speech 3min+ | outstanding | longest run so far ~95s |
 | 8 | Shared timeline | **pass** | system 92.0–95.1s · mic 93.1–94.9s · monotonic |
-| 9 | Overlay over fullscreen | not started | |
-| 10 | Click-through | not started | |
+| 9 | Overlay over fullscreen | **pass** | transparent, no panel, readable over fullscreen — **requires accessory mode** |
+| 10 | Click-through | **pass** | `ignoresMouseEvents`; clicks reach the app underneath |
 | 11 | Multi-monitor + Spaces | not started | |
 | 12 | Interrupt / sleep–wake | partial | tail promotion on stop implemented; interruption untested |
 | 13 | Stop is reliable | **pass** | stream and microphone released every run |
@@ -76,6 +76,18 @@ when the window moved to 1.14–2.24 immediately afterwards. Finality therefore 
 be judged when a result arrives. Results are held pending and promoted when the
 window advances past them; whatever remains pending at Stop is promoted rather than
 dropped.
+
+**9. The overlay only appears over fullscreen apps when the app is an ACCESSORY app.**
+Measured both ways. As a regular app the overlay renders correctly over windowed
+content and vanishes the moment another app goes fullscreen — which is precisely when
+a meeting needs it. `.fullScreenAuxiliary` does not help, because it is meant for the
+fullscreen app's own auxiliary windows. An accessory (menu-bar) app owns no Space, so
+its `canJoinAllSpaces` window floats above everything.
+
+Window level also matters: `maximum` rather than `screenSaver`.
+
+This is the product's intended architecture rather than a workaround — Excerpt is a
+menu-bar app — but it means the overlay and the Dock icon are mutually exclusive.
 
 ## Known rough edges (Stage 1 work, not gate blockers)
 
