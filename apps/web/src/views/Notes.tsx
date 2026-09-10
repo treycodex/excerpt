@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { applyPreferences, matchedBoosts, orderCategories, saveMeeting, toMarkdown } from '@excerpt/core';
 import { Frame, Strip } from '@excerpt/ui';
 import type { StripMark } from '@excerpt/ui';
@@ -58,11 +59,22 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
 
   // Sections follow the user's stated order; ordering never hides anything.
   const sectionOrder = prefs ? orderCategories(prefs) : ORDER;
+
+
   const grouped = useMemo(
     () => sectionOrder.map((c) => [c, live.filter((i) => i.category === c)] as const)
       .filter(([, g]) => g.length),
     [live, sectionOrder.join(',')],
   );
+
+  // Stagger follows the order items are actually drawn in, not their salience rank —
+  // otherwise the cascade jumps around the page instead of running down it.
+  const visualOrder = useMemo(() => {
+    const map = new Map<string, number>();
+    let i = 0;
+    for (const [, group] of grouped) for (const item of group) map.set(item.id, i++);
+    return map;
+  }, [grouped]);
 
   const marks: StripMark[] = live.map((i) => ({
     id: i.id,
@@ -172,7 +184,11 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
         <section key={category}>
           <h2>{HEADING[category]}</h2>
           {group.map((item) => (
-            <div key={item.id} ref={(el) => { cards.current[item.id] = el; }}>
+            <div
+              key={item.id}
+              ref={(el) => { cards.current[item.id] = el; }}
+              style={{ '--stagger': `${Math.min(visualOrder.get(item.id) ?? 0, 6) * 45}ms` } as CSSProperties}
+            >
               <ItemCard
                 item={item}
                 active={activeItem === item.id}

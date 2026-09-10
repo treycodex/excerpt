@@ -41,7 +41,9 @@
   font-weight: var(--display-weight);
   font-size: clamp(38px, 6.6vw, 88px);
   line-height: 0.95;
-  letter-spacing: var(--display-track);
+  /* Tracking scales with size: at 38px -0.02em reads correctly, at 88px it needs
+     -0.04em or the letters sit too far apart. A single value is wrong at one end. */
+  letter-spacing: -0.02em;
   text-transform: uppercase;
   margin: 0 0 26px;
 }
@@ -271,7 +273,7 @@
 .passage-context button:hover { color: var(--ink); }
 
 .controls { display: flex; gap: 8px; margin-top: 18px; align-items: center; opacity: 0; transition: opacity .15s; }
-.item:hover .controls, .item:focus-within .controls, .is-active .controls { opacity: 1; }
+.item:focus-within .controls, .is-active .controls { opacity: 1; }
 .controls button, .controls select, .edit button {
   font: var(--label); letter-spacing: 0.1em; text-transform: uppercase;
   background: transparent; color: var(--faint); border: 1px solid var(--line);
@@ -488,6 +490,11 @@ code {
    Fixed grid columns in the claims and credits blocks, plus a nav and CTA row
    that could not wrap, pushed the body wider than the viewport and clipped the
    copy. Wide content scrolls inside its own container; the page never does. */
+@media (min-width: 900px) {
+  .landing h1 { letter-spacing: -0.04em; }
+  .closing-line { letter-spacing: -0.032em; }
+}
+
 @media (max-width: 720px) {
   .nav { padding: 16px 20px; gap: 16px; flex-wrap: wrap; }
 
@@ -641,4 +648,35 @@ button:active, .cta:active, .mode:active, .preset-card:active, .meeting-row .ope
 @media (prefers-reduced-motion: reduce) {
   button, .cta, .mode, .preset-card, .meeting-row .open { transition: background .15s, color .15s; }
   button:active, .cta:active, .mode:active, .preset-card:active, .meeting-row .open:active { transform: none; }
+}
+
+
+/* --- Hover gating -----------------------------------------------------------
+   A tap on a touch device fires a hover that then sticks, leaving controls
+   revealed and marks enlarged with no way to undo it. Motion-on-hover belongs
+   behind a real pointer. */
+@media (hover: hover) and (pointer: fine) {
+  .item:hover .controls { opacity: 1; }
+  .item blockquote:hover { color: var(--ink); border-left-color: var(--ember); }
+  .meeting-row .open:hover .mtitle { color: var(--ember); }
+}
+@media not all and (hover: hover) {
+  .controls { opacity: 1; }   /* no hover to reveal them, so show them */
+}
+
+/* --- Group entrance ----------------------------------------------------------
+   Notes are the payoff screen, seen once per meeting. Items arriving together
+   read as a dump; a short stagger reads as a list being written. Decorative
+   only — it never blocks interaction, and it never moves anything sideways. */
+@keyframes note-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.notes section .framed {
+  animation: note-in 320ms var(--ease-out) both;
+  animation-delay: var(--stagger, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notes section .framed { animation: none; }
 }
