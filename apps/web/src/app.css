@@ -294,3 +294,35 @@
 
 .nudge { border-left: 1px solid var(--ember); padding-left: 14px; margin-top: 22px; }
 .nudge a { color: var(--ember); }
+
+/* --- Live capture ---------------------------------------------------------- */
+.cta-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.cta.ghost {
+  border-color: var(--line); color: var(--dim); text-decoration: none;
+  display: inline-block;
+}
+.cta.ghost:hover { background: transparent; border-color: var(--ink); color: var(--ink); }
+
+.modes { display: grid; gap: 14px; margin: 22px 0 26px; }
+.mode {
+  display: grid; gap: 10px; text-align: left; padding: 24px;
+  background: transparent; border: 1px solid var(--line); cursor: pointer;
+  transition: border-color .15s;
+}
+.mode:hover { border-color: var(--ember); }
+.mode .mtitle { font: 400 21px/1.3 var(--sans); color: var(--ink); }
+.mode .mmeta { font: 400 14px/1.6 var(--sans); color: var(--faint); max-width: 62ch; }
+
+.call.live { display: grid; place-items: center; }
+.call.live .waiting {
+  font: var(--label); letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--faint); margin: 0;
+}
+.live-credits { margin: 22px 0 0; }
+.live-credits .warn { color: var(--warn); }
+
+.actions .primary-choice { border-color: var(--ember); color: var(--ember); }
+code {
+  font: 400 12px/1 var(--mono); background: var(--raise);
+  border: 1px solid var(--line); padding: 3px 6px; color: var(--ink);
+}

@@ -76,7 +76,7 @@ export type AdapterStatus =
   | { kind: 'starting' }
   | { kind: 'running'; processing: ProcessingMode }
   | { kind: 'needs-consent'; reason: 'on-device-unavailable' }
-  | { kind: 'needs-reshare'; reason: 'share-stopped' }
+  | { kind: 'needs-reshare'; reason: 'share-stopped' | 'no-audio-track' }
   | { kind: 'error'; message: string };
 
 /** Capture is swappable; nothing downstream knows where events came from. */

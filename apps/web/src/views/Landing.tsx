@@ -23,8 +23,13 @@ export function Landing({ onStart }: { onStart: () => void }) {
         </div>
       </div>
 
-      <button className="cta" onClick={onStart}>Watch a meeting →</button>
-      <p className="runtime">85 seconds · no install</p>
+      <div className="cta-row">
+        <button className="cta" onClick={onStart}>Watch a meeting →</button>
+        <a className="cta ghost" href="#/record">Record a real one</a>
+      </div>
+      <p className="runtime">
+        85 seconds · no install · recording needs Chrome on macOS
+      </p>
     </div>
   );
 }

@@ -1,0 +1,264 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  LiveCaptureAdapter, applyPreferences, extractItems,
+  loadPreferences, saveMeeting, savePreferences,
+} from '@excerpt/core';
+import type { AdapterStatus, Meeting, ProcessingMode, TranscriptEvent } from '@excerpt/types';
+import { Captions } from './CallFrame';
+import type { Spoken } from './CallFrame';
+import { Strip } from '@excerpt/ui';
+import { openCaptionWindow, supportsPiP } from '../pip';
+
+type Mode = 'tab' | 'system';
+const LINGER = 3200;
+
+const supported = () =>
+  ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) &&
+  !!navigator.mediaDevices?.getDisplayMedia;
+
+export function Record({ onSaved }: { onSaved: (id: string) => void }) {
+  const [status, setStatus] = useState<AdapterStatus>({ kind: 'idle' });
+  const [spoken, setSpoken] = useState<Record<string, Spoken>>({});
+  const [elapsed, setElapsed] = useState(0);
+  const [pip, setPip] = useState<Document | null>(null);
+  const [pendingMode, setPendingMode] = useState<Mode>('tab');
+  const [captured, setCaptured] = useState(0);
+
+  const adapter = useRef<LiveCaptureAdapter | null>(null);
+  const events = useRef<TranscriptEvent[]>([]);
+  const startedAt = useRef<number>(0);
+
+  const begin = useCallback(async (mode: Mode, cloudAllowed: boolean) => {
+    const prefs = await loadPreferences();
+    const a = new LiveCaptureAdapter({
+      sessionId: `live-${Date.now()}`,
+      captureMode: mode,
+      cloudAllowed: cloudAllowed || prefs.transcriptionChoice === 'cloud-allowed',
+    });
+    adapter.current = a;
+    events.current = [];
+    setCaptured(0);
+    a.onStatus(setStatus);
+    a.onEvent((e) => {
+      if (e.isFinal) { events.current.push(e); setCaptured(events.current.length); }
+      setSpoken((prev) => ({
+        ...prev,
+        [e.role]: { text: e.text, at: performance.now(), label: e.speakerLabel },
+      }));
+    });
+    startedAt.current = performance.now();
+    setPendingMode(mode);
+    await a.start();
+  }, []);
+
+  useEffect(() => {
+    if (status.kind !== 'running') return;
+    const id = setInterval(() => setElapsed(performance.now() - startedAt.current), 200);
+    return () => clearInterval(id);
+  }, [status.kind]);
+
+  useEffect(() => () => { void adapter.current?.stop(); }, []);
+
+  const stop = async () => {
+    await adapter.current?.stop();
+    const captured = events.current;
+    if (!captured.length) { setStatus({ kind: 'idle' }); return; }
+
+    const prefs = await loadPreferences();
+    const processing: ProcessingMode =
+      status.kind === 'running' ? status.processing : 'on-device';
+    const meeting: Meeting = {
+      id: `m-${Date.now()}`,
+      title: `Meeting · ${new Date().toLocaleDateString()}`,
+      startedAt: new Date(Date.now() - elapsed).toISOString(),
+      endedAt: new Date().toISOString(),
+      processing,
+      events: captured,
+      items: applyPreferences(extractItems(captured, new Date()), prefs),
+    };
+    await saveMeeting(meeting);
+    onSaved(meeting.id);
+  };
+
+  const now = performance.now();
+  const fresh = Object.values(spoken)
+    .filter((s) => now - s.at < LINGER)
+    .sort((a, b) => a.at - b.at);
+
+  if (!supported()) {
+    return (
+      <div className="notes">
+        <header className="masthead">
+          <div className="eyebrow">Excerpt</div>
+          <h1>This browser can’t listen</h1>
+          <p className="rubric">
+            Live capture needs Chrome 139 or newer on macOS. Chrome’s on-device speech
+            engine and tab-audio capture do not exist in Firefox or Safari, and Excerpt
+            will not pretend otherwise. The <a href="#/session">demo</a> runs anywhere.
+          </p>
+        </header>
+      </div>
+    );
+  }
+
+  if (status.kind === 'needs-consent') {
+    return (
+      <div className="notes">
+        <header className="masthead">
+          <div className="eyebrow">Excerpt</div>
+          <h1>On-device transcription isn’t available</h1>
+          <p className="rubric">
+            Chrome could not install its local speech model, so the only way to
+            transcribe here is Google’s cloud service. That means your meeting audio
+            would leave this device. Excerpt will not make that choice for you.
+          </p>
+          <p className="rubric">
+            To get on-device working instead: open <code>chrome://settings/captions</code>,
+            turn on Live Caption, wait for the English pack to download, and come back.
+          </p>
+          <div className="actions">
+            <button onClick={() => { void begin(pendingMode, true); }}>
+              Use cloud transcription
+            </button>
+            <button
+              className="primary-choice"
+              onClick={async () => {
+                const p = await loadPreferences();
+                await savePreferences({ ...p, transcriptionChoice: 'on-device-only' });
+                setStatus({ kind: 'idle' });
+              }}
+            >
+              Continue without live capture
+            </button>
+          </div>
+        </header>
+      </div>
+    );
+  }
+
+  if (status.kind === 'needs-reshare') {
+    const forgotAudio = status.reason === 'no-audio-track';
+    return (
+      <div className="notes">
+        <header className="masthead">
+          <div className="eyebrow">Excerpt</div>
+          <h1>{forgotAudio ? 'No audio in that share' : 'Screen sharing stopped'}</h1>
+          <p className="rubric">
+            {forgotAudio
+              ? 'Chrome shared the picture but not the sound. In the picker, choose a tab and tick “Also share tab audio” — without it there is nothing to transcribe.'
+              : 'The shared tab was closed or sharing was ended, so capture stopped. Nothing was lost; share again to carry on.'}
+          </p>
+          <div className="actions">
+            <button onClick={() => { void begin(pendingMode, false); }}>Share again</button>
+            <button onClick={() => setStatus({ kind: 'idle' })}>Cancel</button>
+          </div>
+        </header>
+      </div>
+    );
+  }
+
+  if (status.kind === 'error') {
+    return (
+      <div className="notes">
+        <header className="masthead">
+          <div className="eyebrow">Excerpt</div>
+          <h1>Couldn’t start</h1>
+          <p className="rubric">{status.message}</p>
+          <div className="actions">
+            <button onClick={() => setStatus({ kind: 'idle' })}>Back</button>
+          </div>
+        </header>
+      </div>
+    );
+  }
+
+  if (status.kind === 'running' || status.kind === 'starting') {
+    const processing = status.kind === 'running' ? status.processing : 'on-device';
+    return (
+      <div className="session">
+        <div className="call live">
+          <div className="call-chrome">
+            <span className="rec"><i /> Excerpt is listening</span>
+            <span className="elapsed">{stamp(elapsed)}</span>
+          </div>
+          <Captions fresh={fresh} />
+          {fresh.length === 0 && (
+            <p className="waiting">Waiting for speech…</p>
+          )}
+        </div>
+
+        <dl className="credits live-credits">
+          <dt>Processing</dt>
+          <dd className={processing === 'cloud' ? 'warn' : ''}>
+            {processing === 'cloud' ? 'Google cloud — audio leaves this device' : 'On-device'}
+          </dd>
+          <dt>Captured</dt><dd>{captured} {captured === 1 ? 'line' : 'lines'}</dd>
+        </dl>
+
+        {pip && createPortal(<Captions fresh={fresh} standalone />, pip.body)}
+
+        <div className="transport">
+          <div className="transport-strip">
+            <Strip duration={Math.max(elapsed, 60_000)} position={elapsed} />
+          </div>
+          {supportsPiP() && (
+            <button onClick={async () => {
+              if (pip) { pip.defaultView?.close(); setPip(null); return; }
+              const doc = await openCaptionWindow();
+              if (!doc) return;
+              doc.defaultView?.addEventListener('pagehide', () => setPip(null));
+              setPip(doc);
+            }}>{pip ? 'Close float' : 'Float captions'}</button>
+          )}
+          <button className="skip" onClick={() => { void stop(); }}>End and write notes</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="notes">
+      <header className="masthead">
+        <div className="eyebrow">Excerpt</div>
+        <h1>Record a meeting</h1>
+        <p className="rubric">
+          Excerpt listens to what your computer is playing and to your microphone,
+          transcribes both on this machine, and writes notes when you stop. Nothing is
+          uploaded and nothing is recorded — only the transcript is kept, here.
+        </p>
+      </header>
+
+      <section>
+        <h2>How should Excerpt listen?</h2>
+        <div className="modes">
+          <button className="mode" onClick={() => { void begin('tab', false); }}>
+            <span className="mtitle">A browser tab</span>
+            <span className="mmeta">
+              Meet, Zoom on the web, anything playing in Chrome. Choose the meeting tab
+              and tick “Also share tab audio”.
+            </span>
+          </button>
+          <button className="mode" onClick={() => { void begin('system', false); }}>
+            <span className="mtitle">Anything on this Mac</span>
+            <span className="mmeta">
+              The Zoom or Teams desktop app, FaceTime, a call on speaker. Choose Entire
+              Screen and tick “Share system audio”. macOS will ask for screen-recording
+              permission.
+            </span>
+          </button>
+        </div>
+        <p className="rubric">
+          Your microphone is captured separately, which is how Excerpt can tell what you
+          said from what everyone else said. It is the only thing it can tell about who
+          is speaking.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+const stamp = (ms: number) => {
+  const t = Math.max(0, Math.round(ms / 1000));
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+};

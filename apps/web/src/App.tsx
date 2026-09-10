@@ -6,6 +6,7 @@ import { Session } from './views/Session';
 import { Notes } from './views/Notes';
 import { Library } from './views/Library';
 import { Preferences } from './views/Preferences';
+import { Record } from './views/Record';
 import { useRoute } from './router';
 
 export function App() {
@@ -44,6 +45,8 @@ export function App() {
         return <Library onOpen={(id) => go(`/m/${id}`)} />;
       case 'preferences':
         return <Preferences />;
+      case 'record':
+        return <Record onSaved={(id) => go(`/m/${id}`)} />;
       case 'meeting':
         if (!meeting || meeting.id !== route.id) {
           return <div className="notes"><p className="rubric">Reading…</p></div>;
@@ -66,6 +69,7 @@ export function App() {
       <nav className="nav" aria-label="Main">
         <a href="#/" className={route.name === 'landing' ? 'on' : ''}>Excerpt</a>
         <span className="spacer" />
+        <a href="#/record" className={route.name === 'record' ? 'on' : ''}>Record</a>
         <a href="#/meetings" className={route.name === 'library' ? 'on' : ''}>Meetings</a>
         <a href="#/preferences" className={route.name === 'preferences' ? 'on' : ''}>Preferences</a>
       </nav>

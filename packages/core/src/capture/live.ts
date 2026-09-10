@@ -71,7 +71,9 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     if (!tabTrack) {
       this.display.getTracks().forEach((t) => t.stop());
       this.display = undefined;
-      return this.setStatus({ kind: 'needs-reshare', reason: 'share-stopped' });
+      // Distinct from share-stopped: the picture was shared but the audio box
+      // was left unticked, which the Day 0 spike showed people do constantly.
+      return this.setStatus({ kind: 'needs-reshare', reason: 'no-audio-track' });
     }
     // Ending the share is a first-class recoverable state.
     tabTrack.onended = () => { void this.stop(); this.setStatus({ kind: 'needs-reshare', reason: 'share-stopped' }); };
