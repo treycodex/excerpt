@@ -1,0 +1,204 @@
+{
+  "comment": "Cross-runtime fixtures. vitest runs these against the TypeScript source; ExcerptTests runs them against the compiled bundle inside JavaScriptCore. One file, two runtimes \u2014 the only way 'one engine' is a fact rather than an intention.",
+  "reference": "2026-09-07T09:00:00Z",
+  "cases": [
+    {
+      "name": "a settled decision is a decision",
+      "lines": [
+        [
+          "remote",
+          "Okay. Let's move the campaign launch to October. That's decided."
+        ]
+      ],
+      "expect": [
+        {
+          "category": "decision",
+          "state": "decided",
+          "assignee": "unassigned"
+        }
+      ]
+    },
+    {
+      "name": "a proposal is recorded as proposed, never as decided",
+      "lines": [
+        [
+          "remote",
+          "What if we moved the launch to October?"
+        ]
+      ],
+      "expect": [
+        {
+          "category": "decision",
+          "state": "proposed"
+        }
+      ]
+    },
+    {
+      "name": "first person on your own microphone is assigned to you",
+      "lines": [
+        [
+          "you",
+          "I'll take the revised deck and get it over by Thursday."
+        ]
+      ],
+      "expect": [
+        {
+          "category": "action",
+          "assignee": "you",
+          "due": "2026-09-10"
+        }
+      ]
+    },
+    {
+      "name": "a request from the far side is never assigned to you",
+      "lines": [
+        [
+          "remote",
+          "Can you send the revised deck before Friday?"
+        ]
+      ],
+      "expect": [
+        {
+          "category": "action",
+          "assignee": "unassigned"
+        }
+      ]
+    },
+    {
+      "name": "someone else committing themselves is not your action",
+      "lines": [
+        [
+          "remote",
+          "I'll take the deck."
+        ]
+      ],
+      "expect": [
+        {
+          "category": "action",
+          "assignee": "unassigned"
+        }
+      ]
+    },
+    {
+      "name": "negation is not a decision",
+      "lines": [
+        [
+          "remote",
+          "We're not moving the launch to October."
+        ]
+      ],
+      "expect": []
+    },
+    {
+      "name": "a conditional never reaches decided",
+      "lines": [
+        [
+          "remote",
+          "If media come back early we could move the launch to October."
+        ]
+      ],
+      "expect": [
+        {
+          "category": "decision",
+          "state": "proposed"
+        }
+      ]
+    },
+    {
+      "name": "discussing a future discussion decides nothing",
+      "lines": [
+        [
+          "remote",
+          "We'll discuss October next week once media come back."
+        ]
+      ],
+      "expect": []
+    },
+    {
+      "name": "reported speech is not our decision",
+      "lines": [
+        [
+          "remote",
+          "She said they decided to move the launch to October."
+        ]
+      ],
+      "expect": []
+    },
+    {
+      "name": "an unanswered question stays open",
+      "lines": [
+        [
+          "remote",
+          "Do we still need the out-of-home buy?"
+        ],
+        [
+          "you",
+          "I'm not sure the out-of-home spend is justified yet."
+        ]
+      ],
+      "expect": [
+        {
+          "category": "question",
+          "state": "discussed"
+        }
+      ]
+    },
+    {
+      "name": "an answered question is not an open question",
+      "lines": [
+        [
+          "remote",
+          "Do we still need the out-of-home buy?"
+        ],
+        [
+          "you",
+          "Yes, media confirmed it this morning."
+        ]
+      ],
+      "expect": []
+    },
+    {
+      "name": "a vague commitment is not an action",
+      "lines": [
+        [
+          "you",
+          "I'll have a look at some point."
+        ]
+      ],
+      "expect": []
+    },
+    {
+      "name": "unrelated speech yields nothing at all",
+      "lines": [
+        [
+          "remote",
+          "Did you see the game last night?"
+        ],
+        [
+          "you",
+          "Only the second half. The weather here has been terrible."
+        ],
+        [
+          "remote",
+          "Same. I pulled the last four weeks this morning."
+        ]
+      ],
+      "expect": []
+    },
+    {
+      "name": "titles are verbatim spans, never rewritten",
+      "lines": [
+        [
+          "remote",
+          "Right, so let's lock the October date. That's decided."
+        ]
+      ],
+      "expect": [
+        {
+          "category": "decision",
+          "titleIsSpanOf": "Right, so let's lock the October date. That's decided."
+        }
+      ]
+    }
+  ]
+}

@@ -22,6 +22,14 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/$CONFIG/Excerpt" "$APP/Contents/MacOS/Excerpt"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 
+# The extraction engine is the web package's build output, not a Swift port. If it
+# is missing the app has no notes at all, so refuse to assemble a bundle without it.
+if [ ! -f Resources/excerpt-engine.js ]; then
+  echo "error: Resources/excerpt-engine.js missing — run: pnpm --filter @excerpt/core build:engine"
+  exit 1
+fi
+cp Resources/excerpt-engine.js "$APP/Contents/Resources/excerpt-engine.js"
+
 # TCC keys permissions to code identity. Ad-hoc signing (-s -) produces a new hash
 # every build, so macOS treats each build as a different app and drops every grant —
 # measured, not assumed: gate 14 saw microphone and speech fall back to undetermined

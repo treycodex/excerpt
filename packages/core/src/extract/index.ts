@@ -35,6 +35,10 @@ function evidenceOf(s: Sentence) {
     tArrived: s.event.tArrived,
     quote: s.text,
     speakerLabel: s.event.speakerLabel,
+    // Carried through only when the source had one. Scrubbing to a quote is
+    // audio-accurate on macOS and arrival-approximate in the browser, and the
+    // difference has to survive extraction rather than be flattened here.
+    ...(s.event.tStart !== undefined ? { tStart: s.event.tStart } : {}),
   };
 }
 

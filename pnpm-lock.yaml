@@ -162,6 +162,9 @@ importers:
         specifier: ^6.3.0
         version: 6.3.0
     devDependencies:
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
       vitest:
         specifier: ^2.1.8
         version: 2.1.9

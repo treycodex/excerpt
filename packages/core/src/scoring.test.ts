@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Item, Preferences } from '@excerpt/types';
-import { DEFAULT_PREFERENCES, applyPreferences, deriveBoosts, matchedBoosts, scoreItem } from './preferences';
+import { DEFAULT_PREFERENCES, applyPreferences, deriveBoosts, matchedBoosts, scoreItem } from './scoring';
 
 const item = (over: Partial<Item> = {}): Item => ({
   id: 'i', category: 'decision', state: 'decided', title: 'Move the launch to October',

@@ -28,6 +28,17 @@ export interface TranscriptEvent {
   isFinal: boolean;
   tArrived: number;
   confidence?: number;
+  /**
+   * Audio-aligned position on the meeting clock, in seconds from the start.
+   *
+   * Present only where the recogniser reports one. macOS `SpeechTranscriber` gives
+   * every result an `audioTimeRange`; the Web Speech API gives nothing at all, so on
+   * the website these stay undefined and `tArrived` remains the only clock. Timing is
+   * audio-aligned where these exist and arrival-approximate where they do not — never
+   * describe it as exact.
+   */
+  tStart?: number;
+  tEnd?: number;
 }
 
 /** A verbatim pointer back into the transcript. Quotes are never paraphrased. */
@@ -36,6 +47,8 @@ export interface Evidence {
   tArrived: number;
   quote: string;
   speakerLabel: string;
+  /** Audio-aligned start, seconds, where the source provided one. See TranscriptEvent. */
+  tStart?: number;
 }
 
 export interface Item {

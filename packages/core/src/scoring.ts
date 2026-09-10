@@ -1,4 +1,8 @@
-import { get, set } from 'idb-keyval';
+/**
+ * Salience and personalisation — the deciding half of preferences, with no storage
+ * in it. Split out so it can run anywhere the extraction engine runs: the macOS app
+ * hosts this file's bundle in JavaScriptCore, where IndexedDB does not exist.
+ */
 import type { Category, Item, Preferences } from '@excerpt/types';
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -82,22 +86,6 @@ export function applyPreferences(items: Item[], prefs: Preferences): Item[] {
     .map((i) => ({ ...i, salience: scoreItem(i, prefs) }))
     .sort((a, b) => b.salience - a.salience
       || (a.evidence[0]?.tArrived ?? 0) - (b.evidence[0]?.tArrived ?? 0));
-}
-
-const KEY = 'excerpt:preferences';
-
-/** Falls back to defaults rather than hanging when storage is unavailable. */
-export async function loadPreferences(): Promise<Preferences> {
-  try {
-    const stored = await get<Preferences>(KEY);
-    return stored ? { ...DEFAULT_PREFERENCES, ...stored } : DEFAULT_PREFERENCES;
-  } catch {
-    return DEFAULT_PREFERENCES;
-  }
-}
-
-export async function savePreferences(prefs: Preferences): Promise<void> {
-  await set(KEY, prefs);
 }
 
 export function orderCategories(prefs: Preferences): Category[] {

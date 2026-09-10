@@ -15,5 +15,6 @@ export type { CaptureDraft } from './store/meetings';
 export { toMarkdown } from './export/markdown';
 export {
   DEFAULT_PREFERENCES, applyPreferences, deriveBoosts, matchedBoosts, scoreItem,
-  loadPreferences, savePreferences, orderCategories,
-} from './preferences';
+  orderCategories,
+} from './scoring';
+export { loadPreferences, savePreferences } from './store/preferences';
