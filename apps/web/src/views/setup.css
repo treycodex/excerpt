@@ -4,8 +4,8 @@
 .setup-page button { cursor: pointer; font-family: var(--sans); }
 .setup-page button:disabled { opacity: .5; cursor: wait; }
 .setup-nav { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 26px 5vw; border-bottom: 1px solid var(--line); font: 12px/1.6 var(--mono); letter-spacing: .06em; color: var(--muted); }
-.setup-nav > a:first-child { display: inline-flex; align-items: baseline; gap: 14px; font-family: var(--sans); font-size: 28px; letter-spacing: -3px; color: var(--paper); }
-.setup-nav strong { font-size: 13px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
+/* Size only — the mark's shape lives in brand.css. */
+.setup-nav > a:first-child { font-size: 21px; color: var(--paper); }
 .setup-eyebrow { font: 11px/1.6 var(--mono); letter-spacing: .14em; color: #989c8d; display: block; }
 .setup-page h1 { font: 400 clamp(40px, 4.4vw, 66px)/1.05 var(--sans); letter-spacing: -.05em; margin: 20px 0; color: var(--paper); }
 .setup-page em { font-family: var(--serif); font-weight: 400; }

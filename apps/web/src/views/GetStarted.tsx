@@ -1,9 +1,10 @@
+import { Wordmark } from './Wordmark';
 import './setup.css';
 
 export function GetStarted() {
   const download = import.meta.env.VITE_MAC_DOWNLOAD_URL as string | undefined;
   return <div className="setup-page">
-    <nav className="setup-nav"><a href="#/" aria-label="Excerpt home">[ e ] <strong>EXCERPT</strong></a><span>FREE. OPEN SOURCE. YOURS.</span></nav>
+    <nav className="setup-nav"><a href="#/" aria-label="Excerpt home"><Wordmark /></a><span>FREE. OPEN SOURCE. YOURS.</span></nav>
     <div className="get-started">
       <span className="setup-eyebrow">WELCOME TO EXCERPT</span>
       <h1>Your next meeting.<br /><em>Already in notes.</em></h1>

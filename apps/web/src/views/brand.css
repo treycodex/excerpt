@@ -1,0 +1,30 @@
+/* ── The wordmark ──────────────────────────────────────────────────────────────
+   One mark, one set of metrics, every surface.
+
+   It had drifted into three: `[ e ]` alone in the landing nav, `[ e ] EXCERPT`
+   uppercase and letter-spaced in the setup flow, and `[ e ] excerpt` lowercase at a
+   different size in the notes sidebar. Three versions of a logo is no logo.
+
+   The bracket kerning is the mark's own — the site's -4px at 30px, written in em so
+   it holds at any size — and the word is set the way the masthead sets it, because
+   that is the wordmark people actually see first. */
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.42em;
+  font-family: var(--sans);
+  white-space: nowrap;
+  line-height: 1;
+}
+.wordmark .mark {
+  font-size: 1em;
+  font-weight: 600;
+  letter-spacing: -0.133em;
+  /* The trailing bracket's kerning would otherwise pull the word left into it. */
+  padding-right: 0.133em;
+}
+.wordmark .word {
+  font-size: 1.05em;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+}

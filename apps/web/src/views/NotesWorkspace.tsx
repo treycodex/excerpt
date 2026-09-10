@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { isNativeHost, readMeetingLibrary } from '@excerpt/core';
 import type { Meeting } from '@excerpt/types';
+import { Wordmark } from './Wordmark';
 import './notes.css';
 
 /**
@@ -29,7 +30,7 @@ export function NotesWorkspace({ children, currentId, library }: { children: Rea
   const filtered = listed.filter((m) => m.title.toLowerCase().includes(query.toLowerCase()));
   return <div className="notebook">
     <aside className="notebook-sidebar" aria-label="Meeting library">
-      <a className="notebook-brand" href="#/">[ e ] <span>excerpt</span></a>
+      <a className="notebook-brand" href="#/"><Wordmark /></a>
       {!isNativeHost() && <a className="notebook-new" href="#/record"><span>＋</span> New meeting</a>}
       <label className="notebook-search"><span className="sr-only">Search meetings</span><input type="search" placeholder="Search meetings…" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
       <a className={`notebook-all${!currentId ? ' selected' : ''}`} href="#/meetings">All meetings <span>{listed.length}</span></a>

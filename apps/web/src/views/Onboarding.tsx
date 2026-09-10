@@ -3,6 +3,7 @@ import { deriveBoosts, loadPreferences, savePreferences } from '@excerpt/core';
 import type { Preferences as Prefs } from '@excerpt/types';
 import { CAPTION_PRESETS, applyPreset, currentPreset } from '../captionPreset';
 import type { CaptionPreset } from '../captionPreset';
+import { Wordmark } from './Wordmark';
 import './setup.css';
 
 export function Onboarding({ onDone, forCapture = false }: { onDone: () => void; forCapture?: boolean }) {
@@ -22,7 +23,7 @@ export function Onboarding({ onDone, forCapture = false }: { onDone: () => void;
     finally { setSaving(false); }
   };
   return <div className="setup-page">
-    <nav className="setup-nav"><a href="#/" aria-label="Excerpt home">[ e ] <strong>EXCERPT</strong></a><a href="#/get-started">ALL WAYS TO USE EXCERPT ↗</a></nav>
+    <nav className="setup-nav"><a href="#/" aria-label="Excerpt home"><Wordmark /></a><a href="#/get-started">ALL WAYS TO USE EXCERPT ↗</a></nav>
     <div className="setup-wizard">
       <aside className="setup-rail"><span className="setup-eyebrow">MAKE IT YOURS</span><h2>A little setup.<br /><em>Better notes.</em></h2><ol><li className={step === 0 ? 'current' : 'complete'}><b>{step === 0 ? '1' : '✓'}</b>Your subtitle style</li><li className={step === 1 ? 'current' : ''}><b>2</b>Your priorities</li></ol><p>Everything can be changed later in Preferences.</p><span className="setup-eyebrow">FREE & OPEN SOURCE</span></aside>
       <div className="setup-wizard-content">

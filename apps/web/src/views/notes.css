@@ -63,11 +63,7 @@
    so the sidebar has to start below the traffic lights rather than under them. */
 [data-host="mac"] .notebook-sidebar { padding-top: 46px; }
 
-.notebook-brand {
-  display: flex; align-items: baseline; gap: 10px;
-  padding: 0 10px 18px; font-size: 19px; letter-spacing: -0.09em;
-}
-.notebook-brand span { font-size: 21px; font-weight: 600; letter-spacing: -0.045em; }
+.notebook-brand { display: block; padding: 0 10px 18px; font-size: 19px; }
 
 .notebook-new {
   display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -322,6 +318,43 @@
 .notebook .nudge a { text-decoration: underline; text-underline-offset: 3px; }
 
 .notebook .empty-notes h2 { font: var(--serif); font-size: 22px; letter-spacing: -0.01em; color: var(--ink); text-transform: none; margin-top: 34px; }
+
+/* ── Capture and preferences ───────────────────────────────────────────────────
+   These two are workspace screens, not marketing ones, so they inherit the paper
+   ground and only need the controls that app.css styles for a dark page put right. */
+.notebook select, .notebook textarea, .notebook input[type="text"], .notebook input[type="date"] {
+  color-scheme: light;
+  background: #fbfaf1; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px;
+  font: 14px var(--sans);
+}
+.notebook select { padding-right: 28px; }
+.notebook .instruction { width: 100%; line-height: 1.6; }
+
+/* The live caption preview stays a dark frame inside the light page — a subtitle is
+   white on a picture, and showing it on paper would be showing something the product
+   never does. Same reason the notes page keeps its strip dark. */
+.notebook .call {
+  background: #101110; border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden;
+}
+.notebook .call .caption .line { color: var(--cap-color); }
+.notebook .call-chrome { color: #8d9184; }
+
+.notebook .diagnostics { font: 12.5px var(--sans); color: var(--dim); margin-top: 14px; }
+.notebook .diagnostics summary { color: var(--dim); }
+
+/* Cards for the two capture modes, and the preset picker on Preferences. */
+.notebook .share-option, .notebook .caption-style-card {
+  background: #fbfaf1; border: 1px solid var(--line); border-radius: 9px;
+}
+.notebook .caption-style-preview { background: #101110; border-radius: 7px; }
+.notebook .chip {
+  background: var(--paper-deep); border: 1px solid var(--line); border-radius: 20px;
+  color: var(--ink-soft); font: 12.5px var(--sans); padding: 5px 11px;
+}
+.notebook .pref-order li { border-bottom: 1px solid var(--line-soft); }
+.notebook .rank { color: var(--faint); font: 12px var(--mono); }
 
 /* ── Library ──────────────────────────────────────────────────────────────── */
 .notebook .meeting-row { padding: 18px 0; border-bottom: 1px solid var(--line-soft); gap: 16px; }

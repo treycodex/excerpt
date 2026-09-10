@@ -7,6 +7,7 @@ import { Notes } from './views/Notes';
 import { Library } from './views/Library';
 import { Preferences } from './views/Preferences';
 import { GetStarted } from './views/GetStarted';
+import { NotesWorkspace } from './views/NotesWorkspace';
 import { Onboarding } from './views/Onboarding';
 import { Record } from './views/Record';
 import { useRoute } from './router';
@@ -63,10 +64,14 @@ export function App() {
         return <Session onEnd={onEnd} />;
       case 'library':
         return <Library onOpen={(id) => go(`/m/${id}`)} />;
+      // Capturing and choosing what matters are things you do *in* Excerpt, not
+      // things you are sold — so they live in the workspace with the library beside
+      // them, like the notes they produce. The marketing pages keep the dark
+      // editorial ground; everything past "set up" is the paper one.
       case 'preferences':
-        return <Preferences />;
+        return <NotesWorkspace><Preferences /></NotesWorkspace>;
       case 'record':
-        return <Record onSaved={(id) => go(`/m/${id}`)} />;
+        return <NotesWorkspace><Record onSaved={(id) => go(`/m/${id}`)} /></NotesWorkspace>;
       case 'onboarding':
         return (
           <Onboarding
@@ -113,7 +118,7 @@ export function App() {
       <button className="skip-link" onClick={() => document.querySelector<HTMLElement>('#main')?.focus()}>
         Skip to content
       </button>
-      {!['landing', 'meeting', 'library', 'setup', 'get-started', 'onboarding'].includes(route.name) && <nav className="nav" aria-label="Main">
+      {!['landing', 'meeting', 'library', 'setup', 'get-started', 'onboarding', 'record', 'preferences'].includes(route.name) && <nav className="nav" aria-label="Main">
         <a href="#/">Excerpt</a>
         <span className="spacer" />
         {/* Inside the Mac app, recording is the menu bar's job — this screen asks the

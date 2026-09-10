@@ -4,7 +4,8 @@
 .editorial a { color: inherit; text-decoration: none; }
 .editorial button:focus-visible, .editorial a:focus-visible { outline: 2px solid var(--paper); outline-offset: 6px; }
 .ed-nav { display: flex; align-items: center; gap: 48px; min-height: 100px; }
-.ed-logo { font-size: 30px; font-weight: 600; letter-spacing: -4px; white-space: nowrap; }
+/* Size only — the mark's shape lives in brand.css. */
+.ed-logo { font-size: 30px; }
 .ed-nav-note { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .ed-nav-links { margin-left: auto; display: flex; gap: 36px; align-items: center; }
 .ed-nav-links button, .ed-text-button, .ed-film-caption button { padding: 0; border: 0; background: none; color: inherit; font-size: 14px; }

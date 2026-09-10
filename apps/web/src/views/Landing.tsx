@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Wordmark } from './Wordmark';
 import './landing.css';
 
 const SOURCE = 'https://github.com/treycodex/excerpt';
@@ -13,7 +14,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
   return (
     <div className="editorial">
       <nav className="ed-nav" aria-label="Main">
-        <a className="ed-logo" href="#/" aria-label="Excerpt home">[ e ]</a>
+        <a className="ed-logo" href="#/" aria-label="Excerpt home"><Wordmark markOnly /></a>
         <span className="ed-nav-note">Meeting notes.<br />Free and open source.</span>
         <div className="ed-nav-links"><button onClick={() => jump('the-experience')}>Features</button><a href={SOURCE} target="_blank" rel="noreferrer">Open source ↗</a></div>
         <a className="ed-nav-start" href="#/get-started">Use it free <span>↗</span></a>
