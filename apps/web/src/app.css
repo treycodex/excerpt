@@ -146,8 +146,24 @@
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
-.fade { opacity: 0; transition: opacity var(--cap-fade) var(--ease-out); }
-.fade.in { opacity: 1; }
+/* Each caption is a fresh mount (keyed by its text), so the fade has to be an
+   ENTRY animation. A static class cannot do it: a transition needs a change, and a
+   newly mounted element simply paints at its computed value — which is why this
+   silently did nothing at all until it was measured.
+   @starting-style gives the element a value to transition FROM on first paint. */
+.fade {
+  opacity: 1;
+  transition: opacity var(--cap-fade) var(--ease-out);
+}
+@starting-style {
+  .fade { opacity: 0; }
+}
+
+/* Between consecutive lines the swap is a cut, as film subtitles are. The fade is
+   for a caption arriving, not for one line replacing another. */
+@media (prefers-reduced-motion: reduce) {
+  .fade { transition: none; }
+}
 
 .call-chrome {
   position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between;

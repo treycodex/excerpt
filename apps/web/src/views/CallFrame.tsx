@@ -49,7 +49,7 @@ export function Captions({ fresh, standalone }: { fresh: Spoken[]; standalone?: 
       role="region"
       aria-label="Live captions"
     >
-      <div className="fade in">
+      <div className="fade">
         {!overlapping && visible[0] && <div className="who">{visible[0].label}</div>}
         {visible.flatMap((s, i) => {
           const lines = splitIntoSubtitleLines(s.text, { maxChars: overlapping ? 40 : 42 });
