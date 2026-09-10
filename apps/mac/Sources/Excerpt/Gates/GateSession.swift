@@ -10,7 +10,9 @@ final class GateSession: ObservableObject {
     @Published var speech: [SourceKind: TranscriptStats] = [:]
 
     private let engine = CaptureEngine()
-    private let transcribers: [SourceKind: SourceTranscriber] = [
+    /// Rebuilt per run. A `SourceTranscriber` is a one-run object, and a gate board
+    /// that silently measured the previous run would be worse than no gate board.
+    private var transcribers: [SourceKind: SourceTranscriber] = [
         .system: SourceTranscriber(kind: .system),
         .microphone: SourceTranscriber(kind: .microphone),
     ]
@@ -29,6 +31,9 @@ final class GateSession: ObservableObject {
     func start() async {
         guard !running else { return }
         board.note("Starting capture — one SCStream, two audio outputs…")
+
+        transcribers = [.system: SourceTranscriber(kind: .system),
+                        .microphone: SourceTranscriber(kind: .microphone)]
 
         do {
             for (_, t) in transcribers { try await t.start() }
@@ -73,15 +78,29 @@ final class GateSession: ObservableObject {
 
         // Volatile text drives the overlay — it is the live edge of speech. Finalized
         // text is the transcript, and arrives later by design.
+        //
+        // The gates poll deliberately; a measurement harness with its own cadence is
+        // the point. What it must not do is keep its own copy of the rule — this used
+        // to compare the two sources' raw local seconds, so the gate board inherited
+        // the very bias it exists to catch.
         if overlay.visible {
             let sys = speech[.system] ?? TranscriptStats()
             let mic = speech[.microphone] ?? TranscriptStats()
             let sysText = sys.lastVolatile.isEmpty ? sys.lastFinalized : sys.lastVolatile
             let micText = mic.lastVolatile.isEmpty ? mic.lastFinalized : mic.lastVolatile
-            if mic.lastRangeEnd >= sys.lastRangeEnd, !micText.isEmpty {
-                overlay.update(speaker: "YOU", text: micText)
-            } else if !sysText.isEmpty {
-                overlay.update(speaker: "SPEAKER", text: sysText)
+
+            // Both ends onto the capture clock. The offsets share an origin, so the
+            // comparison is sound without a MeetingClock to hold it.
+            let sysOffset = await transcribers[.system]?.captureOffsetSeconds() ?? 0
+            let micOffset = await transcribers[.microphone]?.captureOffsetSeconds() ?? 0
+
+            switch CaptionEdge.owner(
+                you: micText.isEmpty ? nil : mic.lastRangeEnd + micOffset,
+                remote: sysText.isEmpty ? nil : sys.lastRangeEnd + sysOffset
+            ) {
+            case .you: overlay.update(speaker: "YOU", text: micText)
+            case .remote: overlay.update(speaker: "SPEAKER", text: sysText)
+            case nil: break
             }
         }
 

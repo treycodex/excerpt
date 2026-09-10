@@ -74,6 +74,11 @@ final class OverlayController {
     private(set) var visible = false
     private(set) var screenName = "—"
 
+    /// The latest words, held whether or not they are being drawn. Not observed: it is
+    /// the input to `caption`, and re-rendering the overlay on it would defeat the
+    /// point of holding it.
+    @ObservationIgnored private var pendingText: (speaker: String, text: String) = ("", "")
+
     private(set) var preset: CaptionPreset
     private(set) var size: CaptionSize
     private(set) var position: CaptionPosition
@@ -87,7 +92,20 @@ final class OverlayController {
     struct CaptionLine: Equatable {
         var speaker: String
         var text: String
+        /// Already broken. The view draws these and measures nothing, because line
+        /// breaking is a judgement about the words and belongs with the words — not a
+        /// measurement repeated on every frame while someone is still talking.
+        var lines: [String]
     }
+
+    /// How text becomes at most two lines. Assigned by `AppDelegate` to the shared
+    /// engine's `subtitleLines`, so a caption breaks in the same place on the Mac as it
+    /// does on the website.
+    ///
+    /// The default is a plain character-greedy tail, and it is not defensive padding:
+    /// the overlay is built before `CoreEngine` and outlives its failure, so this is
+    /// what keeps captions on screen when the notes engine is missing entirely.
+    @ObservationIgnored var breakLines: @MainActor (String) -> [String] = OverlayController.fallbackLines
 
     private enum Key {
         static let preset = "caption.preset"
@@ -185,6 +203,9 @@ final class OverlayController {
         visible = true
         screenName = target.localizedName
         DockPresence.shared.overlay(isShowing: true)
+        // Whatever was said while the overlay was down is drawn the moment it comes up,
+        // rather than after the next word.
+        rebreakHeldText()
 
         // Gate 11: follow display changes rather than being stranded on a screen
         // that no longer exists.
@@ -224,7 +245,59 @@ final class OverlayController {
 
     func update(speaker: String, text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        caption = trimmed.isEmpty ? nil : CaptionLine(speaker: speaker, text: trimmed)
+        guard !trimmed.isEmpty else {
+            pendingText = ("", "")
+            if caption != nil { caption = nil }
+            return
+        }
+        pendingText = (speaker, trimmed)
+
+        // Off screen, the words are worth keeping but breaking them is not: `show()`
+        // breaks whatever is held. This is what lets the session push unconditionally
+        // and stop caring whether the overlay is up.
+        guard visible else { return }
+
+        let next = CaptionLine(speaker: speaker, text: trimmed, lines: breakLines(trimmed))
+        // `@Observable` notifies on assignment, not on change, and the live edge
+        // republishes the same words whenever a result lands without adding any. This
+        // guard is what keeps a push cheaper than the poll it replaced.
+        guard next != caption else { return }
+        caption = next
+    }
+
+    /// Break what is held, for the overlay coming up on words that were said while it
+    /// was down.
+    ///
+    /// Not needed when the look changes: the budget is `maxCharsPerLine`, a count of
+    /// characters, and every preset and size shares it. The frame a line is drawn in
+    /// changes with the size; where the line breaks does not.
+    private func rebreakHeldText() {
+        let (speaker, text) = pendingText
+        guard visible, !text.isEmpty else { return }
+        let next = CaptionLine(speaker: speaker, text: text, lines: breakLines(text))
+        if next != caption { caption = next }
+    }
+
+    /// At most two lines, keeping the tail, splitting on spaces at the token's budget.
+    ///
+    /// Deliberately simpler than the shared engine's phrase breaker — it exists for the
+    /// case where that engine could not be loaded, and a caption broken in a slightly
+    /// worse place is enormously better than no caption.
+    nonisolated static func fallbackLines(_ text: String) -> [String] {
+        let budget = CaptionTokens.maxCharsPerLine
+        var lines: [String] = []
+        var current = ""
+        for word in text.split(separator: " ", omittingEmptySubsequences: true) {
+            let candidate = current.isEmpty ? String(word) : current + " " + word
+            if current.isEmpty || candidate.count <= budget {
+                current = candidate
+            } else {
+                lines.append(current)
+                current = String(word)
+            }
+        }
+        if !current.isEmpty { lines.append(current) }
+        return Array(lines.suffix(CaptionTokens.maxLines))
     }
 }
 

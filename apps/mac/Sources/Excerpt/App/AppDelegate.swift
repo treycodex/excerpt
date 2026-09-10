@@ -45,6 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let engine = try CoreEngine()
             self.store = store
             self.engine = engine
+            // One phrase breaker, not two: a caption breaks in the same place over a
+            // meeting as it does on the website, because it is the same code deciding.
+            overlay.breakLines = { text in
+                (try? engine.subtitleLines(text, maxChars: CaptionTokens.maxCharsPerLine))
+                    ?? OverlayController.fallbackLines(text)
+            }
             session = MeetingSession(engine: engine, store: store, overlay: overlay)
             notes = NotesWindowController(bridge: NotesBridge(store: store, preferences: preferences))
             offerRecovery(store: store)
@@ -81,8 +87,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if CommandLine.arguments.contains("--captions") { overlay.show() }
         if let index = CommandLine.arguments.firstIndex(of: "--diagnose") {
-            let seconds = CommandLine.arguments.dropFirst(index + 1).first.flatMap(Double.init) ?? 15
-            Task { await runDiagnosis(seconds: seconds) }
+            let arguments = Array(CommandLine.arguments.dropFirst(index + 1))
+            let seconds = arguments.first.flatMap(Double.init) ?? 15
+            // A second meeting in the same launch is its own test — see trap 13. The
+            // tool only ever ran one, which is why an empty second transcript could
+            // survive every diagnosis this app has ever produced.
+            let runs = arguments.dropFirst().first.flatMap(Int.init) ?? 1
+            Task { await runDiagnosis(seconds: seconds, runs: max(1, runs)) }
         }
         refresh()
     }
@@ -352,7 +363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The app has to be launched through LaunchServices for TCC to attribute
     /// permissions to it rather than to a terminal, which means stdout goes nowhere —
     /// so the report goes to a file next to the meetings.
-    private func runDiagnosis(seconds: Double) async {
+    private func runDiagnosis(seconds: Double, runs: Int = 1) async {
         var report = ["Excerpt diagnosis — \(Date().formatted())"]
 
         for permission in Permission.allCases {
@@ -366,18 +377,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        await session.start()
-        report.append("  after start: \(session.status)")
-        try? await Task.sleep(for: .seconds(seconds))
-        await session.stop()
+        for run in 1...runs {
+            if runs > 1 { report.append("  — meeting \(run) of \(runs) —") }
 
-        report.append("  sources: \(session.diagnosis)")
-        report.append("  events: \(session.lastSaved?.events.count ?? 0)")
-        report.append("  items: \(session.lastSaved?.items.count ?? 0)")
-        report.append("  verdict: \(session.status)")
-        for event in session.lastSaved?.events.prefix(8) ?? [] {
-            report.append(String(format: "    %@ %.2f–%.2f “%@”",
-                                 event.speakerLabel, event.tStart ?? -1, event.tEnd ?? -1, event.text))
+            await session.start()
+            report.append("  after start: \(session.status)")
+            try? await Task.sleep(for: .seconds(seconds))
+            await session.stop()
+
+            report.append("  sources: \(session.diagnosis)")
+            report.append("  events: \(session.lastSaved?.events.count ?? 0)")
+            report.append("  items: \(session.lastSaved?.items.count ?? 0)")
+            report.append("  verdict: \(session.status)")
+            for event in session.lastSaved?.events.prefix(8) ?? [] {
+                report.append(String(format: "    %@ %.2f–%.2f “%@”",
+                                     event.speakerLabel, event.tStart ?? -1, event.tEnd ?? -1, event.text))
+            }
         }
 
         writeDiagnosis(report)

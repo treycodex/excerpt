@@ -228,7 +228,7 @@ and has not been deployed.
 **macOS: Stages 1 and 2 complete and running.** One meeting journey end to end —
 capture, two transcribers, one clock, journal, assembly, extraction through the shared
 engine, notes in a WKWebView — plus the guided setup, the menu bar, and the unsigned
-distribution notes. 82 TypeScript tests, 43 Swift.
+distribution notes. 87 TypeScript tests, 63 Swift.
 
 ### Owed, in order — start here
 0. **The hero footage still shows letter avatars.** The call tiles now draw a
@@ -242,19 +242,51 @@ distribution notes. 82 TypeScript tests, 43 Swift.
    ```
    cd apps/mac && ./tools/record-media.sh hero   # then don't touch the machine ~45s
    ```
-1. **`assigned to you` from a real human voice.** Still the one unproven claim, on
+1. **`--diagnose` never finishes, and it is the tool everything else here is measured
+   with.** The app launches with the flag, parses it (`ps` confirms the arguments
+   reach the process), and then sits in the run loop forever: no `diagnose.txt`, no
+   saved meeting, no log line, and only five threads — so nothing in `SpeechAnalyzer`
+   ever spun up. The main thread is idle in `-[NSApplication run]`, so it is not a
+   modal alert and not a deadlock on the main actor; `runDiagnosis` is awaiting
+   something that never resumes, before the first log statement. `Permissions.state`
+   is entirely synchronous, so the suspect is `transcriber.start()` — most likely
+   `SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:)` or the transcriber's
+   model assets.
+
+   **Not a regression.** Commit `0b4bf06` built in a clean worktree fails identically,
+   so this predates the caption work and predates the two-run flag.
+
+   It matters more than it looks: `--diagnose` is how owed item 3 below is meant to be
+   discharged without a person, so until this is fixed **every unattended measurement
+   on this app is blocked** and anything claiming to have been measured that way needs
+   re-reading. Start by logging on entry to `runDiagnosis` and after each `await`.
+2. **The caption is smoother and closer to the voice — by construction, not by
+   measurement.** The 100ms poll is gone (the transcriber pushes), the edge now spans
+   settled *and* unsettled speech so promotion moves nothing on screen, and lines are
+   broken once by the shared engine instead of re-wrapped by width inside `body`. The
+   logic is covered by 20 new tests and the app runs without crashing on the new path;
+   the end-to-end latency number is not measured, because getting it needs `--diagnose`
+   to work. Once it does, `--diagnose <seconds> <runs>` takes a run count, and two runs
+   is also the standing check for trap 13:
+
+   ```
+   cd apps/mac && open build/Excerpt.app --args --diagnose 12 2
+   say "Okay, let's move the launch to October. I'll take the revised deck and get it over by Thursday."
+   # both meetings must have events — an empty second one is trap 13 again
+   ```
+3. **`assigned to you` from a real human voice.** Still the one unproven claim, on
    both surfaces. On the Mac: wear headphones (or the microphone hears the speakers
    and its copy is correctly suppressed as an echo, which is what happened in every
    test so far), then `open apps/mac/build/Excerpt.app`, Start listening, say
    *"I'll send the revised deck by Thursday"*, Stop. Expect one action **assigned to
    you** with a due date. `--diagnose 25` does the same run unattended and writes
    `~/Library/Application Support/Excerpt/diagnose.txt`.
-2. **A meeting longer than 30 seconds.** Everything measured so far is a 13-second
+4. **A meeting longer than 30 seconds.** Everything measured so far is a 13-second
    script spoken by `say` through the speakers. Recognition quality, the journal under
    load, and the overlay during a real call are all unmeasured at length.
-3. **The overlay over an actual fullscreen meeting.** Judged only against this desktop.
-4. Still untested from Stage 0: multiple displays, sleep/wake, gate 1's offline check.
-5. **The setup flow has never been walked by a person**, only jumped through with
+5. **The overlay over an actual fullscreen meeting.** Judged only against this desktop.
+6. Still untested from Stage 0: multiple displays, sleep/wake, gate 1's offline check.
+7. **The setup flow has never been walked by a person**, only jumped through with
    `--setup-step` on a Mac where all three permissions were already granted. The
    denied path, the request prompts and the relaunch notice are unit-tested but
    unseen. `defaults delete com.excerpt.app setup.completed` makes it first-run again.
@@ -348,6 +380,19 @@ and pivoting to one mid-competition is an architecture change, not a fallback.
    It looks like the right privacy default until the captions are missing from every
    demo video and every screenshot, with no error to explain it. The overlay is
    deliberately left capturable.
+13. **A `SourceTranscriber` is good for one capture run, not one app launch.** `stop()`
+    calls `emit.finish()`, and a finished `AsyncStream` never reopens; `start()` also
+    resets none of `framesFed`, `settledThrough`, `pending` or the stats. Both
+    `MeetingSession` and `GateSession` used to hold them in a `let` created once, so
+    **the second meeting of any launch saved an empty transcript** — every settled
+    segment yielded into a dead stream and vanished, while capture, recognition and the
+    live caption all looked healthy. They are rebuilt per run now. Anything holding a
+    transcriber across runs is this bug again.
+14. **Two sources, two clocks.** Each `SourceTranscriber` counts seconds from its own
+    first buffer, so the one that started later reports a *smaller* number for the same
+    moment. Comparing `lastRangeEnd` raw hands the earlier stream a permanent lead —
+    which is how the caption came to sit on YOU while the far side talked. `MeetingClock`
+    exists for this; `CaptionEdge.owner` is the only place the comparison is made.
 
 ---
 

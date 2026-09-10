@@ -35,6 +35,14 @@ struct Segment: Sendable, Equatable {
 /// Chrome finalizing only on pauses. Apple marks volatile results explicitly and
 /// supersedes them, so committing early here would commit text the recogniser may
 /// still revise.
+///
+/// **One capture run, not one app launch.** `stop()` finishes both streams, and a
+/// finished `AsyncStream` cannot be reopened; the frame counter, the settle mark and
+/// every statistic here measure *this* run and `start()` does not reset them. A second
+/// meeting therefore needs new transcribers rather than a second `start()` on these.
+/// Reusing them is silent and total: every settled segment is yielded into a finished
+/// stream and dropped, so the meeting saves with an empty transcript and no notes,
+/// while capture, recognition and the caption all look healthy.
 actor SourceTranscriber {
     let kind: SourceKind
 
@@ -85,12 +93,33 @@ actor SourceTranscriber {
     nonisolated let segments: AsyncStream<Segment>
     private let emit: AsyncStream<Segment>.Continuation
 
+    /// The speaking edge, pushed the instant a result lands. This is what a caption is
+    /// for; `segments` is what a transcript is for, and arrives later by design.
+    ///
+    /// Buffering the newest value only, unlike `segments`. Every element here
+    /// supersedes the one before it — it is a snapshot of the same live text, not a new
+    /// piece of it — so a burst of results must collapse to the latest rather than
+    /// queue. Losing an intermediate frame of a caption costs nothing; a caption
+    /// replaying a backlog behind live speech is exactly the lag this replaced.
+    nonisolated let live: AsyncStream<LiveEdge>
+    private let emitLive: AsyncStream<LiveEdge>.Continuation
+
+    /// One snapshot of the speaking edge, in this source's own local seconds.
+    /// `sourceStart` rides along so the consumer can place it on the meeting clock
+    /// without an actor hop back to ask.
+    struct LiveEdge: Sendable, Equatable {
+        var text: String
+        var localEnd: Double
+        var sourceStart: Double
+    }
+
     /// Recently emitted segments, for the overlap check below.
     private var recentlyEmitted: [Segment] = []
 
     init(kind: SourceKind) {
         self.kind = kind
         (segments, emit) = AsyncStream<Segment>.makeStream()
+        (live, emitLive) = AsyncStream<LiveEdge>.makeStream(bufferingPolicy: .bufferingNewest(1))
     }
 
     func statistics() -> TranscriptStats { stats }
@@ -264,6 +293,22 @@ actor SourceTranscriber {
             pending.append((start, end, text))
         }
         if pending.count > 64 { pending.removeFirst(pending.count - 64) }
+
+        publishLiveEdge()
+    }
+
+    /// The caption's whole update path: a result landed, so the edge moved.
+    ///
+    /// Pushed here rather than polled by the consumer. A 100ms tick added up to 100ms
+    /// to every caption and, worse, put updates on a fixed grid uncorrelated with
+    /// speech, so words arrived in clumps of whatever the tick happened to catch.
+    private func publishLiveEdge() {
+        let unsettled = pending.map { Segment(start: $0.start, end: $0.end, text: $0.text) }
+        emitLive.yield(LiveEdge(
+            text: CaptionEdge.text(settled: recentlyEmitted, pending: unsettled),
+            localEnd: stats.lastRangeEnd,
+            sourceStart: haveOffset ? sourceOffset.seconds : 0
+        ))
     }
 
     /// Feeds one captured buffer, converting to whatever format the analyzer wants.
@@ -337,6 +382,7 @@ actor SourceTranscriber {
         // Gate 12: the tail must not vanish just because the session ended.
         promote(settledBefore: .greatestFiniteMagnitude)
         emit.finish()
+        emitLive.finish()
 
         analyzer = nil
         transcriber = nil

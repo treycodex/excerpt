@@ -58,16 +58,27 @@ final class MeetingSession {
     private let log = Logger(subsystem: "com.excerpt.app", category: "meeting")
 
     private let capture = CaptureEngine()
-    private let transcribers: [SourceKind: SourceTranscriber] = [
-        .system: SourceTranscriber(kind: .system),
-        .microphone: SourceTranscriber(kind: .microphone),
-    ]
+
+    /// Rebuilt for every meeting, never reused. A `SourceTranscriber` is a one-run
+    /// object — see its own note — and holding one across two meetings costs the
+    /// second meeting its entire transcript without any visible failure.
+    private var transcribers: [SourceKind: SourceTranscriber] = MeetingSession.freshTranscribers()
+
+    private static func freshTranscribers() -> [SourceKind: SourceTranscriber] {
+        [.system: SourceTranscriber(kind: .system),
+         .microphone: SourceTranscriber(kind: .microphone)]
+    }
 
     private var meetingId = ""
     private var clock = MeetingClock()
     private var pumps: [Task<Void, Never>] = []
-    private var captionTicker: Task<Void, Never>?
+    private var edgePumps: [Task<Void, Never>] = []
     private var eventCounter = 0
+
+    /// The latest live edge from each side, on the meeting clock. Kept because a push
+    /// carries one source's news and the caption is a decision about both.
+    private var youEdge: (end: Double, text: String)?
+    private var remoteEdge: (end: Double, text: String)?
 
     init(engine: CoreEngine, store: MeetingStore, overlay: OverlayController) {
         self.engine = engine
@@ -87,6 +98,9 @@ final class MeetingSession {
         events = []
         eventCounter = 0
         suppressedEchoes = 0
+        youEdge = nil
+        remoteEdge = nil
+        transcribers = Self.freshTranscribers()
 
         do {
             for (_, transcriber) in transcribers { try await transcriber.start() }
@@ -96,6 +110,7 @@ final class MeetingSession {
         }
 
         consumeSettledSpeech()
+        consumeLiveEdge()
 
         do {
             try await capture.start(
@@ -117,7 +132,6 @@ final class MeetingSession {
 
         state = .listening(since: Date())
         status = "Listening"
-        startCaptionTicker()
     }
 
     private func fail(_ message: String) {
@@ -182,30 +196,38 @@ final class MeetingSession {
     /// Volatile text is the speaking edge; it is what a caption is for. Finalized text
     /// is the transcript and arrives later by design.
     ///
-    /// Ten times a second, not twice: a caption that updates every 500ms reads as lag,
-    /// and the poll costs two actor hops over a string.
-    private func startCaptionTicker() {
-        captionTicker = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(100))
-                await self?.refreshCaption()
+    /// Pushed, not polled. The tick this replaced added up to 100ms to every caption
+    /// and, worse, landed updates on a fixed 10Hz grid uncorrelated with speech, so
+    /// words appeared in clumps of whatever the tick caught. The transcriber knows the
+    /// instant a result lands, and its stream keeps only the newest edge, so a burst
+    /// coalesces into the latest rather than queueing behind live speech.
+    private func consumeLiveEdge() {
+        edgePumps = transcribers.map { kind, transcriber in
+            Task { [weak self] in
+                for await edge in transcriber.live {
+                    guard let self else { return }
+                    await self.show(edge, from: kind)
+                }
             }
         }
     }
 
-    private func refreshCaption() async {
-        guard overlay.visible else { return }
-        let system = await transcribers[.system]?.statistics() ?? TranscriptStats()
-        let mic = await transcribers[.microphone]?.statistics() ?? TranscriptStats()
+    private func show(_ edge: SourceTranscriber.LiveEdge, from kind: SourceKind) {
+        // On the meeting clock, not this source's own. The two sources start at
+        // different instants, so raw local seconds hand whichever began first a
+        // permanent lead and the caption sticks to one speaker.
+        let placed = clock.meetingRange(
+            localStart: 0,
+            localEnd: edge.localEnd,
+            sourceStartingAt: CMTime(seconds: edge.sourceStart, preferredTimescale: 1000))
+        let latest = edge.text.isEmpty ? nil : (end: placed.end, text: edge.text)
 
-        let systemText = system.lastVolatile.isEmpty ? system.lastFinalized : system.lastVolatile
-        let micText = mic.lastVolatile.isEmpty ? mic.lastFinalized : mic.lastVolatile
+        if kind == .microphone { youEdge = latest } else { remoteEdge = latest }
 
-        // Whoever spoke most recently owns the caption.
-        if mic.lastRangeEnd >= system.lastRangeEnd, !micText.isEmpty {
-            overlay.update(speaker: "YOU", text: micText)
-        } else if !systemText.isEmpty {
-            overlay.update(speaker: "SPEAKER", text: systemText)
+        switch CaptionEdge.owner(you: youEdge?.end, remote: remoteEdge?.end) {
+        case .you: overlay.update(speaker: "YOU", text: youEdge?.text ?? "")
+        case .remote: overlay.update(speaker: "SPEAKER", text: remoteEdge?.text ?? "")
+        case nil: break
         }
     }
 
@@ -223,7 +245,6 @@ final class MeetingSession {
         state = .saving
         status = "Writing your notes…"
 
-        captionTicker?.cancel(); captionTicker = nil
         // Read the meters before tearing anything down, or the evidence goes with it.
         audioStats = capture.statistics()
         for (kind, transcriber) in transcribers { speechStats[kind] = await transcriber.statistics() }
@@ -233,6 +254,10 @@ final class MeetingSession {
         for (_, transcriber) in transcribers { await transcriber.stop() }
         for pump in pumps { _ = await pump.value }
         pumps = []
+        // The caption pumps end with their own stream; nothing is owed from them, so
+        // they are not waited on — only cleared.
+        for pump in edgePumps { pump.cancel() }
+        edgePumps = []
 
         // Re-read: stopping a transcriber promotes its tail, so the counts change.
         for (kind, transcriber) in transcribers { speechStats[kind] = await transcriber.statistics() }

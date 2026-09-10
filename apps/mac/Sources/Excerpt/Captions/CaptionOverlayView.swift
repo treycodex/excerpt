@@ -50,7 +50,7 @@ struct CaptionOverlayView: View {
             // contrast look reads as two bars hugging the text rather than one
             // ragged rectangle. This is the web's `box-decoration-break: clone`.
             VStack(spacing: style.lineGap) {
-                ForEach(Array(lines(of: caption.text, style: style).enumerated()), id: \.offset) { _, line in
+                ForEach(Array(caption.lines.enumerated()), id: \.offset) { _, line in
                     Text(line)
                         .font(Font(style.font))
                         .tracking(style.tracking)
@@ -67,32 +67,13 @@ struct CaptionOverlayView: View {
         .accessibilityLabel("\(caption.speaker) said: \(caption.text)")
     }
 
-    /// The last two lines of the wrapped text. Last, not first: the words being
-    /// spoken now are the ones worth reading.
-    ///
-    /// Wrapping is done here rather than left to `Text` because the two-line rule is
-    /// a rule about content, not about the width of a window — and because a plate
-    /// per line needs to know where the lines are. In the product this comes from the
-    /// shared engine, so there is one phrase breaker rather than two.
-    private func lines(of text: String, style: CaptionStyle) -> [String] {
-        let font = style.font
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .kern: style.tracking]
-        func width(_ s: String) -> CGFloat { (s as NSString).size(withAttributes: attributes).width }
-
-        var wrapped: [String] = []
-        var current = ""
-        for word in text.split(separator: " ", omittingEmptySubsequences: true).map(String.init) {
-            let candidate = current.isEmpty ? word : current + " " + word
-            if current.isEmpty || width(candidate) <= style.maxWidth {
-                current = candidate
-            } else {
-                wrapped.append(current)
-                current = word
-            }
-        }
-        if !current.isEmpty { wrapped.append(current) }
-        return Array(wrapped.suffix(style.maxLines))
-    }
+    // Lines arrive already broken, by the shared engine, in `OverlayController.update`.
+    // They used to be wrapped here, inside `body`, by measuring every word — ten times
+    // a second, on a string that grows while someone talks. Two things were wrong with
+    // that. Breaking on width rather than on phrase boundaries contradicts the rule the
+    // website follows and the design is named after; and re-wrapping a growing string
+    // reflows it, so each new word could shove a word across the break and shuffle the
+    // whole block. That shuffle was most of what read as jitter.
 }
 
 /// A CSS text-shadow list is a list; SwiftUI's shadow is one modifier. This applies
