@@ -3,10 +3,10 @@ import SwiftUI
 
 /// The whole of Excerpt's chrome.
 ///
-/// An accessory app has no Dock icon, so this menu is the only way in: it has to
-/// answer where you are, what you can do, and how to get out, on its own. Everything
-/// here is one click from the front, and the things a person does every meeting come
-/// before the things they set once.
+/// Excerpt is a menu-bar app that visits the Dock (see DockPresence), so with no window
+/// open this menu is the only way in: it has to answer where you are, what you can do,
+/// and how to get out, on its own. Everything here is one click from the front, and the
+/// things a person does every meeting come before the things they set once.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 

@@ -116,7 +116,10 @@ captions inside a page. The Mac app hears the meeting through ScreenCaptureKit a
 draws the subtitles **directly over it** — no window, no panel, no box — which is the
 thing a web page fundamentally cannot do.
 
-It lives in the menu bar. There is no Dock icon and no window to keep open.
+It lives in the menu bar, and there is no window you have to keep open. Excerpt joins
+the Dock the first time you open its notes or setup window and stays there until you
+quit; while the captions are on screen it drops back to being a menu-bar app, which is
+what lets the subtitles draw over a fullscreen meeting.
 
 ```bash
 pnpm --filter @excerpt/core build:engine   # the extraction engine, for JavaScriptCore

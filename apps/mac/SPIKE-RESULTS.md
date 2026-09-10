@@ -93,7 +93,9 @@ its `canJoinAllSpaces` window floats above everything.
 Window level also matters: `maximum` rather than `screenSaver`.
 
 This is the product's intended architecture rather than a workaround — Excerpt is a
-menu-bar app — but it means the overlay and the Dock icon are mutually exclusive.
+menu-bar app. It was first written here as "the overlay and the Dock icon are mutually
+exclusive"; **see 9b, which narrows that** — what matters is the policy while the
+captions are up, not the policy since launch.
 
 **9b. Re-measured when the Dock icon was added back (Sept 10).** `DockPresence` now
 switches policy at runtime: `.regular` while a notes or setup window is open,
@@ -116,10 +118,17 @@ Two results worth keeping:
   there until you quit" — not "it comes and goes". The tile is LaunchServices UI, not
   Space ownership, so it should not affect finding 9's mechanism.
 
-**Still unmeasured:** whether captions draw over a *fullscreen* app after the app has
-been promoted to regular and demoted again. Finding 9 was measured on an app that was
-accessory from launch. The mechanism says it should hold — a demoted app owns no Space —
-but that is reasoning, not a measurement, and everything else in this file was measured.
+- **Captions still draw over a fullscreen app after a promote-and-demote.** Confirmed by
+  eye on the developer's machine: notes window opened (Dock icon appears), a meeting put
+  fullscreen, captions toggled on, and the subtitle drew over it. This was the one thing
+  finding 9 did not cover — it was measured on an app that was accessory from launch —
+  and it is what makes the Dock icon safe to keep.
+
+**So finding 9 is narrower than it was first written.** What the overlay requires is
+that the app be an accessory *at the moment the captions are showing*, not that it has
+been one since launch. A Dock icon and captions over fullscreen are not mutually
+exclusive; a Dock icon and captions *at the same instant* are, and `DockPresence`
+resolves that in the overlay's favour every time.
 
 **10. Gate 13 must be judged on resources held, not on a state transition.**
 After an interruption the engine is already stopped, so a `running → stopped` check
