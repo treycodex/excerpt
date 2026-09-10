@@ -3,7 +3,7 @@ import Foundation
 
 /// Drives capture + both transcribers and judges the gates that depend on them.
 @MainActor
-final class CaptureSession: ObservableObject {
+final class GateSession: ObservableObject {
     @Published var running = false
     @Published var elapsed: TimeInterval = 0
     @Published var audio: [SourceKind: SourceStats] = [:]

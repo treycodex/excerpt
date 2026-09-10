@@ -16,10 +16,10 @@ fi
 
 swift build -c "$CONFIG" 2>&1 | tail -20
 
-APP="build/Excerpt Spike.app"
+APP="build/Excerpt.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp ".build/$CONFIG/ExcerptSpike" "$APP/Contents/MacOS/ExcerptSpike"
+cp ".build/$CONFIG/Excerpt" "$APP/Contents/MacOS/Excerpt"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 
 # TCC keys permissions to code identity. Ad-hoc signing (-s -) produces a new hash

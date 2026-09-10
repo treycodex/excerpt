@@ -12,8 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CSS = resolve(here, '../../../../packages/ui/src/tokens.css');
-const OUT = resolve(here, '../Sources/ExcerptSpike/CaptionTokens.generated.swift');
+const CSS = resolve(here, '../../../packages/ui/src/tokens.css');
+const OUT = resolve(here, '../Sources/Excerpt/Captions/CaptionTokens.generated.swift');
 
 // Comments sit between declarations, so strip them before splitting on `;`.
 const css = readFileSync(CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

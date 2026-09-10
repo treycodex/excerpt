@@ -7,7 +7,7 @@ import AppKit
 // instance, so no window, no status item and no callbacks — measured, the app launched
 // with nothing but a menu bar. An explicit entry point keeps the delegate alive in a
 // global (NSApplication holds its delegate weakly) and states where the main actor is.
-let delegate = MainActor.assumeIsolated { SpikeAppDelegate() }
+let delegate = MainActor.assumeIsolated { AppDelegate() }
 
 MainActor.assumeIsolated {
     let app = NSApplication.shared

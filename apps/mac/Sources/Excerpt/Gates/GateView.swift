@@ -1,14 +1,14 @@
 import SwiftUI
 
-struct SpikeView: View {
+struct GateView: View {
     @StateObject private var board = GateBoard()
-    @StateObject private var session: CaptureSession
+    @StateObject private var session: GateSession
     @State private var downloadProgress: Double?
 
     init() {
         let board = GateBoard()
         _board = StateObject(wrappedValue: board)
-        _session = StateObject(wrappedValue: CaptureSession(board: board))
+        _session = StateObject(wrappedValue: GateSession(board: board))
     }
 
     var body: some View {

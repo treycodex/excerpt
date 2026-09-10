@@ -2,18 +2,18 @@
 import PackageDescription
 
 let package = Package(
-    name: "ExcerptSpike",
+    name: "Excerpt",
     platforms: [.macOS("26.0")],
     targets: [
         .executableTarget(
-            name: "ExcerptSpike",
-            path: "Sources/ExcerptSpike",
+            name: "Excerpt",
+            path: "Sources/Excerpt",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
-            name: "ExcerptSpikeTests",
-            dependencies: ["ExcerptSpike"],
-            path: "Tests/ExcerptSpikeTests",
+            name: "ExcerptTests",
+            dependencies: ["Excerpt"],
+            path: "Tests/ExcerptTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

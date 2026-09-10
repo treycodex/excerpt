@@ -1,5 +1,5 @@
 import Testing
-@testable import ExcerptSpike
+@testable import Excerpt
 
 /// `CaptionStyle.resolve` is where every caption decision is made, which is the whole
 /// reason it is a pure function: the rules that matter most — the ones that override

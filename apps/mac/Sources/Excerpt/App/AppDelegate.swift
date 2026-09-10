@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var statusItem: NSStatusItem?
     private var showCaptionsItem: NSMenuItem?
@@ -93,7 +93,7 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(gate)
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Excerpt Spike",
+        menu.addItem(withTitle: "Quit Excerpt",
                      action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
     }
@@ -158,7 +158,7 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
         )
         window.title = "Excerpt — Stage 0 gate"
         window.center()
-        window.contentView = NSHostingView(rootView: SpikeView())
+        window.contentView = NSHostingView(rootView: GateView())
         window.isReleasedWhenClosed = false      // reopen from the menu bar
         window.makeKeyAndOrderFront(nil)
         self.window = window
@@ -169,7 +169,7 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @MainActor
-extension SpikeAppDelegate: NSMenuDelegate {
+extension AppDelegate: NSMenuDelegate {
     /// Marks are set as the menu opens rather than kept in sync by hand. There is no
     /// window in which the menu can be showing something that is no longer true.
     func menuNeedsUpdate(_ menu: NSMenu) {
