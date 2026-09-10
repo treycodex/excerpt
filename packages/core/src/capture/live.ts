@@ -198,6 +198,14 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     }
   }
 
+  /**
+   * How long an interim must stop growing before we treat it as settled.
+   * SODA finalises on pauses, so a monologue can run 40 seconds and produce a
+   * single final. Extraction reads finals only, so without this a continuous
+   * speaker yields an almost empty transcript.
+   */
+  private static readonly SETTLE_MS = 1800;
+
   private attach(track: MediaStreamTrack, role: SourceRole, label: string, local: boolean): void {
     const rec = new SR!();
     rec.lang = 'en-US';
@@ -227,12 +235,13 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       const d = this.diagnostics[key]; if (d) d.started = true;
     });
 
-    rec.onresult = (e: any) => {
-      const r = e.results[e.results.length - 1];
-      const text = String(r[0].transcript).trim();
-      const d = this.diagnostics[key];
-      if (d) { if (r.isFinal) d.finals++; else d.interims++; }
-      if (d && d.interims + d.finals <= 3) trace(r.isFinal ? 'FIRST FINAL' : 'first interim');
+    // Interim text within one utterance is cumulative, so we track how much of it
+    // has already been committed as transcript and only ever emit the new tail.
+    let interim = '';
+    let committed = 0;
+    let lastGrowth = performance.now();
+
+    const send = (text: string, isFinal: boolean, confidence?: number) => {
       if (!text) return;
       this.emit({
         id: `live-${this.seq++}`,
@@ -240,10 +249,52 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
         role,
         speakerLabel: label,
         text,
-        isFinal: !!r.isFinal,
+        isFinal,
         tArrived: performance.now() - this.t0,
-        confidence: typeof r[0].confidence === 'number' ? r[0].confidence : undefined,
+        ...(confidence !== undefined ? { confidence } : {}),
       });
+    };
+
+    /** Commit the settled part of a long utterance so extraction can see it. */
+    const settle = () => {
+      if (!this.running) return;
+      if (interim.length > committed &&
+          performance.now() - lastGrowth > LiveCaptureAdapter.SETTLE_MS) {
+        const tail = interim.slice(committed).trim();
+        if (tail) {
+          send(tail, true);
+          const d = this.diagnostics[key];
+          if (d) d.finals++;
+          trace('settled interim -> final');
+        }
+        committed = interim.length;
+      }
+      setTimeout(settle, 500);
+    };
+    setTimeout(settle, 500);
+
+    rec.onresult = (e: any) => {
+      const r = e.results[e.results.length - 1];
+      const text = String(r[0].transcript).trim();
+      const d = this.diagnostics[key];
+      if (d) { if (r.isFinal) d.finals++; else d.interims++; }
+      if (d && d.interims + d.finals <= 3) trace(r.isFinal ? 'FIRST FINAL' : 'first interim');
+      if (!text) return;
+
+      if (r.isFinal) {
+        // Emit only what has not already been committed by settle().
+        const tail = text.length > committed ? text.slice(committed).trim() : '';
+        send(tail || (committed === 0 ? text : ''), true,
+             typeof r[0].confidence === 'number' ? r[0].confidence : undefined);
+        interim = '';
+        committed = 0;
+        lastGrowth = performance.now();
+        return;
+      }
+
+      if (text.length > interim.length) lastGrowth = performance.now();
+      interim = text;
+      send(text, false);   // captions still see the whole live interim
     };
 
     rec.onerror = (e: any) => {
