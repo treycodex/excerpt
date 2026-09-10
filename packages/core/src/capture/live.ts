@@ -66,6 +66,28 @@ export interface LiveCaptureOptions {
  *    track throws InvalidStateError.
  *  - Ending the screen share is a recoverable product state, not an error.
  */
+/**
+ * getDisplayMedia failures are not all "you said no", and saying so sends people
+ * looking in the wrong place. NotReadableError in particular means the source
+ * could not be handed over -- usually because something else is already capturing it.
+ */
+function shareError(e: Error): string {
+  switch (e.name) {
+    case 'NotAllowedError':
+      return 'Screen sharing was cancelled. Choose the meeting tab and tick "Also share tab audio".';
+    case 'NotReadableError':
+      return 'That source could not be captured. Something else is probably already sharing it — close any other Excerpt tab or stop the existing share, then try again.';
+    case 'NotFoundError':
+      return 'No shareable source was found.';
+    case 'AbortError':
+      return 'Sharing stopped before it started. Try again.';
+    case 'OverconstrainedError':
+      return 'That source cannot provide audio. Choose a tab rather than a window.';
+    default:
+      return `Screen sharing failed (${e.name}: ${e.message}).`;
+  }
+}
+
 export class LiveCaptureAdapter implements TranscriptAdapter {
   readonly id = 'live';
   status: AdapterStatus = { kind: 'idle' };
@@ -95,7 +117,7 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
         selfBrowserSurface: 'exclude',
       } as DisplayMediaStreamOptions);
     } catch (e) {
-      return this.setStatus({ kind: 'error', message: `Screen share was declined (${(e as Error).name}).` });
+      return this.setStatus({ kind: 'error', message: shareError(e as Error) });
     }
 
     const tabTrack = this.display.getAudioTracks()[0];
