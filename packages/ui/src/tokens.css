@@ -25,10 +25,16 @@
     --warn: #E8C77A;
     --bad:  #FF4D4D;
 
-    /* Type — Motif 1 and 4 */
+    /* Type — two voices with distinct jobs.
+       Grotesk sells: hero, section headings, UI, captions.
+       Serif reads: meeting titles, evidence quotes — where you are not being sold to. */
     --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
-    --sans:  "Instrument Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    --sans:  "Archivo", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
     --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    /* Display scale. Heavy weight and tight tracking is the whole register. */
+    --display-weight: 800;
+    --display-track: -0.035em;
 
     /* Chrome is mono, uppercase, letter-spaced. Human speech never is. */
     --label:       400 11px/1.6 var(--mono);
@@ -38,11 +44,18 @@
     --cap-size:      clamp(20px, 2.4vw, 30px);
     --cap-leading:   1.45;
     --cap-tracking:  0.005em;
+    --cap-weight:    400;
     --cap-max-lines: 2;
     --cap-max-chars: 42;
     --cap-bottom:    78%;
-    --cap-shadow:    0 1px 2px rgba(0,0,0,.9), 0 2px 14px rgba(0,0,0,.75);
     --cap-fade:      180ms;
+
+    /* Caption presets. Defined once here; the Mac app reads the same values.
+       Classic is the default and every preset keeps the two-line rule. */
+    --cap-color:     #ffffff;
+    --cap-shadow:    0 1px 2px rgba(0,0,0,.9), 0 2px 14px rgba(0,0,0,.75);
+    --cap-backdrop:  transparent;
+    --cap-pad:       0;
 
     /* Motif 3 — selection is four corner brackets, never a border */
     --frame-size:  9px;
@@ -51,10 +64,29 @@
     --grain: 0.03;
   }
 
+  /* Warm — 35mm burn-in. The amber reads over bright footage where white fails,
+     and the outline is what makes it survive a white wall behind the speaker. */
+  [data-caption="warm"] {
+    --cap-color: #F5C86B;
+    --cap-shadow:
+      0 0 1px rgba(0,0,0,.95), 1px 0 1px rgba(0,0,0,.95),
+      -1px 0 1px rgba(0,0,0,.95), 0 1px 1px rgba(0,0,0,.95),
+      0 -1px 1px rgba(0,0,0,.95), 0 2px 12px rgba(0,0,0,.7);
+  }
+
+  /* Contrast — deliberately breaks the no-box rule. Accessibility and busy
+     footage beat the aesthetic; that was always the rule, not an exception. */
+  [data-caption="contrast"] {
+    --cap-color: #ffffff;
+    --cap-backdrop: rgba(0,0,0,.82);
+    --cap-shadow: none;
+    --cap-pad: 4px 14px;
+  }
+
   /* Accessibility overrides the aesthetic. The no-box subtitle is a default,
      never a constraint on legibility. */
   @media (prefers-contrast: more) {
-    :root { --cap-backdrop: rgba(0,0,0,.82); }
+    :root:not([data-caption]) { --cap-backdrop: rgba(0,0,0,.82); --cap-pad: 4px 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
     :root { --cap-fade: 0ms; }

@@ -6,6 +6,7 @@ import { Session } from './views/Session';
 import { Notes } from './views/Notes';
 import { Library } from './views/Library';
 import { Preferences } from './views/Preferences';
+import { Onboarding } from './views/Onboarding';
 import { Record } from './views/Record';
 import { useRoute } from './router';
 
@@ -59,6 +60,15 @@ export function App() {
         return <Preferences />;
       case 'record':
         return <Record onSaved={(id) => go(`/m/${id}`)} />;
+      case 'onboarding':
+        return (
+          <Onboarding
+            onDone={() => {
+              try { localStorage.setItem('excerpt:welcomed', '1'); } catch { /* no storage */ }
+              go(`/m/${route.id}`);
+            }}
+          />
+        );
       case 'meeting':
         if (missing) {
           return (
@@ -99,10 +109,11 @@ export function App() {
       <nav className="nav" aria-label="Main">
         <a href="#/" className={route.name === 'landing' ? 'on' : ''}>Excerpt</a>
         <span className="spacer" />
-        <a href="#/record" className={route.name === 'record' ? 'on' : ''}>Capture</a>
+        <a href="#/record" className={route.name === 'record' ? 'on' : ''}>Record</a>
         <a href="#/meetings" className={route.name === 'library' ? 'on' : ''}>Meetings</a>
         <a href="#/preferences" className={route.name === 'preferences' ? 'on' : ''}>Preferences</a>
-        <span className="build" title="Build timestamp">{__BUILD__}</span>
+        {/* Build stamp is a debugging aid, not something a visitor should see. */}
+        {import.meta.env.DEV && <span className="build" title="Build timestamp">{__BUILD__}</span>}
       </nav>
       <main id="main" tabIndex={-1}>{body}</main>
     </>

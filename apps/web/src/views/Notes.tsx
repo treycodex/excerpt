@@ -129,13 +129,13 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
         <dl className="credits summary-credits">
           <dt>Audio sources</dt><dd>Your microphone + shared audio</dd>
           <dt>Duration</dt><dd>{clock(duration)}</dd>
-          <dt>Processing</dt><dd>{meeting.processing}</dd>
+          <dt>Transcribed</dt><dd>{meeting.processing === 'cloud' ? 'By Google' : 'On this Mac'}</dd>
         </dl>
 
         <div className="note-counts" aria-label="Meeting note counts">
           <span><b>{decided.length}</b> decided</span>
           <span><b>{mine.length}</b> assigned to you</span>
-          <span><b>{review.length}</b> needs review</span>
+          <span><b>{review.length}</b> unassigned</span>
         </div>
 
         <div className="actions masthead-actions">
@@ -249,14 +249,14 @@ function ItemCard({
           {item.assignee === 'you' && <span className="mine">assigned to you</span>}
           {item.category === 'action' && item.assignee === 'unassigned' && (
             <span className="review" title="Excerpt cannot tell who this was addressed to, so it will not guess.">
-              needs review
+              who's doing this?
             </span>
           )}
           {item.due && <span className="due">due {item.due}</span>}
           {item.userEdited && <span className="edited">edited</span>}
           {/* Show which of the user's own terms lifted this item, so the ranking
               is inspectable rather than mysterious. */}
-          {boosts.length > 0 && <span className="boosted">matches {boosts.join(', ')}</span>}
+          {boosts.length > 0 && <span className="boosted">you asked about {boosts.join(', ')}</span>}
         </div>
 
         {editing ? (

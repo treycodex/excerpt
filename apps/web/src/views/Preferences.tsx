@@ -38,7 +38,7 @@ export function Preferences() {
     <div className="notes">
       <header className="masthead">
         <div className="eyebrow">Excerpt</div>
-        <h1>What you care about</h1>
+        <h1>What matters to you</h1>
         <p className="rubric">
           Stored on this device. Preferences change the order of your notes, never what
           appears in them — a decision you forgot to prioritise is still a decision.
@@ -79,7 +79,7 @@ export function Preferences() {
         />
 
         <div className="boosts">
-          <span className="boost-label">Boosting</span>
+          <span className="boost-label">Listening out for</span>
           {prefs.boosts.length === 0 && <span className="rubric">nothing yet</span>}
           {prefs.boosts.map((b) => (
             <button

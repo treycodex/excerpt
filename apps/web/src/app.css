@@ -1,41 +1,97 @@
-/* --- Landing --------------------------------------------------------------- */
-.landing { max-width: 720px; margin: 0 auto; padding: 72px 32px 120px; }
-.eyebrow {
-  font: var(--label); letter-spacing: 0.32em; text-transform: uppercase;
-  color: var(--faint); margin-bottom: 26px;
+/* --- Landing ---------------------------------------------------------------- */
+.landing { padding: 0 0 120px; }
+
+/* Hero: the product is the hero. Captions run live behind the headline, so the
+   product explains itself before a word is read. */
+/* Copy at the top, captions at the bottom. Overlaying a headline on a "video"
+   that is itself text does not work — they have to be separated vertically. */
+.hero {
+  position: relative;
+  min-height: min(74vh, 660px);
+  display: grid;
+  align-items: start;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
 }
+.hero-loop { position: absolute; inset: 0; }
+/* Grain over the hero: felt, never seen. Gives the empty middle some texture
+   without putting anything in it. */
+.hero::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  opacity: var(--grain);
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/></filter>\
+<rect width='120' height='120' filter='url(%23n)' opacity='.5'/></svg>");
+}
+.hero-loop .call { height: 100%; aspect-ratio: auto; border: 0; }
+.hero-loop .caption { top: auto; bottom: 8%; transform: none; }
+
+/* Keeps the headline readable without hiding what is happening behind it. */
+.hero-scrim {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(10,10,10,.92) 0%, rgba(10,10,10,.55) 38%, rgba(10,10,10,0) 62%),
+    radial-gradient(120% 70% at 50% 100%, rgba(10,10,10,.55) 0%, rgba(10,10,10,0) 60%);
+}
+
+.hero-copy { position: relative; padding: clamp(40px, 7vh, 84px) clamp(20px, 5vw, 64px) 0; max-width: 1180px; }
 .landing h1 {
-  font: 400 clamp(38px, 6.4vw, 62px)/1.06 var(--serif);
-  letter-spacing: -0.02em; margin: 0 0 30px;
+  font-family: var(--sans);
+  font-weight: var(--display-weight);
+  font-size: clamp(38px, 6.6vw, 88px);
+  line-height: 0.95;
+  letter-spacing: var(--display-track);
+  text-transform: uppercase;
+  margin: 0 0 26px;
 }
-.lede {
-  font: 400 19px/1.62 var(--sans); color: var(--dim);
-  max-width: 52ch; margin: 0 0 32px;
-}
+.hero-em { color: var(--dim); }
+.lede { font: 400 clamp(16px, 1.5vw, 20px)/1.6 var(--sans); color: var(--dim); max-width: 46ch; margin: 0 0 34px; }
 
-.claims { display: grid; gap: 26px; margin: 56px 0; }
-.claims div { display: grid; grid-template-columns: 190px 1fr; gap: 24px; align-items: baseline;
-  padding-top: 18px; border-top: 1px solid var(--line); }
-.claims dt {
-  font: var(--label); letter-spacing: var(--label-track); text-transform: uppercase;
-  color: var(--ink);
-}
-.claims dd { margin: 0; font: 400 15px/1.65 var(--sans); color: var(--dim); }
-
+.cta-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .cta {
   font: var(--label); letter-spacing: var(--label-track); text-transform: uppercase;
-  background: var(--ink); color: var(--ground); border: 1px solid var(--ink);
+  background: var(--ink); color: #0A0A0A; border: 1px solid var(--ink);
   padding: 16px 26px; cursor: pointer; transition: background .15s, color .15s;
 }
 .cta:hover { background: transparent; color: var(--ink); }
+.cta.ghost { background: transparent; color: var(--dim); border-color: var(--line-strong); text-decoration: none; display: inline-block; }
+.cta.ghost:hover { color: var(--ink); border-color: var(--ink); }
 .runtime { font: var(--label); letter-spacing: 0.12em; color: var(--faint); margin: 16px 0 0; }
-.proof { margin: 38px 0 0; padding: 22px 24px; border: 1px solid var(--line-strong); }
-.proof figcaption { display: grid; gap: 8px; }
-.proof figcaption span, .proof p { font: var(--label); letter-spacing: var(--label-track); text-transform: uppercase; color: var(--faint); }
-.proof figcaption span { color: var(--ember); }
-.proof figcaption b { font: 400 18px/1.4 var(--sans); }
-.proof blockquote { margin: 18px 0 12px; font: 400 20px/1.5 var(--serif); color: var(--dim); }
-.proof p { margin: 0; }
+
+/* Ticker: what Excerpt listens for, moving slowly. */
+.marquee { overflow: hidden; border-bottom: 1px solid var(--line); padding: 22px 0; }
+.marquee-track { display: flex; width: max-content; animation: marquee 42s linear infinite; }
+.marquee-run { display: flex; }
+.marquee-item {
+  display: inline-flex; align-items: center;
+  font: var(--label); letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint);
+  white-space: nowrap;
+}
+.marquee-item i { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--ember); margin: 0 28px; }
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .marquee-track { animation: none; } }
+
+.claims {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+  background: var(--line); border-bottom: 1px solid var(--line);
+}
+.claims article { background: var(--ground); padding: clamp(28px, 4vw, 56px) clamp(20px, 3vw, 40px); }
+.claim-n { font: var(--label); letter-spacing: 0.2em; color: var(--ember); }
+.claims h2 {
+  font-family: var(--sans); font-weight: 700;
+  font-size: clamp(20px, 2vw, 27px); letter-spacing: -0.015em;
+  margin: 18px 0 12px;
+}
+.claims p { font: 400 15px/1.65 var(--sans); color: var(--dim); margin: 0; }
+
+.closing { padding: clamp(64px, 12vh, 140px) clamp(20px, 5vw, 64px); max-width: 1100px; }
+.closing-line {
+  font-family: var(--sans); font-weight: var(--display-weight);
+  font-size: clamp(26px, 4vw, 52px); line-height: 1.06;
+  letter-spacing: var(--display-track); margin: 0 0 38px; color: var(--dim);
+}
+.closing-em { color: var(--ink); }
 
 /* --- Session --------------------------------------------------------------- */
 .session { max-width: 1000px; margin: 0 auto; padding: 60px 32px 80px; }
@@ -77,9 +133,17 @@
   color: #B4B4B4; margin-bottom: 12px;
 }
 .caption .line {
-  font-family: var(--sans); font-size: var(--cap-size); line-height: var(--cap-leading);
-  letter-spacing: var(--cap-tracking); color: #fff; text-shadow: var(--cap-shadow);
-  background: var(--cap-backdrop, transparent);
+  font-family: var(--sans);
+  font-size: var(--cap-size);
+  font-weight: var(--cap-weight);
+  line-height: var(--cap-leading);
+  letter-spacing: var(--cap-tracking);
+  color: var(--cap-color);
+  text-shadow: var(--cap-shadow);
+  background: var(--cap-backdrop);
+  padding: var(--cap-pad);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 .fade { opacity: 0; transition: opacity var(--cap-fade) ease; }
 .fade.in { opacity: 1; }
@@ -327,10 +391,7 @@ main:focus { outline: none; }
 
 /* --- Captions: PiP and contrast -------------------------------------------- */
 .caption.standalone { position: static; transform: none; padding: 0 6%; }
-:root.caption-contrast {
-  --cap-backdrop: rgba(0, 0, 0, .82);
-}
-:root.caption-contrast .caption .line { padding: 2px 10px; }
+/* Superseded by the caption presets in tokens.css: [data-caption="contrast"]. */
 
 .nudge { border-left: 1px solid var(--line-strong); padding-left: 14px; margin-top: 22px; }
 .nudge a { color: var(--ink); }
@@ -412,6 +473,21 @@ code {
    copy. Wide content scrolls inside its own container; the page never does. */
 @media (max-width: 720px) {
   .nav { padding: 16px 20px; gap: 16px; flex-wrap: wrap; }
+
+  /* On a phone the hero cannot layer copy over captions — there is not enough
+     height, and they collide. The loop moves below the copy as its own band, so
+     a phone visitor still sees the product working. */
+  .hero { min-height: 0; display: block; }
+  .hero-copy { padding: 36px 20px 32px; }
+  .hero-loop { position: relative; inset: auto; aspect-ratio: 16 / 9; border-top: 1px solid var(--line); }
+  .hero-loop .call { aspect-ratio: 16 / 9; }
+  .hero-loop .caption { bottom: 12%; }
+  .hero-scrim { display: none; }
+  .hero::after { display: none; }
+
+  .claims { grid-template-columns: 1fr; }
+  .preset-cards { grid-template-columns: 1fr; }
+  .closing-line { font-size: clamp(24px, 7vw, 34px); }
   .nav .build { width: 100%; font-size: 9px; }
 
   .landing { padding: 56px 20px 80px; }
@@ -456,3 +532,76 @@ code {
   font: 400 13px/1.6 var(--sans); color: var(--warn);
   max-width: 62ch; border-left: 1px solid var(--warn); padding-left: 12px; margin-top: 4px;
 }
+
+/* --- Caption presets -------------------------------------------------------- */
+.preset-switch { display: inline-flex; border: 1px solid var(--line); }
+.preset-switch button {
+  border: 0; border-right: 1px solid var(--line);
+  font: var(--label); letter-spacing: 0.12em; text-transform: uppercase;
+  background: transparent; color: var(--faint); padding: 11px 14px; cursor: pointer;
+}
+.preset-switch button:last-child { border-right: 0; }
+.preset-switch button:hover { color: var(--ink); }
+.preset-switch button.on { color: var(--ink); background: rgba(255,255,255,0.06); }
+
+/* --- Onboarding: "make it yours" -------------------------------------------- */
+.onboard { max-width: 900px; margin: 0 auto; padding: 72px 24px 120px; }
+.onboard header { margin-bottom: 56px; }
+.onboard h1 {
+  font-family: var(--sans); font-weight: var(--display-weight);
+  font-size: clamp(32px, 5vw, 56px); letter-spacing: var(--display-track);
+  text-transform: uppercase; margin: 14px 0 16px;
+}
+.onboard h2 {
+  font-family: var(--sans); font-weight: 700; font-size: 19px;
+  letter-spacing: -0.01em; text-transform: none; color: var(--ink);
+  margin: 0 0 16px; padding: 0; border: 0;
+}
+.onboard section { margin-bottom: 56px; }
+
+.preset-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.preset-card {
+  display: grid; gap: 10px; text-align: left; padding: 0 0 18px;
+  background: transparent; border: 1px solid var(--line); cursor: pointer;
+  transition: border-color .15s;
+}
+.preset-card:hover { border-color: var(--line-strong); }
+.preset-card.on { border-color: var(--ember); }
+.preset-card .preview {
+  display: grid; place-items: center; height: 116px; margin-bottom: 6px;
+  background: linear-gradient(135deg, #3a3128, #241d17);
+}
+.preset-card .preview .line {
+  font-family: var(--sans); font-size: 14px; text-align: center; padding: var(--cap-pad);
+  color: var(--cap-color); text-shadow: var(--cap-shadow); background: var(--cap-backdrop);
+}
+.preset-name { font: 400 15px/1 var(--sans); color: var(--ink); padding: 0 16px; }
+.preset-note { font: var(--label); letter-spacing: 0.04em; color: var(--faint); padding: 0 16px; line-height: 1.5; }
+
+.onboard .actions { display: flex; gap: 12px; align-items: center; }
+.onboard .actions button:not(.cta) {
+  font: var(--label); letter-spacing: var(--label-track); text-transform: uppercase;
+  background: transparent; color: var(--faint); border: 1px solid var(--line);
+  padding: 16px 22px; cursor: pointer;
+}
+.onboard .actions button:not(.cta):hover { color: var(--ink); border-color: var(--ink); }
+.onboard .chip { border: 1px solid var(--line-strong); color: var(--dim); padding: 7px 11px; font: var(--label); }
+
+/* --- Capture: one plain line, numbers behind a disclosure -------------------- */
+.live-status {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  font: 400 15px/1.5 var(--sans); color: var(--ink); margin: 22px 0 0;
+}
+.live-status .ok { color: var(--ok); }
+.live-status .warn { color: var(--warn); }
+.live-status .dim { color: var(--faint); }
+
+.diagnostics { margin-top: 16px; }
+.diagnostics summary {
+  font: var(--label); letter-spacing: var(--label-track); text-transform: uppercase;
+  color: var(--faint); cursor: pointer; padding: 6px 0; list-style: none;
+}
+.diagnostics summary::-webkit-details-marker { display: none; }
+.diagnostics summary::before { content: "▸ "; }
+.diagnostics[open] summary::before { content: "▾ "; }
+.diagnostics summary:hover { color: var(--dim); }

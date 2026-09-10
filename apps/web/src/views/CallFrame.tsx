@@ -10,22 +10,23 @@ export interface Spoken { text: string; at: number; label: string; final?: boole
  * Tiles are labelled by person; captions are labelled by ROLE. That mismatch is
  * the truth: two audio streams tell Excerpt who spoke, never who they are.
  */
-export function CallFrame({ fresh, elapsed }: { fresh: Spoken[]; elapsed: number }) {
+export function CallFrame({ fresh, elapsed, bare = false }:
+  { fresh: Spoken[]; elapsed: number; bare?: boolean }) {
   const speaking = new Set(fresh.map((f) => f.label));
 
   return (
     <div className="call">
-      <div className="tiles">
+      {!bare && <div className="tiles">
         <Tile name="Client" role="SPEAKER" live={speaking.has('SPEAKER')} />
         <Tile name="You" role="YOU" live={speaking.has('YOU')} />
-      </div>
+      </div>}
 
       <Captions fresh={fresh} />
 
-      <div className="call-chrome">
+      {!bare && <div className="call-chrome">
         <span className="rec demo-label">Scripted demo</span>
         <span className="elapsed">{stamp(elapsed)}</span>
-      </div>
+      </div>}
     </div>
   );
 }

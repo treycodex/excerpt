@@ -7,6 +7,8 @@ import { DEMO_SCRIPT } from '../demo/script';
 import { CallFrame, Captions } from './CallFrame';
 import type { Spoken } from './CallFrame';
 import { openCaptionWindow, supportsPiP } from '../pip';
+import { CAPTION_PRESETS, applyPreset, currentPreset } from '../captionPreset';
+import type { CaptionPreset } from '../captionPreset';
 import { createAmbience } from '../ambience';
 import type { Ambience } from '../ambience';
 
@@ -20,7 +22,7 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
   const [elapsed, setElapsed] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [pip, setPip] = useState<Document | null>(null);
-  const [contrast, setContrast] = useState(false);
+  const [preset, setPreset] = useState<CaptionPreset>(() => currentPreset());
   const [sound, setSound] = useState(false);
   const ambience = useRef<Ambience | null>(null);
   const collected = useRef<TranscriptEvent[]>([]);
@@ -120,18 +122,19 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
         >
           {sound ? 'Sound off' : 'Sound on'}
         </button>
-        <button
-          className="contrast"
-          aria-pressed={contrast}
-          onClick={() => {
-            const next = !contrast;
-            setContrast(next);
-            document.documentElement.classList.toggle('caption-contrast', next);
-            pip?.documentElement.classList.toggle('caption-contrast', next);
-          }}
-        >
-          {contrast ? 'Plain captions' : 'High contrast'}
-        </button>
+        <div className="preset-switch" role="group" aria-label="Caption look">
+          {CAPTION_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              className={preset === p.id ? 'on' : ''}
+              aria-pressed={preset === p.id}
+              title={p.note}
+              onClick={() => { setPreset(p.id); applyPreset(p.id, pip); }}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
         {supportsPiP() && (
           <button
             className="pip"
@@ -140,6 +143,7 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
               const doc = await openCaptionWindow();
               if (!doc) return;
               doc.defaultView?.addEventListener('pagehide', () => setPip(null));
+              applyPreset(preset, doc);
               setPip(doc);
             }}
           >

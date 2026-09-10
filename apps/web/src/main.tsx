@@ -6,6 +6,9 @@ import '@excerpt/ui/strip.css';
 import './app.css';
 import { App } from './App';
 import { ErrorBoundary } from './ErrorBoundary';
+import { restorePreset } from './captionPreset';
+
+restorePreset();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode><ErrorBoundary><App /></ErrorBoundary></StrictMode>,

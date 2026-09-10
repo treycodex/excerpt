@@ -247,15 +247,15 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
       <div className="notes">
         <header className="masthead">
           <div className="eyebrow">Excerpt</div>
-          <h1>On-device transcription isn’t available</h1>
+          <h1>This Mac can’t transcribe privately yet</h1>
           <p className="rubric">
-            Chrome could not install its local speech model, so the only way to
-            transcribe here is Google’s cloud service. That means your meeting audio
-            would leave this device. Excerpt will not make that choice for you.
+            Chrome couldn’t set up the speech model that runs on your own machine.
+            The only other way to transcribe is Google’s service, which means your
+            meeting audio would leave this Mac. That’s your call to make, not ours.
           </p>
           <p className="rubric">
-            To get on-device working instead: open <code>chrome://settings/captions</code>,
-            turn on Live Caption, wait for the English pack to download, and come back.
+            To keep it private instead: open <code>chrome://settings/captions</code>,
+            turn on Live Caption, wait for English to finish downloading, then come back.
           </p>
           <div className="actions">
             <button onClick={() => { void begin(pendingMode, true); }}>
@@ -328,6 +328,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
 
   if (status.kind === 'running' || status.kind === 'starting') {
     const processing = status.kind === 'running' ? status.processing : 'on-device';
+    const hearing = diag.some((d) => d.voicedSeconds > 1.5);
     const heard = diag.some((d) => d.voicedSeconds > 3);
     const recognised = diag.some((d) => d.finals + d.interims > 0);
     const stalled = elapsed > 15_000 && heard && !recognised;
@@ -348,14 +349,23 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
           )}
         </div>
 
-        <dl className="credits live-credits">
-          <dt>Processing</dt>
-          <dd className={processing === 'cloud' ? 'warn' : ''}>
-            {processing === 'cloud' ? 'Google cloud — audio leaves this device' : 'On-device'}
-          </dd>
-          <dt>Captured</dt><dd>{captured} {captured === 1 ? 'line' : 'lines'}</dd>
-          {diag.map((d) => (
-            <Fragment key={d.role}>
+        <div className="live-status">
+          <span className={hearing ? 'ok' : 'warn'}>
+            {hearing ? 'Hearing the meeting' : 'Not hearing anything yet'}
+          </span>
+          <span className="dim">·</span>
+          <span className={processing === 'cloud' ? 'warn' : ''}>
+            {processing === 'cloud' ? 'Sent to Google to transcribe' : 'Private — nothing leaves this Mac'}
+          </span>
+          <span className="dim">·</span>
+          <span className="dim">{captured} {captured === 1 ? 'line' : 'lines'} so far</span>
+        </div>
+
+        <details className="diagnostics">
+          <summary>Details</summary>
+          <dl className="credits live-credits">
+            {diag.map((d) => (
+              <Fragment key={d.role}>
               <dt>{d.role === 'you' ? 'Your microphone' : 'Shared audio'}</dt>
               <dd>
                 <Level level={d.level} />
@@ -371,8 +381,9 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
                 {!d.started && <span className="warn"> · speech engine starting</span>}
               </dd>
             </Fragment>
-          ))}
-        </dl>
+            ))}
+          </dl>
+        </details>
 
         {diag.length > 0 && (
           <details className="diagnostics">
@@ -405,9 +416,9 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
               if (!doc) return;
               doc.defaultView?.addEventListener('pagehide', () => setPip(null));
               setPip(doc);
-            }}>{pip ? 'Close float' : 'Float captions'}</button>
+            }}>{pip ? 'Hide floating captions' : 'Show captions over my meeting'}</button>
           )}
-          <button className="skip" onClick={() => { void stop(); }}>End and write notes</button>
+          <button className="skip" onClick={() => { void stop(); }}>Finish and write my notes</button>
         </div>
       </div>
     );

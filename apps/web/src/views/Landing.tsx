@@ -1,46 +1,83 @@
-import { DEMO_SCRIPT } from '../demo/script';
+import { HeroLoop } from './HeroLoop';
 
-const demoSeconds = Math.ceil(((DEMO_SCRIPT.at(-1)?.at ?? 0) + 2000) / 1000);
+const CLAIMS = [
+  {
+    n: '01',
+    title: 'Free, and private',
+    body: 'Your Mac does the listening. Nothing is uploaded, no account, no subscription.',
+  },
+  {
+    n: '02',
+    title: 'Nothing made up',
+    body: 'Every note is something a person actually said, and Excerpt shows you where.',
+  },
+  {
+    n: '03',
+    title: 'Wrong sometimes',
+    body: 'So you can fix anything in a click. It tells you what it heard, and what it could not tell.',
+  },
+];
+
+const TICKER = [
+  'Decisions', 'Action items', 'Deadlines', 'Open questions',
+  'Who agreed to what', 'What you promised', 'What is still unanswered',
+];
 
 export function Landing({ onStart }: { onStart: () => void }) {
   return (
     <div className="landing">
-      <div className="eyebrow">Excerpt</div>
-      <h1>Be in the meeting.<br />We’ll remember it.</h1>
-      <p className="lede">
-        Cinematic captions while you talk. Afterwards, notes where every line points
-        back at the passage it came from — so you can check it, and correct it.
-      </p>
+      <section className="hero">
+        <HeroLoop />
+        <div className="hero-scrim" />
+        <div className="hero-copy">
+          <h1>
+            Be in the meeting.<br />
+            <span className="hero-em">We’ll remember it.</span>
+          </h1>
+          <p className="lede">
+            Beautiful live subtitles while you talk. Afterwards, notes you can actually
+            trust — every line points back at what was said.
+          </p>
+          <div className="cta-row">
+            <button className="cta" onClick={onStart}>Watch a meeting</button>
+            <a className="cta ghost" href="#/record">Record a real one</a>
+          </div>
+          <p className="runtime">85 seconds · nothing to install</p>
+        </div>
+      </section>
 
-      <div className="cta-row">
-        <button className="cta" onClick={onStart}>Watch the demo →</button>
-        <a className="cta ghost" href="#/record">Capture a meeting</a>
+      {/* Genesis-style ticker: what Excerpt looks for, moving slowly. */}
+      <div className="marquee" aria-hidden>
+        <div className="marquee-track">
+          {[0, 1].map((copy) => (
+            <span className="marquee-run" key={copy}>
+              {TICKER.map((item) => (
+                <span className="marquee-item" key={item}>
+                  {item}<i />
+                </span>
+              ))}
+            </span>
+          ))}
+        </div>
       </div>
-      <p className="runtime">
-        {demoSeconds} seconds · scripted demo · no microphone access
-      </p>
 
-      <figure className="proof">
-        <figcaption><span>Decision</span><b>Every note keeps its source in frame.</b></figcaption>
-        <blockquote>“Let’s move the campaign launch to October.”</blockquote>
-        <p>Speaker · approximate 1:02 · View passage</p>
-      </figure>
+      <section className="claims">
+        {CLAIMS.map((claim) => (
+          <article key={claim.n}>
+            <span className="claim-n">{claim.n}</span>
+            <h2>{claim.title}</h2>
+            <p>{claim.body}</p>
+          </article>
+        ))}
+      </section>
 
-      <div className="claims">
-        <div>
-          <dt>Free to run</dt>
-          <dd>On-device by default, with cloud transcription only after explicit consent. No API keys, backend, or account.</dd>
-        </div>
-        <div>
-          <dt>Nothing invented</dt>
-          <dd>Notes are extracted by grammar, not by a language model. Every item is a span of something a person actually said.</dd>
-        </div>
-        <div>
-          <dt>Wrong sometimes</dt>
-          <dd>So everything is correctable. Excerpt says what it heard, and what it could not tell.</dd>
-        </div>
-      </div>
-
+      <section className="closing">
+        <h2 className="closing-line">
+          Most meeting tools hand you a confident summary you cannot check.
+          <span className="closing-em"> This one shows its work.</span>
+        </h2>
+        <button className="cta" onClick={onStart}>See it in 85 seconds</button>
+      </section>
     </div>
   );
 }
