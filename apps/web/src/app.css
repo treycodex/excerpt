@@ -395,3 +395,7 @@ code {
 
 /* Long unbroken strings (URLs, recognition artefacts) must not widen the page. */
 .item .title, .item blockquote, .line-row span, .rubric { overflow-wrap: anywhere; }
+.mode .mwarn {
+  font: 400 13px/1.6 var(--sans); color: var(--warn);
+  max-width: 62ch; border-left: 1px solid var(--warn); padding-left: 12px; margin-top: 4px;
+}

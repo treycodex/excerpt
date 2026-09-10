@@ -9,7 +9,11 @@ const COMMIT = [
   /\bwe'?ll\s+(go with|move|ship|lock|take)\b/i,
   /\bthat'?s\s+(decided|settled|final)\b/i,
   /\bwe(?:'ve| have)\s+decided\b/i,
-  /\b(agreed|locked in|signed off on)\b/i,
+  // "movies are locked in by..." is not a decision. These cues only count when the
+  // subject is the thing being settled.
+  /\b(we|they|everyone|both sides)\s+(all\s+)?agreed\b/i,
+  /\b(we(?:'re| are)|that'?s|it'?s|this is)\s+locked in\b/i,
+  /\b(we|they|legal|the client)\s+signed off\b/i,
 ];
 
 /** Suggestion: floated, not settled. */

@@ -39,6 +39,8 @@ export interface StreamDiagnostics {
   /** Recognizer lifecycle, newest last. The only way to see what a silent
       recognizer was actually doing. */
   events: string[];
+  /** Microphone lines discarded for repeating the far side. */
+  echoesDropped?: number;
   /** Which device this stream came from. A silent Continuity mic looks identical
       to a quiet room unless the label is on screen. */
   device?: string;
@@ -103,6 +105,9 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
   private seq = 0;
   private t0 = 0;
   private audio: AudioContext | undefined;
+  /** Recent remote finals, for detecting the microphone hearing the speakers. */
+  private recentRemote: { text: string; at: number }[] = [];
+  private echoes = 0;
   readonly diagnostics: Record<string, StreamDiagnostics> = {};
 
   constructor(private readonly opts: LiveCaptureOptions) {}
@@ -170,6 +175,37 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     this.setStatus({ kind: 'running', processing });
   }
 
+  /**
+   * Without headphones the speakers play the far side and the microphone hears it
+   * straight back, so both streams transcribe the same words. That does not merely
+   * double the transcript -- it corrupts attribution, which is the one thing
+   * Excerpt claims to know. Chrome's echoCancellation only cancels a WebRTC render
+   * stream, not system or tab audio, so this has to be caught in text.
+   */
+  private static readonly ECHO_WINDOW_MS = 6000;
+  private static readonly ECHO_OVERLAP = 0.6;
+
+  private isEcho(text: string): boolean {
+    const now = performance.now();
+    this.recentRemote = this.recentRemote.filter(
+      (r) => now - r.at < LiveCaptureAdapter.ECHO_WINDOW_MS,
+    );
+    const mine = new Set(
+      text.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').split(/\s+/).filter((w) => w.length > 2),
+    );
+    if (mine.size < 3) return false;   // too short to judge
+
+    for (const r of this.recentRemote) {
+      const theirs = new Set(
+        r.text.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').split(/\s+/).filter((w) => w.length > 2),
+      );
+      let hits = 0;
+      mine.forEach((w) => { if (theirs.has(w)) hits++; });
+      if (hits / mine.size >= LiveCaptureAdapter.ECHO_OVERLAP) return true;
+    }
+    return false;
+  }
+
   /** RMS meter per stream: distinguishes "nothing said" from "nothing arriving". */
   private meter(stream: MediaStream, key: string): void {
     try {
@@ -225,7 +261,7 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     const key = role;
     this.diagnostics[key] = {
       role, label, level: 0, voicedSeconds: 0,
-      finals: 0, interims: 0, restarts: 0, started: false, events: [],
+      finals: 0, interims: 0, restarts: 0, started: false, events: [], echoesDropped: 0,
       ...(track.label ? { device: track.label } : {}),
     };
 
@@ -254,6 +290,21 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
 
     const send = (text: string, isFinal: boolean, confidence?: number) => {
       if (!text) return;
+
+      if (isFinal) {
+        if (role === 'remote') {
+          this.recentRemote.push({ text, at: performance.now() });
+        } else if (this.isEcho(text)) {
+          // The microphone repeating the far side. Dropping it protects
+          // attribution; a genuine echo is never worth a wrong assignment.
+          this.echoes++;
+          const d = this.diagnostics[key];
+          if (d) d.echoesDropped = this.echoes;
+          trace('dropped echo');
+          return;
+        }
+      }
+
       this.emit({
         id: `live-${this.seq++}`,
         sessionId: this.opts.sessionId,

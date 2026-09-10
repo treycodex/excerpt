@@ -225,3 +225,25 @@ describe('real-capture false positives', () => {
     expect(item.evidence[0]!.quote).toBe(long);
   });
 });
+
+describe('cues that fired on ordinary speech', () => {
+  it('does not treat "movies are locked in by" as a decision', () => {
+    const items = extractItems([ev('Scrolling feels compromised and movies are locked in by the aspect ratio.', 'you', 0)], REF);
+    expect(items.filter((i) => i.state === 'decided')).toHaveLength(0);
+  });
+
+  it('still catches a real "locked in"', () => {
+    const items = extractItems([ev("Good — that's locked in.", 'remote', 0)], REF);
+    expect(items.some((i) => i.state === 'decided')).toBe(true);
+  });
+
+  it('does not fire on "agreed" as an adjective', () => {
+    const items = extractItems([ev('We use the agreed formats for every deliverable.', 'remote', 0)], REF);
+    expect(items.filter((i) => i.state === 'decided')).toHaveLength(0);
+  });
+
+  it('still catches "we agreed"', () => {
+    const items = extractItems([ev('We agreed to move the launch.', 'remote', 0)], REF);
+    expect(items.some((i) => i.state === 'decided')).toBe(true);
+  });
+});

@@ -261,6 +261,11 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
                 <span className="dim"> · {d.finals} final · {d.interims} interim</span>
                 {d.restarts > 0 && <span className="dim"> · {d.restarts} restarts</span>}
                 {d.lastError && <span className="warn"> · error: {d.lastError}</span>}
+                {!!d.echoesDropped && (
+                  <span className="dim" title="Your microphone repeating the far side. Dropped so it cannot be mistaken for you.">
+                    {' '}· {d.echoesDropped} echo{d.echoesDropped === 1 ? '' : 'es'} dropped
+                  </span>
+                )}
                 {d.events.length > 0 && (
                   <span className="dim trace"> · {d.events.slice(-4).join(' → ')}</span>
                 )}
@@ -328,6 +333,11 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
               The Zoom or Teams desktop app, FaceTime, a call on speaker. Choose Entire
               Screen and tick “Share system audio”. macOS will ask for screen-recording
               permission.
+            </span>
+            <span className="mwarn">
+              Wear headphones. Through speakers your microphone hears the meeting too,
+              and Excerpt would have to guess which voice was yours. It drops what it
+              can detect, but headphones remove the problem.
             </span>
           </button>
         </div>
