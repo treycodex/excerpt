@@ -207,6 +207,12 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
    * speaker yields an almost empty transcript.
    */
   private static readonly SETTLE_MS = 1800;
+  /** Words left uncommitted because the engine may still revise them. */
+  private static readonly VOLATILE_TAIL_WORDS = 6;
+  /** Never emit a dribble; wait until there is a readable amount. */
+  private static readonly MIN_CHUNK_WORDS = 12;
+  /** Commit at least this often even if the speaker never pauses. */
+  private static readonly MAX_HOLD_MS = 6000;
 
   private attach(track: MediaStreamTrack, role: SourceRole, label: string, local: boolean): void {
     const rec = new SR!();
@@ -237,11 +243,14 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       const d = this.diagnostics[key]; if (d) d.started = true;
     });
 
-    // Interim text within one utterance is cumulative, so we track how much of it
-    // has already been committed as transcript and only ever emit the new tail.
-    let interim = '';
+    // Interim text within one utterance is cumulative. SODA finalises only on
+    // pauses, so 104 seconds of continuous speech once produced four transcript
+    // rows, one of them 180 words under a single timestamp. We therefore commit a
+    // stable prefix as we go, leaving a short volatile tail the engine may revise.
+    let words: string[] = [];
     let committed = 0;
     let lastGrowth = performance.now();
+    let lastCommit = performance.now();
 
     const send = (text: string, isFinal: boolean, confidence?: number) => {
       if (!text) return;
@@ -257,23 +266,39 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       });
     };
 
-    /** Commit the settled part of a long utterance so extraction can see it. */
-    const settle = () => {
-      if (!this.running) return;
-      if (interim.length > committed &&
-          performance.now() - lastGrowth > LiveCaptureAdapter.SETTLE_MS) {
-        const tail = interim.slice(committed).trim();
-        if (tail) {
-          send(tail, true);
-          const d = this.diagnostics[key];
-          if (d) d.finals++;
-          trace('settled interim -> final');
-        }
-        committed = interim.length;
+    /** Prefer cutting after a sentence, so rows read as speech rather than slices. */
+    const cutPoint = (upto: number): number => {
+      for (let i = upto - 1; i >= Math.max(committed + 1, upto - 10); i--) {
+        if (/[.!?]$/.test(words[i] ?? '')) return i + 1;
       }
-      setTimeout(settle, 500);
+      return upto;
     };
-    setTimeout(settle, 500);
+
+    const commit = (upto: number, why: string) => {
+      const cut = why === 'final' || why === 'pause' ? upto : cutPoint(upto);
+      const text = words.slice(committed, cut).join(' ').trim();
+      if (!text) return;
+      send(text, true);
+      const d = this.diagnostics[key];
+      if (d) d.finals++;
+      trace(`committed ${cut - committed}w (${why})`);
+      committed = cut;
+      lastCommit = performance.now();
+    };
+
+    const tick = () => {
+      if (!this.running) return;
+      const now = performance.now();
+      const pending = words.length - committed;
+      if (pending > 0 && now - lastGrowth > LiveCaptureAdapter.SETTLE_MS) {
+        commit(words.length, 'pause');
+      } else if (pending >= LiveCaptureAdapter.MIN_CHUNK_WORDS + LiveCaptureAdapter.VOLATILE_TAIL_WORDS
+                 && now - lastCommit > LiveCaptureAdapter.MAX_HOLD_MS) {
+        commit(words.length - LiveCaptureAdapter.VOLATILE_TAIL_WORDS, 'continuous');
+      }
+      setTimeout(tick, 500);
+    };
+    setTimeout(tick, 500);
 
     rec.onresult = (e: any) => {
       const r = e.results[e.results.length - 1];
@@ -283,19 +308,17 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       if (d && d.interims + d.finals <= 3) trace(r.isFinal ? 'FIRST FINAL' : 'first interim');
       if (!text) return;
 
+      const next = text.split(/\s+/).filter(Boolean);
+      if (next.length > words.length) lastGrowth = performance.now();
+      words = next;
+
       if (r.isFinal) {
-        // Emit only what has not already been committed by settle().
-        const tail = text.length > committed ? text.slice(committed).trim() : '';
-        send(tail || (committed === 0 ? text : ''), true,
-             typeof r[0].confidence === 'number' ? r[0].confidence : undefined);
-        interim = '';
+        commit(words.length, 'final');
+        words = [];
         committed = 0;
         lastGrowth = performance.now();
         return;
       }
-
-      if (text.length > interim.length) lastGrowth = performance.now();
-      interim = text;
       send(text, false);   // captions still see the whole live interim
     };
 
@@ -304,7 +327,8 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       // look identical to a quiet room.
       const d = this.diagnostics[key];
       trace(`ERROR ${e.error}`);
-      if (d && e.error !== 'no-speech') d.lastError = String(e.error);
+      const deliberate = e.error === 'aborted' && !this.running;
+      if (d && e.error !== 'no-speech' && !deliberate) d.lastError = String(e.error);
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         this.running = false;
         this.setStatus({ kind: 'error', message: `Recognition was blocked (${e.error}).` });
