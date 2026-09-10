@@ -11,9 +11,9 @@ enum CaptionPreset: String, CaseIterable, Identifiable, Sendable {
     /// Named for what the user sees, not for how it is drawn.
     var title: String {
         switch self {
-        case .classic: "Classic"
-        case .warm: "Warm"
-        case .contrast: "High contrast"
+        case .classic: "Cinema"
+        case .warm: "Golden hour"
+        case .contrast: "Screenplay"
         }
     }
 
@@ -22,8 +22,8 @@ enum CaptionPreset: String, CaseIterable, Identifiable, Sendable {
     var explanation: String {
         switch self {
         case .classic: "White text, no box. Like film subtitles."
-        case .warm: "Amber with a dark edge. Easier to read over bright video."
-        case .contrast: "White on a dark bar. Easiest to read over anything."
+        case .warm: "Yellow italic text. Inspired by classic film subtitles."
+        case .contrast: "White monospace on a dark backing. Clear over busy scenes."
         }
     }
 
@@ -155,10 +155,10 @@ struct CaptionStyle: Equatable {
             preset: tokens,
             fontSize: fontSize,
             tracking: fontSize * CaptionTokens.trackingEm,
-            lineGap: CaptionStyle.gap(atSize: fontSize, padding: tokens.padding),
+            lineGap: CaptionStyle.gap(atSize: fontSize, preset: tokens),
             centreFraction: position.centreFraction,
             maxWidth: CaptionStyle.measuredWidth(ofCharacters: CaptionTokens.maxCharsPerLine,
-                                                 atSize: fontSize,
+                                                 atSize: fontSize, preset: tokens,
                                                  limitedBy: screenWidth),
             maxLines: CaptionTokens.maxLines,
             maxCharsPerLine: CaptionTokens.maxCharsPerLine,
@@ -166,18 +166,28 @@ struct CaptionStyle: Equatable {
         )
     }
 
-    /// The web sets `line-height: 1.45`, which makes each line box 1.45em tall and
+    var font: NSFont { Self.font(for: preset, size: fontSize) }
+
+    private static func font(for preset: CaptionTokens.Preset, size: CGFloat) -> NSFont {
+        let base = NSFont(name: preset.fontName, size: size) ?? NSFont.systemFont(ofSize: size)
+        let weight: NSFont.Weight = preset.fontWeight >= 600 ? .semibold : preset.fontWeight >= 500 ? .medium : .regular
+        let descriptor = base.fontDescriptor.addingAttributes([.traits: [NSFontDescriptor.TraitKey.weight: weight.rawValue]])
+        let weighted = NSFont(descriptor: descriptor, size: size) ?? base
+        return preset.italic ? NSFontManager.shared.convert(weighted, toHaveTrait: .italicFontMask) : weighted
+    }
+
+    /// The web sets `line-height: 1.35`, which makes each line box 1.45em tall and
     /// paints the plate over that box — so consecutive plates touch. Reproduce that
     /// pitch rather than the number: subtract what the line and its plate already take.
-    private static func gap(atSize size: CGFloat, padding: EdgeInsets) -> CGFloat {
-        let lineHeight = NSLayoutManager().defaultLineHeight(for: NSFont.systemFont(ofSize: size))
-        return max(0, size * CaptionTokens.leading - lineHeight - padding.top - padding.bottom)
+    private static func gap(atSize size: CGFloat, preset: CaptionTokens.Preset) -> CGFloat {
+        let lineHeight = NSLayoutManager().defaultLineHeight(for: font(for: preset, size: size))
+        return max(0, size * CaptionTokens.leading - lineHeight - preset.padding.top - preset.padding.bottom)
     }
 
     /// The line length the 42-character rule actually implies, measured rather than
     /// guessed at: a lowercase alphabet in the real font, divided by its length.
-    private static func measuredWidth(ofCharacters count: Int, atSize size: CGFloat, limitedBy screenWidth: CGFloat) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: size)
+    private static func measuredWidth(ofCharacters count: Int, atSize size: CGFloat, preset: CaptionTokens.Preset, limitedBy screenWidth: CGFloat) -> CGFloat {
+        let font = font(for: preset, size: size)
         let sample = "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz"
         let perCharacter = (sample as NSString)
             .size(withAttributes: [.font: font]).width / CGFloat(sample.count)

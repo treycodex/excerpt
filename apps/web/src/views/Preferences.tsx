@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_PREFERENCES, deriveBoosts, loadPreferences, savePreferences } from '@excerpt/core';
+import { CAPTION_PRESETS, applyPreset, currentPreset } from '../captionPreset';
+import type { CaptionPreset } from '../captionPreset';
 import type { Category, Preferences as Prefs } from '@excerpt/types';
 
 const LABEL: Record<Category, string> = {
@@ -8,6 +10,7 @@ const LABEL: Record<Category, string> = {
 };
 
 export function Preferences() {
+  const [preset, setPreset] = useState<CaptionPreset>(() => currentPreset());
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [saved, setSaved] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
 
@@ -45,6 +48,14 @@ export function Preferences() {
         </p>
       </header>
 
+      <section className="caption-settings">
+        <h2>Subtitle style</h2>
+        <p className="rubric">Choose the look for your meetings and floating captions.</p>
+        <div className="caption-style-grid">{CAPTION_PRESETS.map((p) => <button key={p.id} className="caption-style-card" aria-pressed={preset === p.id} onClick={() => { setPreset(p.id); applyPreset(p.id); }}>
+          <span className="caption-style-preview" data-caption={p.id}><span className="caption"><span className="line">Let’s make it happen.</span></span></span>
+          <span className="caption-style-name">{p.name}<span>{preset === p.id ? 'Selected ✓' : 'Select'}</span></span><span className="caption-style-description">{p.note}</span>
+        </button>)}</div>
+      </section>
       <section>
         <h2>Order</h2>
         <p className="rubric">Most important first.</p>

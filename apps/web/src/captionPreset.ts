@@ -5,9 +5,9 @@
 export type CaptionPreset = 'classic' | 'warm' | 'contrast';
 
 export const CAPTION_PRESETS: { id: CaptionPreset; name: string; note: string }[] = [
-  { id: 'classic', name: 'Classic', note: 'White, no box. The film subtitle.' },
-  { id: 'warm', name: 'Warm', note: 'Amber with a thin outline. Survives bright rooms.' },
-  { id: 'contrast', name: 'High contrast', note: 'On a dark plate. Easiest to read.' },
+  { id: 'classic', name: 'Cinema', note: 'Clean white dialogue. A subtle shadow, no box.' },
+  { id: 'warm', name: 'Golden hour', note: 'Yellow, medium italic. Inspired by classic film subtitles.' },
+  { id: 'contrast', name: 'Screenplay', note: 'White monospace on a dark backing. Clear over busy scenes.' },
 ];
 
 const KEY = 'excerpt:caption-preset';

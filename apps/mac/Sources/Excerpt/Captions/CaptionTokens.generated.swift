@@ -13,15 +13,15 @@ enum CaptionTokens {
     static let sizeMax: CGFloat = 30.0
     /// The vw term of the same clamp, as a fraction. On a Mac the screen is the viewport.
     static let sizeViewportFactor: CGFloat = 0.024
-    static let leading: CGFloat = 1.45
+    static let leading: CGFloat = 1.35
     /// Tracking is stored in em because it is size-relative — Apple's rule that
     /// tracking is size-specific, not one value for every size.
     static let trackingEm: CGFloat = 0.005
-    static let weight = Font.Weight.regular            // --cap-weight: 400
+    static let weight = Font.Weight.semibold            // --cap-weight: 600
     static let maxLines = 2
     static let maxCharsPerLine = 42
     /// Vertical centre of the caption, as a fraction of the screen from the top.
-    static let centreFraction: CGFloat = 0.78
+    static let centreFraction: CGFloat = 0.84
     static let fade: Double = 0.18
 
     /// Motif 5, The Ground: near-black, a narrow grey ramp, and ONE accent whose only
@@ -50,6 +50,9 @@ enum CaptionTokens {
     }
 
     struct Preset: Equatable, Sendable {
+        var fontName: String
+        var fontWeight: Double
+        var italic: Bool
         var color: Color
         var shadows: [Shadow]
         /// A plate behind the text. Only Contrast has one; it breaks the no-box rule
@@ -59,6 +62,9 @@ enum CaptionTokens {
     }
 
     static let classic = Preset(
+        fontName: "Helvetica Neue",
+        fontWeight: 600.0,
+        italic: false,
         color: Color(.sRGB, red: 1.0, green: 1.0, blue: 1.0, opacity: 1.0),
         shadows: [
             .init(x: 0.0, y: 1.0, radius: 2.0, color: Color(.sRGB, red: 0.0, green: 0.0, blue: 0.0, opacity: 0.9)),
@@ -69,7 +75,10 @@ enum CaptionTokens {
     )
 
     static let warm = Preset(
-        color: Color(.sRGB, red: 0.9607843137254902, green: 0.7843137254901961, blue: 0.4196078431372549, opacity: 1.0),
+        fontName: "Helvetica Neue",
+        fontWeight: 500.0,
+        italic: true,
+        color: Color(.sRGB, red: 0.9686274509803922, green: 0.8745098039215686, blue: 0.40784313725490196, opacity: 1.0),
         shadows: [
             .init(x: 0.0, y: 0.0, radius: 1.0, color: Color(.sRGB, red: 0.0, green: 0.0, blue: 0.0, opacity: 0.95)),
             .init(x: 1.0, y: 0.0, radius: 1.0, color: Color(.sRGB, red: 0.0, green: 0.0, blue: 0.0, opacity: 0.95)),
@@ -83,6 +92,9 @@ enum CaptionTokens {
     )
 
     static let contrast = Preset(
+        fontName: "Menlo",
+        fontWeight: 400.0,
+        italic: false,
         color: Color(.sRGB, red: 1.0, green: 1.0, blue: 1.0, opacity: 1.0),
         shadows: [
             // none — the plate carries legibility instead

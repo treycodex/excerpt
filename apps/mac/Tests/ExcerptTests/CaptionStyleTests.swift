@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 @testable import Excerpt
 
@@ -16,6 +17,13 @@ struct CaptionStyleTests {
         CaptionStyle.resolve(preset: preset, size: size, position: position,
                              screenWidth: 1710,
                              increaseContrast: increaseContrast, reduceMotion: reduceMotion)
+    }
+
+    @Test func `Golden hour uses italic and Screenplay uses monospace`() {
+        let golden = resolve(preset: .warm)
+        #expect(NSFontManager.shared.traits(of: golden.font).contains(.italicFontMask))
+        #expect(resolve(preset: .contrast).font.isFixedPitch)
+        #expect(!NSFontManager.shared.traits(of: resolve().font).contains(.italicFontMask))
     }
 
     @Test func `Classic has no plate behind it`() {

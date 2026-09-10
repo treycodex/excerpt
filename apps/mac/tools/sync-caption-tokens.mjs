@@ -33,7 +33,7 @@ function block(selector) {
 
 const base = block(':root');
 const presets = {
-  classic: base,
+  classic: { ...base, ...block('[data-caption="classic"]') },
   warm: { ...base, ...block('[data-caption="warm"]') },
   contrast: { ...base, ...block('[data-caption="contrast"]') },
 };
@@ -102,6 +102,9 @@ function swiftPreset(name, p) {
   const back = color(p['--cap-backdrop']);
   const [padV, padH] = padding(p['--cap-pad']);
   return `    static let ${name} = Preset(
+        fontName: ${p['--cap-native-font']},
+        fontWeight: ${f(num(p['--cap-weight']))},
+        italic: ${p['--cap-style'] === 'italic'},
         color: ${swiftColor(color(p['--cap-color']))},
         shadows: [
 ${sh.join('\n') || '            // none — the plate carries legibility instead'}
@@ -130,7 +133,7 @@ enum CaptionTokens {
     /// Tracking is stored in em because it is size-relative — Apple's rule that
     /// tracking is size-specific, not one value for every size.
     static let trackingEm: CGFloat = ${f(num(base['--cap-tracking']))}
-    static let weight = Font.Weight.regular            // --cap-weight: ${base['--cap-weight']}
+    static let weight = Font.Weight.semibold            // --cap-weight: ${base['--cap-weight']}
     static let maxLines = ${num(base['--cap-max-lines'])}
     static let maxCharsPerLine = ${num(base['--cap-max-chars'])}
     /// Vertical centre of the caption, as a fraction of the screen from the top.
@@ -152,6 +155,9 @@ ${PALETTE.map(([name, token]) => `        static let ${name} = ${swiftColor(colo
     }
 
     struct Preset: Equatable, Sendable {
+        var fontName: String
+        var fontWeight: Double
+        var italic: Bool
         var color: Color
         var shadows: [Shadow]
         /// A plate behind the text. Only Contrast has one; it breaks the no-box rule

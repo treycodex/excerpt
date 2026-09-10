@@ -12,6 +12,8 @@ import { Captions } from './CallFrame';
 import type { Spoken } from './CallFrame';
 import { Strip } from '@excerpt/ui';
 import { openCaptionWindow, supportsPiP } from '../pip';
+import { CAPTION_PRESETS, applyPreset, currentPreset } from '../captionPreset';
+import type { CaptionPreset } from '../captionPreset';
 
 type Mode = 'tab' | 'system';
 const LINGER = 3200;
@@ -21,6 +23,7 @@ const supported = () =>
   !!navigator.mediaDevices?.getDisplayMedia;
 
 export function Record({ onSaved }: { onSaved: (id: string) => void }) {
+  const [preset, setPreset] = useState<CaptionPreset>(() => currentPreset());
   const [status, setStatus] = useState<AdapterStatus>({ kind: 'idle' });
   const [spoken, setSpoken] = useState<Record<string, Spoken>>({});
   const [elapsed, setElapsed] = useState(0);
@@ -409,6 +412,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
           <div className="transport-strip">
             <Strip duration={Math.max(elapsed, 60_000)} position={elapsed} />
           </div>
+          <div className="preset-switch" role="group" aria-label="Caption look">{CAPTION_PRESETS.map((p) => <button key={p.id} aria-pressed={preset === p.id} className={preset === p.id ? 'on' : ''} title={p.note} onClick={() => { setPreset(p.id); applyPreset(p.id, pip); }}>{p.name}</button>)}</div>
           {supportsPiP() && (
             <button onClick={async () => {
               if (pip) { pip.defaultView?.close(); setPip(null); return; }

@@ -42,12 +42,15 @@
 
     /* Subtitle — the caption is a film subtitle, not a conferencing caption */
     --cap-size:      clamp(20px, 2.4vw, 30px);
-    --cap-leading:   1.45;
+    --cap-leading:   1.35;
     --cap-tracking:  0.005em;
-    --cap-weight:    400;
+    --cap-weight:    600;
+    --cap-font:      "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --cap-native-font: "Helvetica Neue";
+    --cap-style:     normal;
     --cap-max-lines: 2;
     --cap-max-chars: 42;
-    --cap-bottom:    78%;
+    --cap-bottom:    84%;
     --cap-fade:      180ms;
 
     /* Caption presets. Defined once here; the Mac app reads the same values.
@@ -72,10 +75,27 @@
     --press-scale:  0.97;
   }
 
+  [data-caption="classic"] {
+    --cap-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --cap-native-font: "Helvetica Neue";
+    --cap-weight: 600;
+    --cap-style: normal;
+    --cap-color: #ffffff;
+    --cap-shadow: 0 1px 2px rgba(0,0,0,.9), 0 2px 14px rgba(0,0,0,.75);
+    --cap-backdrop: transparent;
+    --cap-pad: 0;
+  }
+
   /* Warm — 35mm burn-in. The amber reads over bright footage where white fails,
      and the outline is what makes it survive a white wall behind the speaker. */
   [data-caption="warm"] {
-    --cap-color: #F5C86B;
+    --cap-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --cap-native-font: "Helvetica Neue";
+    --cap-backdrop: transparent;
+    --cap-pad: 0;
+    --cap-color: #F7DF68;
+    --cap-weight: 500;
+    --cap-style: italic;
     --cap-shadow:
       0 0 1px rgba(0,0,0,.95), 1px 0 1px rgba(0,0,0,.95),
       -1px 0 1px rgba(0,0,0,.95), 0 1px 1px rgba(0,0,0,.95),
@@ -85,6 +105,10 @@
   /* Contrast — deliberately breaks the no-box rule. Accessibility and busy
      footage beat the aesthetic; that was always the rule, not an exception. */
   [data-caption="contrast"] {
+    --cap-font: "IBM Plex Mono", "Courier New", monospace;
+    --cap-native-font: "Menlo";
+    --cap-weight: 400;
+    --cap-style: normal;
     --cap-color: #ffffff;
     --cap-backdrop: rgba(0,0,0,.82);
     --cap-shadow: none;
@@ -94,7 +118,7 @@
   /* Accessibility overrides the aesthetic. The no-box subtitle is a default,
      never a constraint on legibility. */
   @media (prefers-contrast: more) {
-    :root:not([data-caption]) { --cap-backdrop: rgba(0,0,0,.82); --cap-pad: 4px 14px; }
+    :root, [data-caption] { --cap-backdrop: rgba(0,0,0,.82); --cap-pad: 4px 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
     :root { --cap-fade: 0ms; }

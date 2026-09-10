@@ -106,7 +106,7 @@ export function App() {
       <button className="skip-link" onClick={() => document.querySelector<HTMLElement>('#main')?.focus()}>
         Skip to content
       </button>
-      {route.name !== 'landing' && <nav className="nav" aria-label="Main">
+      {!['landing', 'meeting', 'library'].includes(route.name) && <nav className="nav" aria-label="Main">
         <a href="#/">Excerpt</a>
         <span className="spacer" />
         {/* Inside the Mac app, recording is the menu bar's job — this screen asks the

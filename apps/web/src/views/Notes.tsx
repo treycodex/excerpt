@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { NotesWorkspace } from './NotesWorkspace';
 import { applyPreferences, bridge, matchedBoosts, orderCategories, saveMeeting, toMarkdown } from '@excerpt/core';
 import { Frame, Strip } from '@excerpt/ui';
 import type { StripMark } from '@excerpt/ui';
@@ -40,6 +41,8 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
   const [focusedEvent, setFocusedEvent] = useState<string | null>(null);
   const [position, setPosition] = useState<number | undefined>(undefined);
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const [tab, setTab] = useState<'notes' | 'transcript'>('notes');
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'failed'>(initialSaveFailed ? 'failed' : 'saved');
   const rows = useRef<Record<string, HTMLDivElement | null>>({});
   const cards = useRef<Record<string, HTMLElement | null>>({});
@@ -105,6 +108,7 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
     const item = meeting.items.find((i) => i.id === id);
     const ev = item?.evidence[0];
     if (!ev) return;
+    setTab('notes');
     setActiveItem(id);
     setPosition(ev.tArrived);
     setFocusedEvent(ev.eventIds[0] ?? null);
@@ -119,11 +123,22 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
   };
 
   const openTranscript = (eventId: string) => {
-    rows.current[eventId]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
+    setFocusedEvent(eventId);
+    setTab('transcript');
   };
+
+  useEffect(() => {
+    if (tab === 'transcript' && focusedEvent) rows.current[focusedEvent]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
+  }, [tab, focusedEvent]);
+
+  useEffect(() => {
+    if (tab === 'notes' && activeItem) cards.current[activeItem]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
+  }, [tab, activeItem]);
 
   /** Scrubbing the rail lands on the nearest thing actually said. */
   const scrub = (ms: number) => {
+    if (!meeting.events.length) return;
+    setTab('transcript');
     setPosition(ms);
     const nearest = meeting.events.reduce((best, e) =>
       Math.abs(e.tArrived - ms) < Math.abs(best.tArrived - ms) ? e : best, meeting.events[0]!);
@@ -132,9 +147,11 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
   };
 
   const copy = async () => {
-    await navigator.clipboard.writeText(toMarkdown({ ...meeting, items: [...live, ...dismissed] }));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    try {
+      await navigator.clipboard.writeText(toMarkdown({ ...meeting, items: [...live, ...dismissed] }));
+      setCopyFailed(false); setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch { setCopyFailed(true); }
   };
 
   const download = () => {
@@ -155,51 +172,23 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
   };
 
   return (
+    <NotesWorkspace currentId={meeting.id}>
+    <div className="notebook-toolbar"><a href="#/meetings">All meetings <span>/</span> Meeting notes</a><div><span className={`save-state ${saveState}`} role="status">{saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Not saved — export a copy' : 'Saved on this device'}</span><button onClick={copy}>{copied ? 'Copied ✓' : 'Copy notes'}</button><button onClick={download}>Export ↗</button></div></div>
     <div className="notes notes-reading">
       <header className="masthead">
-        <div className="eyebrow">Excerpt</div>
+        <div className="notebook-date">{new Date(meeting.startedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })} <span>·</span> {clock(duration)} <span>·</span> {meeting.processing === 'demo' ? 'Demo meeting' : meeting.processing === 'cloud' ? 'Cloud transcription' : 'On-device transcription'}</div>
         <h1>{meeting.title}</h1>
-
-        <dl className="credits summary-credits">
-          <dt>Audio sources</dt><dd>Your microphone + shared audio</dd>
-          <dt>Duration</dt><dd>{clock(duration)}</dd>
-          <dt>Transcribed</dt><dd>{meeting.processing === 'cloud' ? 'By Google' : 'On this Mac'}</dd>
-        </dl>
-
-        <div className="note-counts" aria-label="Meeting note counts">
-          <span><b>{decided.length}</b> decided</span>
-          <span><b>{mine.length}</b> assigned to you</span>
-          <span><b>{review.length}</b> unassigned</span>
-        </div>
-
-        <div className="actions masthead-actions">
-          <button onClick={copy}>{copied ? 'Copied' : 'Copy Markdown'}</button>
-          <button onClick={download}>Download .md</button>
-          {onReplay && <button onClick={onReplay}>Replay demo</button>}
-          <span className={`save-state ${saveState}`} role="status">
-            {saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Not saved — download now or edit to retry' : ''}
-          </span>
-        </div>
-
-        <Strip
-          duration={duration}
-          position={position}
-          marks={marks}
-          onScrub={scrub}
-          onSelect={selectItem}
-        />
-        <p className="rubric">
-          {meeting.events.some((e) => e.tStart !== undefined)
-            ? 'Every note points at the passage it came from, at the moment in the audio where it was said.'
-            : 'Every note points at the passage it came from. Timings are approximate — measured when text arrived, not from audio.'}
-        </p>
-
+        <p className="notebook-description">Your conversation, with the important parts ready to revisit.</p>
+        <div className="note-counts" aria-label="Meeting note counts"><span><b>{decided.length}</b> decisions</span><span><b>{mine.length}</b> assigned to you</span><span><b>{review.length}</b> to assign</span></div>
+        {copyFailed && <p role="status" className="rubric">Could not copy to the clipboard. Use Export to save your notes.</p>}
+        <div className="notebook-tabs" role="group" aria-label="Meeting view"><button aria-pressed={tab === 'notes'} onClick={() => setTab('notes')}>Notes <span>{live.length}</span></button><button aria-pressed={tab === 'transcript'} onClick={() => setTab('transcript')}>Transcript <span>{meeting.events.length}</span></button>{onReplay && <button className="notebook-replay" onClick={onReplay}>▷ Replay demo</button>}</div>
+        <details className="notebook-timeline"><summary>Explore meeting timeline</summary><Strip duration={duration} position={position} marks={marks} onScrub={scrub} onSelect={selectItem} /><p className="rubric">{meeting.events.some((e) => e.tStart !== undefined) ? 'Select a marker to see its note and source passage.' : 'Select a marker to see its note. Transcript timings are approximate.'}</p></details>
       </header>
-
+      <div hidden={tab !== 'notes'}>
       {live.length === 0 && (
         <section className="empty-notes">
           <h2>No structured notes found</h2>
-          <p>Excerpt could not identify a clear decision, action, deadline, or open question. The transcript is intact below; it leaves ambiguous speech alone rather than guessing.</p>
+          <p>Excerpt could not identify a clear decision, action, deadline, or open question. Open the Transcript tab to read what was captured.</p>
         </section>
       )}
 
@@ -244,8 +233,10 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
         </section>
       )}
 
-      <section>
+      </div>
+      <section hidden={tab !== 'transcript'}>
         <h2>Transcript</h2>
+        {meeting.events.length === 0 && <p className="rubric">No transcript was captured for this meeting.</p>}
         {meeting.events.map((e) => (
           <div
             key={e.id}
@@ -258,6 +249,7 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
         ))}
       </section>
     </div>
+    </NotesWorkspace>
   );
 }
 
@@ -308,6 +300,7 @@ function ItemCard({
           <h3 className="title">{item.title}</h3>
         )}
 
+        <details className="note-evidence" open={active || undefined}><summary>Source · {item.evidence[0] ? stamp(item.evidence[0]) : 'No passage'}</summary>
         {item.evidence.map((e, i) => (
           <blockquote key={i}>
             {e.quote}
@@ -330,7 +323,8 @@ function ItemCard({
           </div>
         )}
 
-        <div className="controls">
+        </details>
+        <details className="note-options"><summary>Edit note</summary><div className="controls">
           <button onClick={() => setEditing(true)}>Edit</button>
           {item.category === 'action' && (item.assignee === 'unassigned'
             ? <button onClick={() => onUpdate(item.id, { assignee: 'you' })}>Assign to me</button>
@@ -355,7 +349,7 @@ function ItemCard({
             {ORDER.map((c) => <option key={c} value={c}>{HEADING[c]}</option>)}
           </select>
           <button onClick={() => onUpdate(item.id, { dismissed: true })}>Dismiss</button>
-        </div>
+        </div></details>
       </article>
     </Frame>
   );

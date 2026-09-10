@@ -34,5 +34,6 @@ export async function openCaptionWindow(): Promise<Document | null> {
   w.document.documentElement.classList.toggle(
     'caption-contrast', document.documentElement.classList.contains('caption-contrast'),
   );
+  w.document.documentElement.dataset.caption = document.documentElement.dataset.caption ?? 'classic';
   return w.document as Document;
 }

@@ -46,19 +46,13 @@ struct CaptionOverlayView: View {
 
     private func block(_ caption: OverlayController.CaptionLine, style: CaptionStyle) -> some View {
         VStack(spacing: CaptionStyle.speakerGap) {
-            Text(caption.speaker)
-                .font(.system(size: CaptionStyle.speakerSize, weight: .regular, design: .monospaced))
-                .tracking(CaptionStyle.speakerTracking)
-                .foregroundStyle(CaptionStyle.speakerColor)
-                .shadow(color: .black.opacity(0.9), radius: 2, y: 1)
-
             // Each line carries its own plate, so a two-line caption in the High
             // contrast look reads as two bars hugging the text rather than one
             // ragged rectangle. This is the web's `box-decoration-break: clone`.
             VStack(spacing: style.lineGap) {
                 ForEach(Array(lines(of: caption.text, style: style).enumerated()), id: \.offset) { _, line in
                     Text(line)
-                        .font(.system(size: style.fontSize, weight: CaptionTokens.weight))
+                        .font(Font(style.font))
                         .tracking(style.tracking)
                         .foregroundStyle(style.preset.color)
                         .fixedSize(horizontal: false, vertical: true)
@@ -81,7 +75,7 @@ struct CaptionOverlayView: View {
     /// per line needs to know where the lines are. In the product this comes from the
     /// shared engine, so there is one phrase breaker rather than two.
     private func lines(of text: String, style: CaptionStyle) -> [String] {
-        let font = NSFont.systemFont(ofSize: style.fontSize)
+        let font = style.font
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .kern: style.tracking]
         func width(_ s: String) -> CGFloat { (s as NSString).size(withAttributes: attributes).width }
 

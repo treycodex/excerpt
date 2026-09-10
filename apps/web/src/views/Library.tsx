@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { readMeetingLibrary, deleteMeeting, saveMeeting, isNativeHost } from '@excerpt/core';
+import { NotesWorkspace } from './NotesWorkspace';
 import type { Meeting } from '@excerpt/types';
 
 const when = (iso: string) =>
@@ -20,7 +21,7 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
   useEffect(refresh, []);
 
   return (
-    <div className="notes">
+    <NotesWorkspace library={meetings ?? []}><div className="notes notebook-library">
       <header className="masthead">
         <div className="eyebrow">Excerpt</div>
         <h1>Your meetings</h1>
@@ -71,6 +72,6 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
           </article>
         );
       })}
-    </div>
+    </div></NotesWorkspace>
   );
 }
