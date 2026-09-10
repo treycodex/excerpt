@@ -12,13 +12,20 @@ import { useRoute } from './router';
 export function App() {
   const [route, go] = useRoute();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [missing, setMissing] = useState(false);
   const [prefs, setPrefs] = useState<Prefs | null>(null);
 
   useEffect(() => { void loadPreferences().then(setPrefs); }, [route]);
 
   useEffect(() => {
     if (route.name !== 'meeting') return;
-    void loadMeeting(route.id).then((m) => setMeeting(m ?? null));
+    setMissing(false);
+    // A resolved-but-empty read is "no such meeting", not "still loading". Treating
+    // them the same left a stale link on Reading... forever.
+    void loadMeeting(route.id).then((m) => {
+      setMeeting(m ?? null);
+      setMissing(!m);
+    });
   }, [route]);
 
   const onEnd = useCallback(async (events: TranscriptEvent[]) => {
@@ -48,6 +55,21 @@ export function App() {
       case 'record':
         return <Record onSaved={(id) => go(`/m/${id}`)} />;
       case 'meeting':
+        if (missing) {
+          return (
+            <div className="notes">
+              <header className="masthead">
+                <div className="eyebrow">Excerpt</div>
+                <h1>No such meeting</h1>
+                <p className="rubric">
+                  Meetings live in this browser only, so a link from another device or
+                  a cleared browser will not find one. <a href="#/meetings">Your
+                  meetings</a> lists what is here.
+                </p>
+              </header>
+            </div>
+          );
+        }
         if (!meeting || meeting.id !== route.id) {
           return <div className="notes"><p className="rubric">Reading…</p></div>;
         }
