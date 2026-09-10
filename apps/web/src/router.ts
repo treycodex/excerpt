@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 
 export type Route =
   | { name: 'landing' }
+  | { name: 'get-started' }
+  | { name: 'setup' }
   | { name: 'session' }
   | { name: 'meeting'; id: string }
   | { name: 'library' }
@@ -12,6 +14,8 @@ export type Route =
 function parse(hash: string): Route {
   const path = hash.replace(/^#\/?/, '');
   if (path.startsWith('m/')) return { name: 'meeting', id: path.slice(2) };
+  if (path === 'get-started') return { name: 'get-started' };
+  if (path === 'setup') return { name: 'setup' };
   if (path === 'session') return { name: 'session' };
   if (path === 'meetings') return { name: 'library' };
   if (path === 'preferences') return { name: 'preferences' };

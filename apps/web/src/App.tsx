@@ -6,6 +6,7 @@ import { Session } from './views/Session';
 import { Notes } from './views/Notes';
 import { Library } from './views/Library';
 import { Preferences } from './views/Preferences';
+import { GetStarted } from './views/GetStarted';
 import { Onboarding } from './views/Onboarding';
 import { Record } from './views/Record';
 import { useRoute } from './router';
@@ -47,11 +48,17 @@ export function App() {
     try { await saveMeeting(m); setMeetingSaveFailed(false); }
     catch { setMeetingSaveFailed(true); }
     setMeeting(m);
-    go(`/m/${m.id}`);
+    let welcomed = false;
+    try { welcomed = localStorage.getItem('excerpt:welcomed') === '1'; } catch { /* defaults to setup */ }
+    go(welcomed ? `/m/${m.id}` : `/welcome/${m.id}`);
   }, [go]);
 
   const body = (() => {
     switch (route.name) {
+      case 'get-started':
+        return <GetStarted />;
+      case 'setup':
+        return <Onboarding forCapture onDone={() => go('/record')} />;
       case 'session':
         return <Session onEnd={onEnd} />;
       case 'library':
@@ -106,7 +113,7 @@ export function App() {
       <button className="skip-link" onClick={() => document.querySelector<HTMLElement>('#main')?.focus()}>
         Skip to content
       </button>
-      {!['landing', 'meeting', 'library'].includes(route.name) && <nav className="nav" aria-label="Main">
+      {!['landing', 'meeting', 'library', 'setup', 'get-started', 'onboarding'].includes(route.name) && <nav className="nav" aria-label="Main">
         <a href="#/">Excerpt</a>
         <span className="spacer" />
         {/* Inside the Mac app, recording is the menu bar's job — this screen asks the

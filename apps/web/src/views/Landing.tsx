@@ -16,7 +16,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <a className="ed-logo" href="#/" aria-label="Excerpt home">[ e ]</a>
         <span className="ed-nav-note">Meeting notes.<br />Free and open source.</span>
         <div className="ed-nav-links"><button onClick={() => jump('the-experience')}>Features</button><a href={SOURCE} target="_blank" rel="noreferrer">Open source ↗</a></div>
-        <a className="ed-nav-start" href="#/record">Use it free <span>↗</span></a>
+        <a className="ed-nav-start" href="#/get-started">Use it free <span>↗</span></a>
       </nav>
 
       <header className="ed-masthead">
@@ -30,7 +30,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <div className="ed-hero-top"><span>MADE FOR YOUR MEETINGS</span><span>FREE TO USE. OPEN SOURCE.</span></div>
         <div className="ed-hero-bottom">
           <div><p className="ed-label">MEET EXCERPT</p><h1 id="ed-title">Meeting notes.<br />Cinematic feel.<br /><em>Free. Open source.</em></h1></div>
-          <div className="ed-hero-aside"><p>Live subtitles while you meet.<br />Decisions and action items when you’re done.</p><a className="ed-button" href="#/record">Use Excerpt free <span>↗</span></a><button className="ed-text-button" onClick={onStart}>▷ &nbsp; Try the interactive demo</button><small>No account. No subscription.</small></div>
+          <div className="ed-hero-aside"><p>Live subtitles while you meet.<br />Decisions and action items when you’re done.</p><a className="ed-button" href="#/get-started">Use Excerpt free <span>↗</span></a><button className="ed-text-button" onClick={onStart}>▷ &nbsp; Try the interactive demo</button><small>No account. No subscription.</small></div>
         </div>
       </section>
       <div className="ed-film-caption"><span>LIVE SUBTITLES · TRANSCRIPTS · MEETING NOTES</span><span>01 / EXCERPT</span></div>
@@ -52,11 +52,11 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <figure><img src="/media/notes.jpg" alt="Excerpt meeting notes with decisions and supporting transcript passages" loading="lazy" /><figcaption>02 — NOTES LINKED TO YOUR TRANSCRIPT</figcaption></figure>
       </section>
 
-      <section className="ed-how" id="how-it-works"><div className="ed-section-line"><span className="ed-label">[ HOW IT WORKS ]</span><span className="ed-label">THREE SIMPLE STEPS</span></div><h2>Meeting notes in <em>three steps.</em></h2><div className="ed-steps">{STEPS.map(([n, title, body, meta]) => <article key={n}><span className="ed-step-number">{n}</span><h3>{title}</h3><p>{body}</p><span className="ed-label">{meta}</span></article>)}</div><div className="ed-how-footer"><span>Live capture works in Chrome on macOS. The demo works in any modern browser.</span><a className="ed-button" href="#/record">Start your first meeting <span>↗</span></a></div></section>
+      <section className="ed-how" id="how-it-works"><div className="ed-section-line"><span className="ed-label">[ HOW IT WORKS ]</span><span className="ed-label">THREE SIMPLE STEPS</span></div><h2>Meeting notes in <em>three steps.</em></h2><div className="ed-steps">{STEPS.map(([n, title, body, meta]) => <article key={n}><span className="ed-step-number">{n}</span><h3>{title}</h3><p>{body}</p><span className="ed-label">{meta}</span></article>)}</div><div className="ed-how-footer"><span>Live capture works in Chrome on macOS. The demo works in any modern browser.</span><a className="ed-button" href="#/get-started">Start your first meeting <span>↗</span></a></div></section>
 
       <section className="ed-manifesto"><span className="ed-label">[ FREE AND OPEN SOURCE ]</span><h2>Beautiful meeting notes.<br /><em>No subscription.</em></h2><div className="ed-principles"><article><h3>Free to use.</h3><p>No account or subscription. Your notes stay in your browser, ready to export.</p></article><article><h3>Private by default.</h3><p>On-device transcription. If it needs the cloud, Excerpt asks you first.</p></article><article><h3>Open source.</h3><p>Read the code, build Excerpt yourself, or contribute on GitHub.</p><a href={SOURCE} target="_blank" rel="noreferrer">Explore the source ↗</a></article></div></section>
 
-      <footer className="ed-footer"><div className="ed-footer-top"><span className="ed-label">TRY EXCERPT FOR YOUR NEXT MEETING.</span><a href="#/record">Meeting notes.<br /><em>Start for free.</em> <span>↗</span></a><div><a className="ed-button" href="#/record">Use Excerpt free <span>↗</span></a><p>No account. No credit card. No subscription.</p></div></div><div className="ed-footer-bottom"><span>© {new Date().getFullYear()} Excerpt</span><a href="#/meetings">Your meetings</a><a href={SOURCE} target="_blank" rel="noreferrer">GitHub ↗</a><span>Free and open source.</span></div></footer>
+      <footer className="ed-footer"><div className="ed-footer-top"><span className="ed-label">TRY EXCERPT FOR YOUR NEXT MEETING.</span><a href="#/get-started">Meeting notes.<br /><em>Start for free.</em> <span>↗</span></a><div><a className="ed-button" href="#/get-started">Use Excerpt free <span>↗</span></a><p>No account. No credit card. No subscription.</p></div></div><div className="ed-footer-bottom"><span>© {new Date().getFullYear()} Excerpt</span><a href="#/meetings">Your meetings</a><a href={SOURCE} target="_blank" rel="noreferrer">GitHub ↗</a><span>Free and open source.</span></div></footer>
     </div>
   );
 }

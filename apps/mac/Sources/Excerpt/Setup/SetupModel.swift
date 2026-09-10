@@ -21,10 +21,10 @@ final class SetupModel {
         /// Named for what the person does, not for what the app configures.
         var title: String {
             switch self {
-            case .preview: "See it"
-            case .permissions: "Let it listen"
-            case .model: "Get ready"
-            case .ready: "Done"
+            case .preview: "Your style"
+            case .permissions: "Permissions"
+            case .model: "Speech model"
+            case .ready: "Ready to meet"
             }
         }
     }
@@ -168,9 +168,11 @@ final class SetupModel {
             step = .permissions
             await refreshPermissions()
         case .permissions:
+            guard canLeavePermissions else { return }
             step = .model
             await provisionModel()
         case .model:
+            guard modelState == .ready else { return }
             step = .ready
             hasCompletedSetup = true
         case .ready:

@@ -98,6 +98,21 @@ struct SetupModelTests {
         #expect(model.hasCompletedSetup)
     }
 
+    @Test func `incomplete setup cannot be marked ready`() async {
+        let missingPermissions = makeModel()
+        await missingPermissions.advance()
+        await missingPermissions.advance()
+        #expect(missingPermissions.step == .permissions)
+        #expect(!missingPermissions.hasCompletedSetup)
+
+        let missingModel = makeModel(granted: Set(Permission.allCases), model: { _ in .failed("offline") })
+        await missingModel.advance()
+        await missingModel.advance()
+        await missingModel.advance()
+        #expect(missingModel.step == .model)
+        #expect(!missingModel.hasCompletedSetup)
+    }
+
     @Test func `Back never falls off the front`() {
         let model = makeModel()
         model.back()
