@@ -23,4 +23,8 @@ export {
   orderCategories,
 } from './scoring';
 export { loadPreferences, savePreferences } from './store/preferences';
-export { editableDocument, insertMeetingImage, previewTranscriptCorrection, preserveDocument, safeImageUrl } from './notes/editor';
+export {
+  editableDocument, insertMeetingImage, previewTranscriptCorrection, preserveDocument,
+  safeImageUrl, meetingImageContext, reconcileMeetingImageContexts, meetingImagePassage,
+  transcriptEventTime, MOMENT_CONTEXT_BEFORE, MOMENT_CONTEXT_AFTER,
+} from './notes/editor';

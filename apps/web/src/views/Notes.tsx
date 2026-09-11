@@ -3,10 +3,10 @@ import type { CSSProperties } from 'react';
 import { NotesWorkspace } from './NotesWorkspace';
 import { NotesDocument } from './NotesDocument';
 import { readMeetingImage } from '../meetingImages';
-import { applyPreferences, bridge, matchedBoosts, orderCategories, saveMeeting, toMarkdown, toTurns, refreshMeetingNotes, preserveNoteEdits, noteTitle, editableDocument, insertMeetingImage, previewTranscriptCorrection, toHTML } from '@excerpt/core';
+import { applyPreferences, bridge, matchedBoosts, orderCategories, saveMeeting, toMarkdown, toTurns, refreshMeetingNotes, preserveNoteEdits, noteTitle, editableDocument, insertMeetingImage, meetingImagePassage, previewTranscriptCorrection, safeImageUrl, toHTML, transcriptEventTime } from '@excerpt/core';
 import { Frame, Strip } from '@excerpt/ui';
 import type { StripMark } from '@excerpt/ui';
-import type { Category, Item, Meeting, NotesDocument as Document, Preferences as Prefs } from '@excerpt/types';
+import type { Category, Item, Meeting, MeetingImage, NotesDocument as Document, Preferences as Prefs } from '@excerpt/types';
 
 const clock = (ms: number) => {
   const t = Math.max(0, Math.round(ms / 1000));
@@ -41,6 +41,8 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
   const [meeting, setMeeting] = useState(initial);
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [focusedEvent, setFocusedEvent] = useState<string | null>(null);
+  const [selectedMoment, setSelectedMoment] = useState<string | null>(null);
+  const [expandedMoment, setExpandedMoment] = useState(false);
   const [position, setPosition] = useState<number | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
@@ -48,21 +50,41 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'failed'>(initialSaveFailed ? 'failed' : 'saved');
   const [generating, setGenerating] = useState(false);
   const [generationMessage, setGenerationMessage] = useState('');
-  const saveQueue = useRef(Promise.resolve());
+  const saveQueue = useRef<Promise<Meeting | undefined>>(Promise.resolve(undefined));
   const saveVersion = useRef(0);
+  const confirmedSaveVersion = useRef(0);
   const latestMeeting = useRef(meeting);
   const [correction, setCorrection] = useState<{ eventId: string; text: string } | null>(null);
   const [pendingImages, setPendingImages] = useState<File[]>([]);
+  const [pendingImageOrigin, setPendingImageOrigin] = useState<MeetingImage['origin']>('import');
   const [imageTime, setImageTime] = useState('0:00');
   const [imageError, setImageError] = useState('');
   const [importing, setImporting] = useState(false);
-  const [generatedDraft, setGeneratedDraft] = useState<Document | null>(null);
+  const [generatedDraft, setGeneratedDraft] = useState<Document | null>(() => initial.suggestedNotes
+    ? editableDocument({ ...initial, notes: initial.suggestedNotes, images: [] }) : null);
   const rows = useRef<Record<string, HTMLDivElement | null>>({});
   const cards = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
-    if (initial.id !== meeting.id) { latestMeeting.current = initial; setMeeting(initial); }
-  }, [initial.id, meeting.id]);
+    setMeeting((current) => {
+      if (initial.id !== current.id) { latestMeeting.current = initial; return initial; }
+      const incomingRevision = initial.draftRevision ?? -1;
+      const currentRevision = current.draftRevision ?? -1;
+      // Settled speech and screenshots may arrive between keystrokes. Until native
+      // confirms a newer document revision, merge those fields around local writing.
+      const hasUnconfirmedWriting = saveVersion.current > confirmedSaveVersion.current;
+      const next: Meeting = incomingRevision > currentRevision && !hasUnconfirmedWriting
+        ? initial
+        : current.notes
+          ? { ...initial, title: current.title, notes: current.notes }
+          : { ...initial, title: current.title };
+      latestMeeting.current = next;
+      return next;
+    });
+    if (initial.suggestedNotes) {
+      setGeneratedDraft(editableDocument({ ...initial, notes: initial.suggestedNotes, images: [] }));
+    }
+  }, [initial]);
 
   const persist = (next: Meeting) => {
     latestMeeting.current = next;
@@ -71,14 +93,24 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
     const version = ++saveVersion.current;
     const pending = saveQueue.current.catch(() => {}).then(() => saveMeeting(next));
     saveQueue.current = pending;
-    void pending.then(() => { if (version === saveVersion.current) setSaveState('saved'); })
+    void pending.then((authoritative) => {
+      if (version !== saveVersion.current) return;
+      confirmedSaveVersion.current = version;
+      if (authoritative) { latestMeeting.current = authoritative; setMeeting(authoritative); }
+      setSaveState('saved');
+    })
       .catch(() => { if (version === saveVersion.current) setSaveState('failed'); });
   };
 
   const noteDocument = useMemo(() => editableDocument(meeting), [meeting]);
-  const editDocument = (notes: Document) => persist({ ...latestMeeting.current, notes });
-  const queueImages = (files: File[]) => {
+  const editDocument = (notes: Document) => {
+    const next = { ...latestMeeting.current, notes };
+    delete next.suggestedNotes;
+    persist(next);
+  };
+  const queueImages = (files: File[], origin: MeetingImage['origin'] = 'import') => {
     setPendingImages(files); setImageError('');
+    setPendingImageOrigin(origin);
     const start = new Date(meeting.startedAt).getTime();
     const end = meeting.endedAt ? new Date(meeting.endedAt).getTime() : start + duration;
     const fileTime = files[0]?.lastModified ?? 0;
@@ -93,7 +125,7 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
     const targetId = meeting.id;
     try {
       const capturedAt = new Date(new Date(meeting.startedAt).getTime() + at).toISOString();
-      const images = await Promise.all(pendingImages.map((file) => readMeetingImage(file, at, capturedAt)));
+      const images = await Promise.all(pendingImages.map((file) => readMeetingImage(file, at, capturedAt, pendingImageOrigin)));
       if (latestMeeting.current.id !== targetId) return;
       let next = latestMeeting.current;
       for (const image of images) next = insertMeetingImage(next, image);
@@ -132,8 +164,9 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
   };
 
   const visible = meeting.items.filter((i) => !i.dismissed);
+  const isLiveDraft = !meeting.endedAt && meeting.draftRevision !== undefined;
   const live = prefs ? applyPreferences(visible, prefs) : visible;
-  const duration = Math.max(1, ...meeting.events.map((e) => e.tArrived), ...(meeting.images ?? []).map((i) => i.at), meeting.endedAt ? new Date(meeting.endedAt).getTime() - new Date(meeting.startedAt).getTime() : 0);
+  const duration = Math.max(1, ...meeting.events.map(transcriptEventTime), ...(meeting.images ?? []).map((i) => i.at), meeting.endedAt ? new Date(meeting.endedAt).getTime() - new Date(meeting.startedAt).getTime() : 0);
   const decided = live.filter((i) => i.state === 'decided' && i.category === 'decision');
   const mine = live.filter((i) => i.assignee === 'you');
   const review = live.filter((i) => i.category === 'action' && i.assignee === 'unassigned');
@@ -158,12 +191,15 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
     return map;
   }, [grouped]);
 
-  const marks: StripMark[] = live.map((i) => ({
-    id: i.id,
-    at: i.evidence[0]?.tArrived ?? 0,
+  const marks: StripMark[] = [...live.map((i) => ({
+    id: `item:${i.id}`,
+    at: i.evidence[0] ? (i.evidence[0].tStart !== undefined ? i.evidence[0].tStart * 1000 : i.evidence[0].tArrived) : 0,
     settled: i.state === 'decided',
     label: i.title,
-  }));
+    kind: 'item' as const,
+  })), ...(meeting.images ?? []).map((image) => ({
+    id: `image:${image.id}`, at: image.at, label: image.caption || 'Captured moment', kind: 'image' as const,
+  }))];
 
   const scrollBehavior = () =>
     window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' as const : 'smooth' as const;
@@ -174,10 +210,26 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
     const ev = item?.evidence[0];
     if (!ev) return;
     setTab('review');
+    setSelectedMoment(null);
     setActiveItem(id);
     setPosition(ev.tArrived);
     setFocusedEvent(ev.eventIds[0] ?? null);
     cards.current[id]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
+  };
+
+  const openMoment = (id: string) => {
+    const image = meeting.images?.find((candidate) => candidate.id === id);
+    if (!image) return;
+    setTab('notes');
+    setActiveItem(null);
+    setSelectedMoment(id);
+    setExpandedMoment(false);
+    setPosition(image.at);
+  };
+
+  const selectMark = (id: string) => {
+    if (id.startsWith('image:')) openMoment(id.slice(6));
+    else if (id.startsWith('item:')) selectItem(id.slice(5));
   };
 
   const revealEvidence = (itemId: string, eventId: string, at: number) => {
@@ -200,13 +252,18 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
     if (tab === 'review' && activeItem) cards.current[activeItem]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
   }, [tab, activeItem]);
 
+  useEffect(() => {
+    if (tab === 'notes' && selectedMoment) document.getElementById('selected-moment')?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
+  }, [tab, selectedMoment]);
+
   /** Scrubbing the rail lands on the nearest thing actually said. */
   const scrub = (ms: number) => {
     if (!meeting.events.length) return;
     setTab('transcript');
+    setSelectedMoment(null);
     setPosition(ms);
     const nearest = meeting.events.reduce((best, e) =>
-      Math.abs(e.tArrived - ms) < Math.abs(best.tArrived - ms) ? e : best, meeting.events[0]!);
+      Math.abs(transcriptEventTime(e) - ms) < Math.abs(transcriptEventTime(best) - ms) ? e : best, meeting.events[0]!);
     setFocusedEvent(nearest.id);
     rows.current[nearest.id]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
   };
@@ -246,6 +303,16 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const correctionPreview = correction ? previewTranscriptCorrection(meeting, correction.eventId, correction.text) : null;
+  const moment = selectedMoment ? meeting.images?.find((image) => image.id === selectedMoment) : undefined;
+  const momentBlock = moment ? noteDocument.blocks?.find((block) => block.imageId === moment.id) : undefined;
+  const momentPassage = moment ? meetingImagePassage(meeting, moment, expandedMoment) : [];
+  const captionMoment = (text: string) => {
+    if (!moment || !momentBlock) return;
+    const notes = { ...noteDocument, blocks: noteDocument.blocks!.map((block) => block.id === momentBlock.id ? { ...block, text, userEdited: true } : block) };
+    const next = { ...latestMeeting.current, notes, images: (latestMeeting.current.images ?? []).map((image) => image.id === moment.id ? { ...image, caption: text } : image) };
+    delete next.suggestedNotes;
+    persist(next);
+  };
   const acceptGenerated = () => {
     if (!generatedDraft) return;
     const protectedBlocks = noteDocument.blocks!.filter((b) => b.userEdited || b.kind === 'image');
@@ -268,7 +335,7 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
     <div className="notebook-toolbar"><a href="#/meetings">All meetings <span>/</span> Meeting notes</a><div><span className={`save-state ${saveState}`} role="status">{saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Not saved — export a copy' : 'Saved on this device'}</span><button onClick={copy}>{copied ? 'Copied ✓' : 'Copy notes'}</button><button onClick={download}>Markdown ↗</button><button onClick={exportHTML}>Export with images ↗</button></div></div>
     <div className="notes notes-reading">
       <header className="masthead">
-        <div className="notebook-date">{new Date(meeting.startedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })} <span>·</span> {clock(duration)} <span>·</span> {meeting.processing === 'demo' ? 'Demo meeting' : meeting.processing === 'cloud' ? 'Cloud transcription' : 'On-device transcription'}</div>
+        <div className="notebook-date">{new Date(meeting.startedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })} <span>·</span> {clock(duration)} <span>·</span> {isLiveDraft ? 'Live meeting' : meeting.processing === 'demo' ? 'Demo meeting' : meeting.processing === 'cloud' ? 'Cloud transcription' : 'On-device transcription'}</div>
         <input className="document-title" aria-label="Meeting title" value={meeting.title} onChange={(e) => persist({ ...meeting, title: e.target.value })} />
         {/* "Your conversation" is a claim about the recording, and it is wrong on one
             that had a single voice in it — the page says so two lines below. */}
@@ -278,10 +345,11 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
         <div className="note-counts" aria-label="Meeting note counts"><span><b>{decided.length}</b> decisions</span><span><b>{mine.length}</b> assigned to you</span><span><b>{review.length}</b> to assign</span></div>
         {copyFailed && <p role="status" className="rubric">Could not copy to the clipboard. Use Export to save your notes.</p>}
         <div className="notebook-tabs" role="group" aria-label="Meeting view"><button aria-pressed={tab === 'notes'} onClick={() => setTab('notes')}>Notes</button><button aria-pressed={tab === 'review'} onClick={() => setTab('review')}>Review <span>{live.filter((i) => !i.confirmed || i.needsReview).length}</span></button><button aria-pressed={tab === 'transcript'} onClick={() => setTab('transcript')}>Transcript <span>{meeting.events.length}</span></button>{onReplay && <button className="notebook-replay" onClick={onReplay}>▷ Replay demo</button>}</div>
-        <details className="notebook-timeline"><summary>Explore meeting timeline</summary><Strip duration={duration} position={position} marks={marks} onScrub={scrub} onSelect={selectItem} /><p className="rubric">{meeting.events.some((e) => e.tStart !== undefined) ? 'Select a marker to see its note and source passage.' : 'Select a marker to see its note. Transcript timings are approximate.'}</p></details>
+        <details className="notebook-timeline"><summary>Explore meeting timeline</summary><Strip duration={duration} position={position} marks={marks} onScrub={scrub} onSelect={selectMark} {...(selectedMoment ? { selectedId: `image:${selectedMoment}` } : activeItem ? { selectedId: `item:${activeItem}` } : {})} /><p className="rubric">{meeting.events.some((e) => e.tStart !== undefined) ? 'Lines are notes; diamonds are captured moments. Select either to revisit its source.' : 'Lines are notes; diamonds are captured moments. Transcript timings are approximate.'}</p></details>
       </header>
       <div hidden={tab !== 'notes'}>
-      <div className="document-toolbar"><span>{noteDocument.method === 'on-device' ? 'Summarized on this Mac' : 'From your transcript'}</span><button disabled={generating || !meeting.events.length} onClick={regenerate}>{generating ? 'Organizing notes…' : 'Improve notes'}</button></div>
+      {moment && <MomentViewer image={moment} caption={momentBlock?.text ?? moment.caption} passage={momentPassage} expanded={expandedMoment} onCaption={captionMoment} onExpand={() => setExpandedMoment((value) => !value)} onClose={() => setSelectedMoment(null)} onSource={openTranscript} />}
+      <div className="document-toolbar"><span>{isLiveDraft ? 'Live draft · saved as you write' : noteDocument.method === 'on-device' ? 'Summarized on this Mac' : 'From your transcript'}</span>{!isLiveDraft && <button disabled={generating || !meeting.events.length} onClick={regenerate}>{generating ? 'Organizing notes…' : 'Improve notes'}</button>}</div>
       {/* Why these are the transcript-based notes, where they are read rather than
           only in the menu bar the moment the meeting ended. Suppressed once the user
           has asked for a regeneration, whose own message is the current answer. */}
@@ -290,7 +358,7 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
       {generatedDraft && <section className="document-preview" aria-label="Regenerated notes preview"><h2>Review the new wording</h2><p>Your writing and screenshots will be kept. Generated text will be replaced.</p>{generatedDraft.blocks?.map((b) => <p key={b.id}>{b.text}</p>)}<button onClick={acceptGenerated}>Use this wording</button><button onClick={() => setGeneratedDraft(null)}>Keep current notes</button></section>}
       {pendingImages.length > 0 && <section className="image-placement" aria-label="Place screenshot"><h2>Place {pendingImages.length === 1 ? 'image' : 'images'} in the conversation</h2><p>Choose when this was shown. The image will sit beside the notes from that moment.</p><label>Meeting time <input aria-label="Image meeting time" value={imageTime} onChange={(e) => setImageTime(e.target.value)} placeholder="12:34" /></label><button disabled={importing} onClick={() => { void importImages(); }}>{importing ? 'Adding…' : 'Add to notes'}</button><button disabled={importing} onClick={() => setPendingImages([])}>Cancel</button>{imageError && <p role="alert">{imageError}</p>}</section>}
       <fieldset className="notes-editor" disabled={generating || importing}>
-      <NotesDocument document={noteDocument} images={meeting.images ?? []} onChange={editDocument} onSource={openTranscript} onImages={queueImages} />
+      <NotesDocument document={noteDocument} images={meeting.images ?? []} onChange={editDocument} onSource={openTranscript} onImages={queueImages} onMoment={openMoment} selectedImageId={selectedMoment} />
       </fieldset>
       </div>
       <div hidden={tab !== 'review'}>
@@ -370,6 +438,20 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
     </div>
     </NotesWorkspace>
   );
+}
+
+function MomentViewer({ image, caption, passage, expanded, onCaption, onExpand, onClose, onSource }: {
+  image: MeetingImage; caption: string; passage: Meeting['events']; expanded: boolean;
+  onCaption: (text: string) => void; onExpand: () => void; onClose: () => void; onSource: (id: string) => void;
+}) {
+  const origin = image.origin === 'excerpt' ? 'Excerpt capture' : image.origin === 'drop' ? 'Dropped image' : image.origin === 'paste' ? 'Pasted image' : image.origin === 'import' ? 'Imported image' : 'Captured image';
+  return <aside id="selected-moment" className="moment-viewer" aria-label={`Captured moment at ${clock(image.at)}`}>
+    <header><div><span>Captured moment</span><strong>{clock(image.at)}</strong></div><button aria-label="Close captured moment" onClick={onClose}>×</button></header>
+    <div className="moment-layout">
+      <div>{safeImageUrl(image.dataUrl) ? <img src={image.dataUrl} alt={caption || `Captured moment at ${clock(image.at)}`} /> : <p>Image unavailable.</p>}<label>Caption<input value={caption} onChange={(event) => onCaption(event.target.value)} placeholder="What should you remember about this?" /></label><small>{origin} · {new Date(image.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small></div>
+      <section><h3>Conversation around this moment</h3>{passage.length ? passage.map((event) => <button className="moment-passage" key={event.id} onClick={() => onSource(event.id)}><span>{event.role === 'you' ? 'You' : event.speakerLabel === 'SPEAKER' ? 'Others' : event.speakerLabel} · {stamp(event)}</span>{event.text}</button>) : <p className="moment-empty">No speech settled around this capture. The image is still saved at its original time.</p>}<button className="moment-expand" onClick={onExpand}>{expanded ? 'Show nearby passage' : 'Expand passage'}</button><p>Nearby speech gives context. It does not claim the words describe the image.</p></section>
+    </div>
+  </aside>;
 }
 
 function ItemCard({

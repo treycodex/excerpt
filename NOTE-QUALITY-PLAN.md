@@ -391,3 +391,89 @@ screen.
   sweep them. Nothing in the app writes to them, and the sweep restores the defaults,
   but they are mutable global state in an actor's type and that is a seam worth
   knowing about.
+
+---
+
+## 11. The LibriSpeech baseline — the model is not the problem
+
+Run to decide whether to replace `SpeechAnalyzer` with Parakeet, Whisper, or a cloud
+service. The answer is no, and the measurement says why.
+
+### The model, on the protocol everyone publishes against
+
+One utterance, one transcriber, no concatenation, no settling — the standard
+LibriSpeech method, so these numbers sit on the same axis as a vendor's:
+
+| | Excerpt via `SpeechAnalyzer` | Parakeet TDT v3, published |
+|---|---|---|
+| test-clean | **2.6%** (766 of 773 words) | 2.5% |
+| test-other | **6.5%** (758 of 770 words) | — |
+
+Apple's on-device model is at parity with the strongest local candidate on the table.
+There is no accuracy to buy by switching.
+
+### The same model, through our streaming pipeline
+
+Five minutes of the same audio, fed in real time as one continuous stream:
+
+| | test-clean | test-other |
+|---|---|---|
+| old 4-second timer | 33.1% | 35.1% |
+| shipping (15s, region-aligned) | 23.3–25.0% | 18.1–20.6% |
+| **the model alone** | **2.6%** | **6.5%** |
+
+**Roughly twenty points, and about one word in seven, are lost between the recogniser
+and the transcript — by our code, not by the model.** The settle fix in `67e88f5`
+recovered ten of them. The rest are still there.
+
+### What this settles
+
+- **Do not swap the transcriber.** It would move recognition by about a tenth of a
+  point, cost the remaining time before the deadline, and re-open traps 9, 13, 14 and
+  17 in `SourceTranscriber` — the file every hard-won lesson in this project lives in.
+- **The remaining work is `finalize(through:)`.** Sixteen forced settles over five
+  minutes still cost ~14% of the words. The obvious next experiment is not settling
+  during the meeting at all — the transcript is read afterwards, captions run off
+  `live` rather than settled text — and finalising once at `stop()`. What blocks it is
+  unknown memory behaviour on a long volatile region, and the catch-up panel, which
+  is the one feature that genuinely needs settled text while the meeting is running.
+- **Cloud stays out**, but its one real argument is now visible in the error dumps:
+  every residual mistake is a homophone or a proper noun — *flower*/`FLOUR`,
+  *Tinkaret*/`TINTORET`, *some time*/`SOMETIME`. Vocabulary hints target exactly that
+  class. It is still not a nineteen-day decision.
+- **Whisper was never tested** and should not be without a silence test first: a model
+  documented to emit fluent text over a pause is the wrong shape for a product whose
+  thesis is that it does not invent.
+
+### How much to trust these numbers
+
+Less than their precision suggests. Three runs of the identical config on test-clean
+gave **17.5%, 23.3% and 25.0%** — a seven-point spread, and two earlier conclusions
+in this session were drawn from single runs and were wrong. Treat anything under about
+seven points as noise; the model-versus-pipeline gap is twenty and survives that
+easily.
+
+Two corrections were made to the harness mid-investigation, and the first set of
+figures published before them should be ignored: it scored the transcriber's raw
+output rather than the assembled transcript a person actually reads, and it counted
+`2` against `TWO` as an error.
+
+`TranscriptAssembly` was suspected of eating words and cleared: scoring raw against
+assembled from the *same* run moves the result by at most 0.3 points and four words.
+`spliceRepeat` is not a regression.
+
+### What this is not
+
+LibriSpeech is read audiobook prose — one speaker, no crosstalk, no disfluency, no
+room tone, and a vocabulary (`TINTORET`, `WOT`, `BEFITS`) that no meeting contains. It
+is a floor and a comparison axis, not a simulation of a call. A good number here would
+not prove Excerpt works in a meeting. A bad one would have proved it does not.
+
+### Running it
+
+```bash
+curl -O https://www.openslr.org/resources/12/test-clean.tar.gz   # 346MB
+EXCERPT_LIBRISPEECH=…/LibriSpeech swift test --filter SpeechFidelity           # pipeline
+EXCERPT_LIBRI_PERUTTERANCE=1 EXCERPT_LIBRISPEECH=…/LibriSpeech \
+  swift test --filter "how good is the model itself"                          # the model
+```

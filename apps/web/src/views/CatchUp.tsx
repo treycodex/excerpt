@@ -8,6 +8,7 @@ type Position = { x: number; y: number };
 const POSITION_KEY = 'excerpt.catch-up.position';
 const stamp = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 const at = (event: TranscriptEvent) => event.tStart !== undefined ? event.tStart * 1000 : event.tArrived;
+const revisionOf = (events: TranscriptEvent[]) => events.map((event) => `${event.id}:${event.isFinal ? 'f' : event.text}`).join('|');
 const clamp = (position: Position, width = 460, height = 440): Position => ({
   x: Math.max(12, Math.min(position.x, window.innerWidth - width - 12)),
   y: Math.max(12, Math.min(position.y, window.innerHeight - height - 12)),
@@ -22,10 +23,10 @@ const initialPosition = (): Position => {
 
 export function CatchUp({ events, now, onClose, floating = true, onImages, imageMessage = '' }: {
   events: TranscriptEvent[]; now: number; onClose: () => void; floating?: boolean;
-  onImages?: (files: File[]) => void; imageMessage?: string;
+  onImages?: (files: File[], origin?: 'drop' | 'paste' | 'import') => void; imageMessage?: string;
 }) {
   const [seconds, setSeconds] = useState(60);
-  const [seen, setSeen] = useState(events.length);
+  const [seen, setSeen] = useState(() => revisionOf(events));
   const [position, setPosition] = useState(initialPosition);
   const [draggingImage, setDraggingImage] = useState(false);
   const [notice, setNotice] = useState('');
@@ -36,7 +37,8 @@ export function CatchUp({ events, now, onClose, floating = true, onImages, image
   const latest = useRef({ events, now }); latest.current = { events, now };
   const drag = useRef<{ x: number; y: number; start: Position } | null>(null);
   const turns = toTurns(events);
-  const unread = events.length > seen;
+  const revision = revisionOf(events);
+  const unread = revision !== seen;
   const place = (next: Position) => {
     const bounds = panel.current?.getBoundingClientRect();
     const safe = clamp(next, bounds?.width, bounds?.height);
@@ -51,7 +53,7 @@ export function CatchUp({ events, now, onClose, floating = true, onImages, image
   };
   const markVisible = () => {
     const container = viewport.current;
-    if (container && container.scrollHeight - container.scrollTop - container.clientHeight < 24) setSeen(latest.current.events.length);
+    if (container && container.scrollHeight - container.scrollTop - container.clientHeight < 24) setSeen(revisionOf(latest.current.events));
   };
   useLayoutEffect(() => {
     const { events, now } = latest.current;
@@ -59,7 +61,7 @@ export function CatchUp({ events, now, onClose, floating = true, onImages, image
     jumpTo(target?.id);
   }, [seconds]);
   // Appending text never moves the viewport. Mark it read only if it is actually visible.
-  useLayoutEffect(markVisible, [events.length]);
+  useLayoutEffect(markVisible, [revision]);
   useEffect(() => {
     const owner = panel.current?.ownerDocument;
     const previous = owner?.activeElement as HTMLElement | null;
@@ -90,7 +92,7 @@ export function CatchUp({ events, now, onClose, floating = true, onImages, image
     onDragEnter={(event) => { if (onImages && event.dataTransfer.types.includes('Files')) { event.preventDefault(); dragDepth.current++; setDraggingImage(true); } }}
     onDragOver={(event) => { if (onImages && event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
     onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDraggingImage(false); }}
-    onDrop={(event) => { if (!onImages || !event.dataTransfer.files.length) return; event.preventDefault(); dragDepth.current = 0; setDraggingImage(false); onImages(Array.from(event.dataTransfer.files)); }}>
+    onDrop={(event) => { if (!onImages || !event.dataTransfer.files.length) return; event.preventDefault(); dragDepth.current = 0; setDraggingImage(false); onImages(Array.from(event.dataTransfer.files), 'drop'); }}>
     <header className="catch-up-header">
       <div className="catch-up-drag" tabIndex={floating ? 0 : -1} role={floating ? 'button' : undefined}
         aria-label={floating ? 'Move catch-up panel. Drag or use arrow keys.' : undefined}
@@ -107,11 +109,11 @@ export function CatchUp({ events, now, onClose, floating = true, onImages, image
       {!turns.length && <div className="catch-up-empty"><p>Waiting for the conversation.</p><span>Words will appear here as they arrive.</span></div>}
       {turns.map((turn) => <article className={`catch-up-turn ${turn.role}`} key={turn.id}>
         <div className="catch-up-speaker"><span>{turn.role === 'you' ? 'You' : turn.speakerLabel === 'SPEAKER' ? 'Others' : turn.speakerLabel}</span><time>{stamp(at(turn.events[0]!))}</time></div>
-        <p>{turn.events.map((event, index) => <span key={event.id} ref={(row) => { rows.current[event.id] = row; }}>{index > 0 ? ' ' : ''}{event.text}</span>)}</p>
+        <p>{turn.events.map((event, index) => <span className={event.isFinal ? '' : 'provisional'} key={event.id} ref={(row) => { rows.current[event.id] = row; }}>{index > 0 ? ' ' : ''}{event.text}{!event.isFinal && <small> live</small>}</span>)}</p>
       </article>)}
     </div>
     <footer className="catch-up-footer">
-      <div className="catch-up-status" role="status">{notice || (unread ? <button className="catch-up-new" onClick={() => { const container = viewport.current; if (container) container.scrollTop = container.scrollHeight; setSeen(events.length); }}>New conversation below ↓</button> : <span>Conversation continues live</span>)}</div>
+      <div className="catch-up-status" role="status">{notice || (unread ? <button className="catch-up-new" onClick={() => { const container = viewport.current; if (container) container.scrollTop = container.scrollHeight; setSeen(revision); }}>New conversation below ↓</button> : <span>Conversation continues live</span>)}</div>
       <button className="catch-up-return" onClick={onClose}>Return to live <kbd>Esc</kbd></button>
     </footer>
     {draggingImage && <div className="catch-up-drop"><span>＋</span><strong>Drop image into this meeting</strong><small>Saved beside the conversation at this moment.</small></div>}

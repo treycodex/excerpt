@@ -22,6 +22,17 @@ export function App() {
   useEffect(() => { void loadPreferences().then(setPrefs); }, [route]);
 
   useEffect(() => {
+    if (!isNativeHost()) return;
+    const receive = (event: Event) => {
+      const incoming = (event as CustomEvent<Meeting>).detail;
+      if (!incoming?.id) return;
+      setMeeting((current) => current?.id === incoming.id ? incoming : current);
+    };
+    window.addEventListener('excerpt:meeting', receive);
+    return () => window.removeEventListener('excerpt:meeting', receive);
+  }, []);
+
+  useEffect(() => {
     if (route.name !== 'meeting') return;
     if (meeting?.id === route.id) return;
     setMissing(false);

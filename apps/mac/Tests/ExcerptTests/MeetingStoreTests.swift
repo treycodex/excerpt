@@ -89,6 +89,25 @@ struct MeetingStoreTests {
         #expect(try store.load(id: "m-1") == original)
     }
 
+    @Test func `writing makes a live draft recoverable before speech`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var draft = meeting(id: "m-writing")
+        draft.events = []
+        draft.draftRevision = 3
+        draft.notes = NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [
+            NoteBlock(id: "mine", kind: "paragraph", text: "Compare the two navigation ideas",
+                      evidence: [], userEdited: true)
+        ])
+
+        try store.checkpointDraft(draft)
+
+        #expect(store.recoverable() == ["m-writing"])
+        #expect(store.recoverDraft(id: "m-writing") == draft)
+        store.discardJournal(id: "m-writing")
+        #expect(store.recoverable().isEmpty)
+    }
+
     @Test func `journalled events replay in the order they settled`() throws {
         let (store, root) = try makeStore()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -178,5 +197,83 @@ struct MeetingClockTests {
         let clock = MeetingClock()
         #expect(clock.origin == nil)
         #expect(clock.offsetSeconds(forSourceStartingAt: time(100)) == 0)
+    }
+}
+
+@MainActor
+struct LiveDraftMergeTests {
+    @Test func `a stale editor write keeps newer speech and screenshots`() {
+        let image = MeetingImage(id: "native", dataUrl: "data:image/png;base64,aGVsbG8=",
+            capturedAt: "2026-09-10T15:20:30Z", at: 30000, caption: "")
+        let imageBlock = NoteBlock(id: "image-native", kind: "image", text: "", evidence: [],
+                                   at: 30000, imageId: "native")
+        let speech = TranscriptEvent(id: "new-speech", sessionId: "m", role: .remote,
+            speakerLabel: "SPEAKER", text: "Move the control above the fold.", isFinal: true,
+            tArrived: 32000, tStart: 31, tEnd: 34)
+        let current = Meeting(id: "m", title: "Review", startedAt: "2026-09-10T15:20:00Z",
+            processing: .onDevice, events: [speech], items: [],
+            notes: NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [imageBlock]),
+            images: [image], draftRevision: 4)
+        let writing = NoteBlock(id: "mine", kind: "paragraph", text: "Compare both variants",
+                                evidence: [], userEdited: true)
+        let stale = Meeting(id: "m", title: "Navigation critique", startedAt: current.startedAt,
+            processing: .onDevice, events: [], items: [],
+            notes: NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [writing]),
+            images: [], draftRevision: 3)
+
+        let merged = LiveDraftMerge.editor(current: current, incoming: stale)
+
+        #expect(merged.title == "Navigation critique")
+        #expect(merged.events == [speech])
+        #expect(merged.images == [image])
+        #expect(merged.notes?.blocks?.map(\.id) == ["mine", "image-native"])
+        #expect(merged.draftRevision == 5)
+    }
+
+    @Test func `a current editor revision may deliberately remove an image block`() {
+        let image = MeetingImage(id: "native", dataUrl: "data:image/png;base64,aGVsbG8=",
+            capturedAt: "2026-09-10T15:20:30Z", at: 30000, caption: "")
+        let current = Meeting(id: "m", title: "Review", startedAt: "2026-09-10T15:20:00Z",
+            processing: .onDevice, events: [], items: [],
+            notes: NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [
+                NoteBlock(id: "image-native", kind: "image", text: "", evidence: [], imageId: "native")
+            ]), images: [image], draftRevision: 4)
+        var deletion = current
+        deletion.notes?.blocks = []
+
+        let merged = LiveDraftMerge.editor(current: current, incoming: deletion)
+
+        #expect(merged.notes?.blocks?.isEmpty == true)
+        #expect(merged.images == [image])
+    }
+}
+
+@MainActor
+struct MeetingMomentsTests {
+    private func event(_ id: String, at: Double, final: Bool = true) -> TranscriptEvent {
+        TranscriptEvent(id: id, sessionId: "m", role: .remote, speakerLabel: "SPEAKER",
+                        text: id, isFinal: final, tArrived: at, tStart: at / 1000, tEnd: at / 1000)
+    }
+
+    @Test func `a capture anchors final speech twenty seconds before through fifteen after`() {
+        let context = MeetingMoments.context(at: 30_000, events: [
+            event("too-early", at: 9_000), event("before", at: 10_000),
+            event("live", at: 30_000, final: false), event("after", at: 45_000),
+            event("too-late", at: 46_000),
+        ])
+        #expect(context.startAt == 10_000)
+        #expect(context.endAt == 45_000)
+        #expect(context.eventIds == ["before", "after"])
+    }
+
+    @Test func `future settled speech joins context without changing capture metadata`() {
+        let image = MeetingImage(id: "shot", dataUrl: "data:image/png;base64,aGVsbG8=",
+            capturedAt: "2026-09-10T15:20:30Z", at: 30_000, caption: "Navigation",
+            origin: "excerpt", context: MeetingMoments.context(at: 30_000, events: [event("before", at: 20_000)]))
+        let next = MeetingMoments.reconcile([image], events: [event("before", at: 20_000), event("after", at: 40_000)])
+        #expect(next[0].at == image.at)
+        #expect(next[0].capturedAt == image.capturedAt)
+        #expect(next[0].origin == "excerpt")
+        #expect(next[0].context?.eventIds == ["before", "after"])
     }
 }

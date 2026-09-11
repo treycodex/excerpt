@@ -4,7 +4,7 @@ import Foundation
 /// Uses macOS's region picker. Only an explicit Excerpt action invokes it.
 @MainActor
 enum MeetingScreenshot {
-    struct Capture { var dataURL: String; var capturedAt: Date }
+    struct Capture { var dataURL: String; var capturedAt: Date; var origin: String }
     enum Failure: LocalizedError {
         case unreadable
         var errorDescription: String? { "The screenshot could not be read. Check Screen Recording permission and try again." }
@@ -26,10 +26,10 @@ enum MeetingScreenshot {
             throw Failure.unreadable
         }
         let capturedAt = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
-        return try fromData(Data(contentsOf: url), capturedAt: capturedAt)
+        return try fromData(Data(contentsOf: url), capturedAt: capturedAt, origin: "excerpt")
     }
 
-    static func fromData(_ input: Data, capturedAt: Date = Date()) throws -> Capture {
+    static func fromData(_ input: Data, capturedAt: Date = Date(), origin: String = "paste") throws -> Capture {
         guard input.count <= 20 * 1024 * 1024, let bitmap = NSBitmapImageRep(data: input) else { throw Failure.unreadable }
         let scale = min(1, 2400 / Double(max(bitmap.pixelsWide, bitmap.pixelsHigh)))
         let size = NSSize(width: Double(bitmap.pixelsWide) * scale, height: Double(bitmap.pixelsHigh) * scale)
@@ -40,6 +40,6 @@ enum MeetingScreenshot {
         bitmap.draw(in: NSRect(origin: .zero, size: size))
         NSGraphicsContext.restoreGraphicsState()
         guard let data = target.representation(using: .jpeg, properties: [.compressionFactor: 0.9]) else { throw Failure.unreadable }
-        return Capture(dataURL: "data:image/jpeg;base64,\(data.base64EncodedString())", capturedAt: capturedAt)
+        return Capture(dataURL: "data:image/jpeg;base64,\(data.base64EncodedString())", capturedAt: capturedAt, origin: origin)
     }
 }

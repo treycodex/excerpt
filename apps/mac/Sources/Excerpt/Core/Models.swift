@@ -101,6 +101,10 @@ struct Meeting: Codable, Sendable, Identifiable, Equatable {
     var items: [Item]
     var notes: NotesDocument?
     var images: [MeetingImage]?
+    /// Only title/document edits advance this. Speech and screenshots merge around it.
+    var draftRevision: Int?
+    /// Enhancement is reviewable and never replaces the user's current document.
+    var suggestedNotes: NotesDocument?
 }
 
 struct NoteBullet: Codable, Sendable, Equatable, Identifiable {
@@ -149,8 +153,17 @@ struct MeetingImage: Codable, Sendable, Equatable, Identifiable {
     var id: String
     var dataUrl: String
     var capturedAt: String
+    /// Original capture time. Moving the image block never changes this anchor.
     var at: Double
     var caption: String
+    var origin: String? = nil
+    var context: MeetingImageContext? = nil
+}
+
+struct MeetingImageContext: Codable, Sendable, Equatable {
+    var eventIds: [String]
+    var startAt: Double
+    var endAt: Double
 }
 
 struct NoteBlock: Codable, Sendable, Equatable, Identifiable {

@@ -3,6 +3,36 @@ import { buildNotesDocument, refreshMeetingNotes } from './summary';
 
 export const evidenceTime = (e: Evidence) => e.tStart !== undefined ? e.tStart * 1000 : e.tArrived;
 const timeOf = (evidence: Evidence[]) => evidence.length ? Math.min(...evidence.map(evidenceTime)) : undefined;
+export const transcriptEventTime = (event: Meeting['events'][number]) => event.tStart !== undefined ? event.tStart * 1000 : event.tArrived;
+const transcriptEventEnd = (event: Meeting['events'][number]) => event.tEnd !== undefined ? event.tEnd * 1000 : transcriptEventTime(event);
+
+export const MOMENT_CONTEXT_BEFORE = 20_000;
+export const MOMENT_CONTEXT_AFTER = 15_000;
+
+/** Stable final-source anchors for a captured moment. */
+export function meetingImageContext(meeting: Pick<Meeting, 'events'>, at: number, before = MOMENT_CONTEXT_BEFORE, after = MOMENT_CONTEXT_AFTER) {
+  const startAt = Math.max(0, at - before);
+  const endAt = at + after;
+  const eventIds = meeting.events
+    .filter((event) => event.isFinal && transcriptEventEnd(event) >= startAt && transcriptEventTime(event) <= endAt)
+    .sort((a, b) => transcriptEventTime(a) - transcriptEventTime(b))
+    .map((event) => event.id);
+  return { eventIds, startAt, endAt };
+}
+
+/** Reconcile future speech into image anchors without changing capture time or block order. */
+export function reconcileMeetingImageContexts(meeting: Meeting): Meeting {
+  if (!meeting.images?.length) return meeting;
+  let changed = false;
+  const images = meeting.images.map((image) => {
+    const context = meetingImageContext(meeting, image.at);
+    if (image.context && image.context.startAt === context.startAt && image.context.endAt === context.endAt
+      && image.context.eventIds.join('\0') === context.eventIds.join('\0')) return image;
+    changed = true;
+    return { ...image, context };
+  });
+  return changed ? { ...meeting, images } : meeting;
+}
 
 /** Upgrade only when needed. An existing document's order (including an empty one) is authoritative. */
 export function editableDocument(meeting: Meeting): NotesDocument {
@@ -54,10 +84,23 @@ function imageBlock(image: MeetingImage): NoteBlock {
 
 export function insertMeetingImage(meeting: Meeting, image: MeetingImage): Meeting {
   if (meeting.images?.some((existing) => existing.id === image.id)) return meeting;
+  image = { ...image, context: meetingImageContext(meeting, image.at) };
   const document = editableDocument(meeting);
   const blocks = [...document.blocks!];
   insertAtTime(blocks, imageBlock(image));
   return { ...meeting, images: [...(meeting.images ?? []), image], notes: { ...document, blocks } };
+}
+
+/** Source passage for a moment. Expanded mode grows the range, still from real events only. */
+export function meetingImagePassage(meeting: Pick<Meeting, 'events'>, image: MeetingImage, expanded = false) {
+  const context = image.context ?? meetingImageContext(meeting, image.at);
+  if (!expanded) {
+    const ids = new Set(context.eventIds);
+    return meeting.events.filter((event) => ids.has(event.id));
+  }
+  const start = Math.max(0, context.startAt - 40_000);
+  const end = context.endAt + 45_000;
+  return meeting.events.filter((event) => event.isFinal && transcriptEventEnd(event) >= start && transcriptEventTime(event) <= end);
 }
 
 /** Regeneration preserves a hand-edited document in full, including deleted blocks and image placement. */

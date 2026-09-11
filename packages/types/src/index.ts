@@ -107,9 +107,22 @@ export interface MeetingImage {
   id: string;
   dataUrl: string;
   capturedAt: string;
-  /** Milliseconds on the meeting clock; independent of document position. */
+  /** Original capture time on the meeting clock; independent of document position. */
   at: number;
   caption: string;
+  /** How the image entered the meeting. Missing means a legacy capture. */
+  origin?: 'excerpt' | 'paste' | 'drop' | 'import';
+  /**
+   * Stable source anchors around the capture. The window begins 20 seconds before
+   * and ends 15 seconds after; event ids are reconciled as final speech arrives.
+   */
+  context?: MeetingImageContext;
+}
+
+export interface MeetingImageContext {
+  eventIds: string[];
+  startAt: number;
+  endAt: number;
 }
 
 export interface NoteBlock {
@@ -141,6 +154,10 @@ export interface Meeting {
   items: Item[];
   notes?: NotesDocument;
   images?: MeetingImage[];
+  /** Native live drafts increment this only when their title or document changes. */
+  draftRevision?: number;
+  /** Finished enhancement waits here for review; it never overwrites the document. */
+  suggestedNotes?: NotesDocument;
 }
 
 export type AdapterStatus =

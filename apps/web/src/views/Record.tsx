@@ -4,6 +4,7 @@ import {
   LiveCaptureAdapter, applyPreferences, extractItems,
   loadPreferences, saveMeeting, savePreferences, toMarkdown,
   saveCaptureDraft, loadCaptureDraft, clearCaptureDraft,
+  meetingImageContext,
 } from '@excerpt/core';
 import type { AdapterStatus, Meeting, MeetingImage, ProcessingMode, TranscriptEvent } from '@excerpt/types';
 import type { AudioInput, StreamDiagnostics } from '@excerpt/core';
@@ -44,12 +45,14 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
   const [imageCount, setImageCount] = useState(0);
   const [imageMessage, setImageMessage] = useState('');
   const [catchUp, setCatchUp] = useState(false);
+  const [catchUpEvents, setCatchUpEvents] = useState<TranscriptEvent[]>([]);
   const images = useRef<MeetingImage[]>([]);
   const imageInput = useRef<HTMLInputElement>(null);
   const pendingImageImport = useRef<Promise<void>>(Promise.resolve());
 
   const adapter = useRef<LiveCaptureAdapter | null>(null);
   const events = useRef<TranscriptEvent[]>([]);
+  const provisional = useRef<Partial<Record<TranscriptEvent['role'], TranscriptEvent>>>({});
   const startedAt = useRef<number>(0);
   const segmentOffset = useRef(0);
   const draftStartedAt = useRef(new Date().toISOString());
@@ -93,12 +96,15 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
     });
     a.onEvent((e) => {
       if (adapter.current !== a) return;
-      const adjusted = { ...e, id: `${e.sessionId}:${e.id}`, tArrived: e.tArrived + segmentOffset.current };
+      const adjusted = { ...e, id: e.isFinal ? `${e.sessionId}:${e.id}` : `${e.sessionId}:provisional:${e.role}`, tArrived: e.tArrived + segmentOffset.current };
       if (e.isFinal) {
         events.current.push(adjusted);
+        delete provisional.current[e.role];
+        images.current = images.current.map((image) => ({ ...image, context: meetingImageContext({ events: events.current }, image.at) }));
         setCaptured(events.current.length);
         checkpoint(events.current, adjusted.tArrived);
-      }
+      } else provisional.current[e.role] = adjusted;
+      setCatchUpEvents([...events.current, ...Object.values(provisional.current)].sort((x, y) => x.tArrived - y.tArrived));
       setSpoken((prev) => ({
         ...prev,
         [e.role]: { text: e.text, at: performance.now(), label: e.speakerLabel, final: e.isFinal },
@@ -137,6 +143,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
       if (cancelled || !draft || (!draft.events.length && !draft.images?.length)) return;
       events.current = draft.events;
       images.current = draft.images ?? [];
+      setCatchUpEvents(draft.events);
       setImageCount(images.current.length);
       draftStartedAt.current = draft.startedAt;
       processingUsed.current = draft.processing;
@@ -148,13 +155,16 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
     return () => { cancelled = true; };
   }, []);
 
-  const addImages = (files: File[]) => {
+  const addImages = (files: File[], origin: MeetingImage['origin'] = 'import') => {
     const at = segmentOffset.current + performance.now() - startedAt.current;
     const capturedAt = new Date().toISOString();
     setImageMessage('Adding image…');
     pendingImageImport.current = pendingImageImport.current.then(async () => {
       try {
-        const imported = await Promise.all(files.map((file) => readMeetingImage(file, at, capturedAt)));
+        const imported = await Promise.all(files.map(async (file) => ({
+          ...await readMeetingImage(file, at, capturedAt, origin),
+          context: meetingImageContext({ events: events.current }, at),
+        })));
         images.current = [...images.current, ...imported];
         setImageCount(images.current.length);
         checkpoint(events.current, at);
@@ -180,7 +190,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
     };
     const paste = (event: ClipboardEvent) => {
       const files = Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith('image/'));
-      if (files.length) { event.preventDefault(); addImages(files); }
+      if (files.length) { event.preventDefault(); addImages(files, 'paste'); }
     };
     targets.forEach((target) => { target.addEventListener('keydown', key); target.addEventListener('paste', paste); });
     return () => targets.forEach((target) => { target.removeEventListener('keydown', key); target.removeEventListener('paste', paste); });
@@ -457,8 +467,8 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
           </p>
         )}
 
-        {pip && createPortal(catchUp ? <CatchUp events={events.current} now={elapsed} onClose={() => setCatchUp(false)} floating={false} onImages={addImages} imageMessage={imageMessage} /> : <Captions fresh={catchUp ? [] : fresh} standalone />, pip.body)}
-        {catchUp && !pip && <CatchUp events={events.current} now={elapsed} onClose={() => setCatchUp(false)} onImages={addImages} imageMessage={imageMessage} />}
+        {pip && createPortal(catchUp ? <CatchUp events={catchUpEvents} now={elapsed} onClose={() => setCatchUp(false)} floating={false} onImages={addImages} imageMessage={imageMessage} /> : <Captions fresh={catchUp ? [] : fresh} standalone />, pip.body)}
+        {catchUp && !pip && <CatchUp events={catchUpEvents} now={elapsed} onClose={() => setCatchUp(false)} onImages={addImages} imageMessage={imageMessage} />}
 
         <div className="transport">
           <div className="transport-strip">
@@ -475,7 +485,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
             }}>{pip ? 'Hide floating captions' : 'Show captions over my meeting'}</button>
           )}
           <button onClick={() => setCatchUp(true)}>I missed that · ⇧⌘J</button>
-          <div onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); addImages(Array.from(e.dataTransfer.files)); }}><button onClick={() => imageInput.current?.click()}>Add image · {imageCount}</button><small> Paste or drop images here</small><input ref={imageInput} hidden type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(e) => { addImages(Array.from(e.target.files ?? [])); e.target.value = ''; }} /></div>
+          <div onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); addImages(Array.from(e.dataTransfer.files), 'drop'); }}><button onClick={() => imageInput.current?.click()}>Add image · {imageCount}</button><small> Paste or drop images here</small><input ref={imageInput} hidden type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(e) => { addImages(Array.from(e.target.files ?? []), 'import'); e.target.value = ''; }} /></div>
           {imageMessage && <p role="status">{imageMessage}</p>}
           <button className="skip" onClick={() => { void stop(); }}>Finish and write my notes</button>
         </div>

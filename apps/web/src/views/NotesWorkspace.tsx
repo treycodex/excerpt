@@ -18,6 +18,7 @@ function sublabel(meeting: Meeting): string {
   const when = today
     ? started.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
     : started.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (!meeting.endedAt && meeting.draftRevision !== undefined) return `${when} · Live`;
   const notes = meeting.items.filter((i) => !i.dismissed).length;
   return `${when} · ${meeting.processing === 'demo' ? 'Demo' : `${notes} ${notes === 1 ? 'note' : 'notes'}`}`;
 }

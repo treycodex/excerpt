@@ -4,6 +4,14 @@ Everything another agent needs to continue this project: what it is, what was
 decided and why, what is proven versus assumed, and the traps that already cost
 hours. Read this before changing anything.
 
+**Strategy update, September 11:** See [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md)
+for the user-approved direction and proposed build sequence: visual meeting memory
+for screen-based reviews, editable live drafts, synchronized screenshots and speech,
+and optional BYOK note enhancement. That plan revisits the older blanket “no API
+keys” restriction below while retaining a local path. It describes planned work,
+not shipped behavior; the implementation and evidence recorded here remain the
+baseline until the corresponding phases are completed.
+
 ---
 
 ## 1. What this is
@@ -253,7 +261,7 @@ and has not been deployed.
 **macOS: Stages 1 and 2 complete and running.** One meeting journey end to end —
 capture, two transcribers, one clock, journal, assembly, extraction through the shared
 engine, notes in a WKWebView — plus the guided setup, the menu bar, and the unsigned
-distribution notes. 112 TypeScript tests, 106 Swift.
+distribution notes. 112 TypeScript tests, 113 Swift.
 
 ### Owed, in order — start here
 0. **The hero footage still shows letter avatars.** The call tiles now draw a
@@ -462,6 +470,17 @@ and pivoting to one mid-competition is an architecture change, not a fallback.
     region boundary the analyzer itself reported is a second, smaller win that mostly
     removes the variance: 5/1/8 across trials became 2/2/2. `SpeechFidelityTests` is
     the harness; it runs in real time and is gated behind `EXCERPT_SPEECH_AUDIO`.
+
+18. **The recogniser is not what is wrong with the transcript — we are.** Measured
+    against LibriSpeech with human reference transcripts: Apple's `SpeechAnalyzer`
+    scores **2.6%** word error on test-clean and **6.5%** on test-other utterance by
+    utterance, which is parity with Parakeet TDT v3's published 2.5%. The same audio
+    through our own streaming path scores **23–25%** and **18–21%**. About twenty
+    points, and one word in seven, are destroyed between the recogniser and the saved
+    transcript by `finalize(through:)` — see trap 17. Before anyone proposes replacing
+    the model, replace nothing and read this: a swap buys about a tenth of a point and
+    re-opens traps 9, 13, 14 and 17. `SpeechFidelityTests` is the harness, and its
+    run-to-run spread is about seven points, so do not trust a single run.
 
 ---
 

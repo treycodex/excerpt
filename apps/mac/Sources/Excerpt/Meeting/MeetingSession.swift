@@ -2,6 +2,71 @@ import AVFoundation
 import Foundation
 import OSLog
 
+/// The conflict boundary between the web editor and native capture. Keeping it pure
+/// makes the data-loss case testable without starting ScreenCaptureKit.
+enum LiveDraftMerge {
+    static func editor(current: Meeting, incoming: Meeting) -> Meeting {
+        var merged = current
+        if !incoming.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            merged.title = incoming.title
+        }
+        let incomingById = Dictionary(uniqueKeysWithValues: (incoming.images ?? []).map { ($0.id, $0) })
+        let known = Set((current.images ?? []).map(\.id))
+        let retained = (current.images ?? []).map { image -> MeetingImage in
+            guard let edited = incomingById[image.id] else { return image }
+            var next = image
+            next.caption = edited.caption
+            return next
+        }
+        let additions = (incoming.images ?? []).filter { !known.contains($0.id) }
+        merged.images = retained + additions
+
+        if var notes = incoming.notes {
+            if (incoming.draftRevision ?? -1) < (current.draftRevision ?? 0) {
+                let incomingImages = Set(notes.blocks?.compactMap(\.imageId) ?? [])
+                let missing = current.notes?.blocks?.filter {
+                    $0.kind == "image" && $0.imageId.map { !incomingImages.contains($0) } == true
+                } ?? []
+                notes.blocks = (notes.blocks ?? []) + missing
+            }
+            merged.notes = notes
+        }
+        merged.draftRevision = (current.draftRevision ?? 0) + 1
+        return merged
+    }
+}
+
+/// Stable transcript anchors for captured moments. Images keep their original time;
+/// moving a block in the editor changes presentation order only.
+enum MeetingMoments {
+    static let before: Double = 20_000
+    static let after: Double = 15_000
+
+    static func time(_ event: TranscriptEvent) -> Double {
+        event.tStart.map { $0 * 1000 } ?? event.tArrived
+    }
+
+    static func end(_ event: TranscriptEvent) -> Double {
+        event.tEnd.map { $0 * 1000 } ?? time(event)
+    }
+
+    static func context(at: Double, events: [TranscriptEvent]) -> MeetingImageContext {
+        let start = max(0, at - before)
+        let finish = at + after
+        let ids = events.filter { $0.isFinal && end($0) >= start && time($0) <= finish }
+            .sorted { time($0) < time($1) }.map(\.id)
+        return MeetingImageContext(eventIds: ids, startAt: start, endAt: finish)
+    }
+
+    static func reconcile(_ images: [MeetingImage], events: [TranscriptEvent]) -> [MeetingImage] {
+        images.map { image in
+            var next = image
+            next.context = context(at: image.at, events: events)
+            return next
+        }
+    }
+}
+
 /// One meeting, from Start to notes on disk.
 ///
 /// This is the product's spine: capture feeds two transcribers, both settle onto one
@@ -28,6 +93,9 @@ final class MeetingSession {
     }
 
     var onStateChange: (() -> Void)?
+    /// NotesBridge forwards these snapshots to the editor. Captions never take this
+    /// path; only settled, readable meeting state does.
+    var onMeetingChange: ((Meeting) -> Void)?
     private(set) var state: State = .idle { didSet { onStateChange?() } }
     private(set) var events: [TranscriptEvent] = []
     private(set) var lastSaved: Meeting?
@@ -51,11 +119,6 @@ final class MeetingSession {
     /// saying it for all four is how a broken app looks like a working one.
     private(set) var diagnosis = ""
 
-    /// Why the notes in the last meeting are the extractive ones, when they are.
-    /// Nil when the on-device summary succeeded or no meeting has finished. The
-    /// user is told which of the two they are reading rather than left to guess
-    /// why a set of notes looks thinner than the last.
-    private(set) var notesNotice: String?
     private var audioStats: [SourceKind: SourceStats] = [:]
     private var speechStats: [SourceKind: TranscriptStats] = [:]
 
@@ -78,6 +141,10 @@ final class MeetingSession {
 
     private(set) var meetingId = ""
     private(set) var images: [MeetingImage] = []
+    private var draftTitle = ""
+    private var draftNotes = NotesDocument(
+        method: "extractive", keyPoints: [], topics: [], blocks: [])
+    private var draftRevision = 0
     private var clock = MeetingClock()
     private var pumps: [Task<Void, Never>] = []
     private var edgePumps: [Task<Void, Never>] = []
@@ -85,8 +152,14 @@ final class MeetingSession {
 
     /// The latest live edge from each side, on the meeting clock. Kept because a push
     /// carries one source's news and the caption is a decision about both.
-    private var youEdge: (end: Double, text: String)?
-    private var remoteEdge: (end: Double, text: String)?
+    private struct LiveState {
+        var start: Double
+        var end: Double
+        var caption: String
+        var provisional: String
+    }
+    private var youEdge: LiveState?
+    private var remoteEdge: LiveState?
 
     init(engine: CoreEngine, store: MeetingStore, overlay: OverlayController) {
         self.engine = engine
@@ -97,15 +170,80 @@ final class MeetingSession {
     var elapsedMilliseconds: Double { clock.positionMilliseconds() }
     var canCaptureImage: Bool { if case .listening = state { return true }; return false }
 
-    func addScreenshot(_ capture: MeetingScreenshot.Capture, for id: String) throws {
+    /// Settled speech plus one stable, replaceable live row per source. These rows are
+    /// display-only: they never enter the journal, saved meeting, or note extraction.
+    var catchUpEvents: [TranscriptEvent] {
+        var result = TranscriptAssembly.assemble(events.filter(\.isFinal))
+        for (role, edge) in [(SourceRole.you, youEdge), (.remote, remoteEdge)] {
+            guard let edge, !edge.provisional.isEmpty else { continue }
+            result.append(TranscriptEvent(
+                id: "\(meetingId)-provisional-\(role.rawValue)", sessionId: meetingId,
+                role: role, speakerLabel: role == .you ? "YOU" : "SPEAKER",
+                text: edge.provisional, isFinal: false, tArrived: edge.end * 1000,
+                confidence: nil, tStart: edge.start, tEnd: edge.end))
+        }
+        return result.sorted { MeetingMoments.time($0) < MeetingMoments.time($1) }
+    }
+
+    /// The editor gets a merged view. It may write the title and document back, but
+    /// never owns transcript, images, extracted items, or capture state.
+    func activeMeeting(id: String? = nil) -> Meeting? {
+        guard state.isActive, !meetingId.isEmpty, id == nil || id == meetingId else { return nil }
+        return draftMeeting()
+    }
+
+    @discardableResult
+    func applyEditorChanges(_ incoming: Meeting) throws -> Meeting {
+        if !state.isActive, lastSaved?.id == incoming.id {
+            var latest = (try? store.load(id: incoming.id)) ?? lastSaved!
+            latest.title = incoming.title
+            latest.notes = incoming.notes
+            latest.suggestedNotes = incoming.suggestedNotes
+            try store.save(latest)
+            lastSaved = latest
+            onMeetingChange?(latest)
+            return latest
+        }
+        guard state.isActive, incoming.id == meetingId else {
+            throw NSError(domain: "Excerpt", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "That meeting is no longer live."])
+        }
+        // Deliberately accept only fields the editor owns. A stale whole-meeting
+        // snapshot therefore cannot erase newer speech or screenshots.
+        let merged = LiveDraftMerge.editor(current: draftMeeting(), incoming: incoming)
+        let imagesChanged = (merged.images ?? []) != images
+        draftTitle = merged.title
+        draftNotes = merged.notes ?? draftNotes
+        let settled = TranscriptAssembly.assemble(events.filter(\.isFinal))
+        images = MeetingMoments.reconcile(merged.images ?? images, events: settled)
+        draftRevision = merged.draftRevision ?? draftRevision + 1
+        if imagesChanged { try store.checkpointImages(images, id: meetingId) }
+        let authoritative = draftMeeting()
+        try store.checkpointDraft(authoritative)
+        onMeetingChange?(authoritative)
+        return authoritative
+    }
+
+    func ownsEditorWrites(for id: String) -> Bool {
+        (state.isActive && id == meetingId) || lastSaved?.id == id
+    }
+
+    @discardableResult
+    func addScreenshot(_ capture: MeetingScreenshot.Capture, for id: String) throws -> MeetingImage {
         guard id == meetingId, canCaptureImage else { throw NSError(domain: "Excerpt", code: 1, userInfo: [NSLocalizedDescriptionKey: "The meeting ended before the screenshot could be added."]) }
+        let at = clock.positionMilliseconds(at: capture.capturedAt)
         let image = MeetingImage(id: UUID().uuidString, dataUrl: capture.dataURL,
             capturedAt: ISO8601DateFormatter().string(from: capture.capturedAt),
-            at: clock.positionMilliseconds(at: capture.capturedAt), caption: "")
+            at: at, caption: "", origin: capture.origin,
+            context: MeetingMoments.context(at: at, events: TranscriptAssembly.assemble(events.filter(\.isFinal))))
         let next = images + [image]
         try store.checkpointImages(next, id: meetingId)
         images = next
+        insertImageBlock(image)
+        draftRevision += 1
+        try checkpointDraftAndPublish()
         status = "Screenshot added · \(images.count) in this meeting"
+        return image
     }
 
     // MARK: - Start
@@ -119,6 +257,9 @@ final class MeetingSession {
         clock = MeetingClock()
         events = []
         images = []
+        draftTitle = Self.title(for: clock.startedAt)
+        draftNotes = NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [])
+        draftRevision = 0
         eventCounter = 0
         suppressedEchoes = 0
         youEdge = nil
@@ -128,6 +269,7 @@ final class MeetingSession {
         do {
             for (_, transcriber) in transcribers { try await transcriber.start() }
         } catch {
+            store.discardJournal(id: meetingId)
             fail("Speech recognition could not start. \(error.localizedDescription)")
             return
         }
@@ -149,12 +291,15 @@ final class MeetingSession {
             )
         } catch {
             for (_, transcriber) in transcribers { await transcriber.stop() }
+            store.discardJournal(id: meetingId)
             fail("Excerpt could not hear the meeting. \(error.localizedDescription)")
             return
         }
 
         state = .listening(since: Date())
         status = "Listening"
+        do { try checkpointDraftAndPublish() }
+        catch { status = "Listening · live notes recovery unavailable"; log.error("draft checkpoint failed: \(error)") }
     }
 
     private func fail(_ message: String) {
@@ -210,8 +355,11 @@ final class MeetingSession {
         )
 
         events.append(event)
+        images = MeetingMoments.reconcile(images, events: TranscriptAssembly.assemble(events.filter(\.isFinal)))
         // Journalled the moment it settles, not at Stop. This is the whole of gate 12.
         store.append(event, toJournalFor: meetingId)
+        do { try checkpointDraftAndPublish() }
+        catch { log.error("draft checkpoint failed after speech: \(error)") }
     }
 
     // MARK: - The live edge drives the overlay
@@ -243,13 +391,15 @@ final class MeetingSession {
             localStart: 0,
             localEnd: edge.localEnd,
             sourceStartingAt: CMTime(seconds: edge.sourceStart, preferredTimescale: 1000))
-        let latest = edge.text.isEmpty ? nil : (end: placed.end, text: edge.text)
+        let latest = edge.text.isEmpty && edge.provisionalText.isEmpty ? nil : LiveState(
+            start: max(0, placed.end - max(0, edge.localEnd - edge.localStart)),
+            end: placed.end, caption: edge.text, provisional: edge.provisionalText)
 
         if kind == .microphone { youEdge = latest } else { remoteEdge = latest }
 
         switch CaptionEdge.owner(you: youEdge?.end, remote: remoteEdge?.end) {
-        case .you: overlay.update(speaker: "YOU", text: youEdge?.text ?? "")
-        case .remote: overlay.update(speaker: "SPEAKER", text: remoteEdge?.text ?? "")
+        case .you: overlay.update(speaker: "YOU", text: youEdge?.caption ?? "")
+        case .remote: overlay.update(speaker: "SPEAKER", text: remoteEdge?.caption ?? "")
         case nil: break
         }
     }
@@ -290,53 +440,18 @@ final class MeetingSession {
 
         overlay.update(speaker: "", text: "")
 
-        var meeting = buildMeeting(interrupted: reason == .interrupted)
+        let meeting = buildMeeting()
         do {
             try store.save(meeting)
             store.discardJournal(id: meetingId)
-            status = "Organizing key points…"
-            // `try?` here once threw away every reason the summary failed, and with no
-            // fallback behind it a meeting was saved carrying no notes at all — after
-            // the user had been told key points were being organized. The on-device
-            // model stays optional; having notes does not.
-            var document: NotesDocument?
-            do {
-                document = try await NotesSummarizer.summarize(meeting)
-                notesNotice = nil
-            } catch {
-                log.error("on-device summary unavailable: \(error.localizedDescription)")
-                notesNotice = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                document = try? engine.notes(for: meeting)
-                if document == nil {
-                    log.error("extractive notes also failed — the meeting is saved with its transcript and items only")
-                }
-            }
-            if var document {
-                // Both reasons a set of notes can come out thin, in the order they
-                // matter: what kind of recording this was, then why the summary is
-                // the transcript-based one. Carried in the document rather than only
-                // on the status line, because the notes window is where somebody
-                // reads these — and it opens again tomorrow, long after a menu bar
-                // caption has gone.
-                let shape = (try? engine.shapeNotice(for: meeting)) ?? ""
-                let notice = [shape, notesNotice].compactMap { $0 }
-                    .filter { !$0.isEmpty }.joined(separator: " ")
-                document.notice = notice.isEmpty ? nil : notice
-                var enhanced = meeting
-                enhanced.notes = document
-                do {
-                    try store.save(enhanced)
-                    meeting = enhanced
-                } catch {
-                    log.error("summary save failed; original meeting remains saved: \(error)")
-                }
-            }
             lastSaved = meeting
             state = .idle
-            status = summary(of: meeting)
-            // Which of the two kinds of notes this is, said plainly. Thinner notes
-            // with a reason beat thinner notes that look like a bad summary.
-            if notesNotice != nil { status += " · transcript-based notes" }
+            status = summary(of: meeting) + " · organizing notes"
+            onMeetingChange?(meeting)
+            // Saving and opening the meeting must not wait on a model. Its result is
+            // merged with whatever is on disk later and offered as a reviewable
+            // suggestion when the person already wrote something.
+            Task { [weak self] in await self?.enhanceSavedMeeting(id: meeting.id, source: meeting) }
         } catch {
             // The journal is still on disk, so nothing is lost — say that rather than
             // implying the meeting is gone.
@@ -346,7 +461,7 @@ final class MeetingSession {
         }
     }
 
-    private func buildMeeting(interrupted: Bool) -> Meeting {
+    private func buildMeeting() -> Meeting {
         // Raw settled segments are what the journal holds; sentences are what a
         // transcript is. Assembly joins the first and resolves the far side's echo.
         let finals = TranscriptAssembly.assemble(events.filter(\.isFinal))
@@ -359,14 +474,88 @@ final class MeetingSession {
 
         return Meeting(
             id: meetingId,
-            title: Self.title(for: clock.startedAt),
+            title: draftTitle,
             startedAt: ISO8601DateFormatter().string(from: clock.startedAt),
             endedAt: ISO8601DateFormatter().string(from: Date()),
             processing: .onDevice,
             events: finals,
             items: items,
-            images: images
+            notes: draftNotes,
+            images: MeetingMoments.reconcile(images, events: finals),
+            draftRevision: nil
         )
+    }
+
+    private func draftMeeting() -> Meeting {
+        let settled = TranscriptAssembly.assemble(events.filter(\.isFinal))
+        return Meeting(
+            id: meetingId, title: draftTitle,
+            startedAt: ISO8601DateFormatter().string(from: clock.startedAt),
+            endedAt: nil, processing: .onDevice,
+            events: settled, items: [],
+            notes: draftNotes, images: MeetingMoments.reconcile(images, events: settled), draftRevision: draftRevision
+        )
+    }
+
+    private func checkpointDraftAndPublish() throws {
+        let draft = draftMeeting()
+        try store.checkpointDraft(draft)
+        onMeetingChange?(draft)
+    }
+
+    private func insertImageBlock(_ image: MeetingImage) {
+        var blocks = draftNotes.blocks ?? []
+        guard !blocks.contains(where: { $0.imageId == image.id }) else { return }
+        let block = NoteBlock(id: "image-\(image.id)", kind: "image", text: image.caption,
+                              evidence: [], at: image.at, imageId: image.id)
+        var insertion = blocks.endIndex
+        var nearest = -Double.infinity
+        for (index, candidate) in blocks.enumerated() {
+            guard candidate.kind != "heading", let at = candidate.at,
+                  at <= image.at, at >= nearest else { continue }
+            nearest = at
+            insertion = index + 1
+        }
+        blocks.insert(block, at: insertion)
+        draftNotes.blocks = blocks
+    }
+
+    private func hasWriting(_ document: NotesDocument?) -> Bool {
+        document?.blocks?.contains(where: { block in
+            block.kind == "image" || !block.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) == true
+    }
+
+    /// Runs after the completed meeting is already durable and visible. It reloads
+    /// immediately before saving so edits made while the model worked are retained.
+    private func enhanceSavedMeeting(id: String, source: Meeting) async {
+        var document: NotesDocument?
+        var failureNotice: String?
+        do {
+            document = try await NotesSummarizer.summarize(source)
+        } catch {
+            log.error("on-device summary unavailable: \(error.localizedDescription)")
+            failureNotice = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            document = try? engine.notes(for: source)
+        }
+        guard var document else {
+            if case .idle = state, lastSaved?.id == id { status = summary(of: source) }
+            return
+        }
+        let shape = (try? engine.shapeNotice(for: source)) ?? ""
+        let notice = [shape, failureNotice].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+        document.notice = notice.isEmpty ? nil : notice
+        do {
+            var latest = try store.load(id: id)
+            if hasWriting(latest.notes) { latest.suggestedNotes = document }
+            else { latest.notes = document; latest.suggestedNotes = nil }
+            try store.save(latest)
+            if lastSaved?.id == id { lastSaved = latest }
+            if case .idle = state, lastSaved?.id == id { status = summary(of: latest) }
+            onMeetingChange?(latest)
+        } catch {
+            log.error("summary save failed; saved meeting remains intact: \(error)")
+        }
     }
 
     /// Meeting ids are `m-<milliseconds since 1970>`, so the start time survives even
@@ -440,9 +629,13 @@ final class MeetingSession {
     func recover(id: String) -> Meeting? {
         // The same assembly the live path uses, so a recovered meeting reads like one
         // that ended normally rather than like a pile of fragments.
-        let recovered = TranscriptAssembly.assemble(store.replayJournal(id: id))
-        let recoveredImages = store.recoverImages(id: id)
-        guard !recovered.isEmpty || !recoveredImages.isEmpty else {
+        let draft = store.recoverDraft(id: id)
+        let journalEvents = store.replayJournal(id: id)
+        let recovered = TranscriptAssembly.assemble(journalEvents.isEmpty ? (draft?.events ?? []) : journalEvents)
+        let sidecarImages = store.recoverImages(id: id)
+        let recoveredImages = sidecarImages.isEmpty ? (draft?.images ?? []) : sidecarImages
+        let recoveredWriting = hasWriting(draft?.notes)
+        guard !recovered.isEmpty || !recoveredImages.isEmpty || recoveredWriting else {
             store.discardJournal(id: id)
             return nil
         }
@@ -452,18 +645,19 @@ final class MeetingSession {
         let items = (try? engine.extract(events: recovered, reference: started)) ?? []
         var meeting = Meeting(
             id: id,
-            title: "\(Self.title(for: started)) (recovered)",
-            startedAt: ISO8601DateFormatter().string(from: started),
+            title: "\(draft?.title ?? Self.title(for: started)) (recovered)",
+            startedAt: draft?.startedAt ?? ISO8601DateFormatter().string(from: started),
             endedAt: nil,
             processing: .onDevice,
             events: recovered,
             items: items,
-            images: recoveredImages
+            notes: draft?.notes,
+            images: MeetingMoments.reconcile(recoveredImages, events: recovered)
         )
         // A recovered meeting used to arrive with no notes at all. The summary is not
         // re-run here — recovery is meant to be immediate — but the extractive document
         // costs nothing and is what the notes window expects to open onto.
-        meeting.notes = try? engine.notes(for: meeting)
+        if !recoveredWriting { meeting.notes = try? engine.notes(for: meeting) }
         do {
             try store.save(meeting)
             store.discardJournal(id: id)

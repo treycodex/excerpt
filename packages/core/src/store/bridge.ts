@@ -8,13 +8,15 @@ import type { Meeting, NotesDocument, Preferences } from '@excerpt/types';
  * written there by the native capture that the browser cannot do. The editor itself
  * knows about neither — it calls the same functions, and this decides where they go.
  *
- * Transcript events never cross this bridge. The webview receives finished meetings;
- * live speech stays native, where the overlay needs it every frame.
+ * The native session remains authoritative while capture is live. Settled transcript
+ * events cross only as meeting snapshots for reading; captions stay native, where a
+ * webview round trip would put them behind the words.
  */
 export interface ExcerptBridge {
   listMeetings(): Promise<Meeting[]>;
   loadMeeting(id: string): Promise<Meeting | undefined>;
-  saveMeeting(meeting: Meeting): Promise<void>;
+  /** Native capture may return its authoritative merged draft after a document edit. */
+  saveMeeting(meeting: Meeting): Promise<Meeting | undefined>;
   deleteMeeting(id: string): Promise<void>;
   loadPreferences(): Promise<Preferences>;
   savePreferences(preferences: Preferences): Promise<void>;

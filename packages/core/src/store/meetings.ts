@@ -25,10 +25,11 @@ export interface CaptureDraft {
  * with storage disabled. A rejected read used to leave the UI on "Reading..."
  * forever, so every read degrades to an empty result instead.
  */
-export async function saveMeeting(m: Meeting): Promise<void> {
+export async function saveMeeting(m: Meeting): Promise<Meeting | undefined> {
   const host = bridge();
   if (host) return host.saveMeeting(m);
   await set(m.id, m, store);
+  return undefined;
 }
 
 export async function loadMeeting(id: string): Promise<Meeting | undefined> {

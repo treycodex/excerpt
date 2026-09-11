@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lookMenu: NSMenu?
     private let shortcuts = MeetingShortcuts()
     private let catchUp = CatchUpWindowController()
+    private let captureReceipt = CaptureReceiptController()
     private var capturingScreenshot = false
     private var shortcutsRegistered = false
     private var screenshotItem: NSMenuItem?
@@ -61,9 +62,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 (try? engine.subtitleLines(text, maxChars: CaptionTokens.maxCharsPerLine))
                     ?? OverlayController.fallbackLines(text)
             }
-            session = MeetingSession(engine: engine, store: store, overlay: overlay)
-            session?.onStateChange = { [weak self] in self?.refresh() }
-            notes = NotesWindowController(bridge: NotesBridge(store: store, preferences: preferences))
+            let session = MeetingSession(engine: engine, store: store, overlay: overlay)
+            self.session = session
+            session.onStateChange = { [weak self] in self?.refresh() }
+            let bridge = NotesBridge(
+                store: store, preferences: preferences,
+                activeMeeting: { [weak session] id in session?.activeMeeting(id: id) },
+                ownsEditorWrites: { [weak session] id in session?.ownsEditorWrites(for: id) == true },
+                updateActiveMeeting: { [weak session] meeting in
+                    guard let session else { return meeting }
+                    return try session.applyEditorChanges(meeting)
+                }
+            )
+            session.onMeetingChange = { [weak bridge] meeting in bridge?.publish(meeting) }
+            notes = NotesWindowController(bridge: bridge)
             offerRecovery(store: store)
         } catch {
             // Without the engine there are no notes and without the folder there is
@@ -254,6 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if !overlay.visible { overlay.show() }
                 await session.start()
                 refresh()
+                if session.canCaptureImage { notes?.navigate(toMeeting: session.meetingId) }
                 suggestHeadphonesIfNeeded()
             }
         }
@@ -263,13 +276,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let session, session.canCaptureImage else { return }
         if catchUp.isVisible { catchUp.close(); overlay.show(); return }
         overlay.hide()
-        catchUp.show(events: TranscriptAssembly.assemble(session.events), now: session.elapsedMilliseconds,
-                     source: { [weak session] in (TranscriptAssembly.assemble(session?.events ?? []), session?.elapsedMilliseconds ?? 0) },
+        catchUp.show(events: session.catchUpEvents, now: session.elapsedMilliseconds,
+                     source: { [weak session] in (session?.catchUpEvents ?? [], session?.elapsedMilliseconds ?? 0) },
                      onReturn: { [weak self] in self?.overlay.show() },
-                     onImages: { [weak self] providers in self?.addMeetingImages(providers) })
+                     onImages: { [weak self] providers, origin in self?.addMeetingImages(providers, origin: origin) })
     }
 
-    private func addMeetingImages(_ providers: [NSItemProvider]) {
+    private func addMeetingImages(_ providers: [NSItemProvider], origin: String) {
         guard let session, session.canCaptureImage else { return }
         let id = session.meetingId
         let capturedAt = Date()
@@ -295,7 +308,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             }
                         }
                     }
-                    try session.addScreenshot(MeetingScreenshot.fromData(data, capturedAt: capturedAt), for: id)
+                    let image = try session.addScreenshot(MeetingScreenshot.fromData(data, capturedAt: capturedAt, origin: origin), for: id)
+                    captureReceipt.show(image)
                     catchUp.showNotice("Image added to your notes")
                     refresh()
                 } catch {
@@ -321,7 +335,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             do {
                 if let capture = try await MeetingScreenshot.captureRegion() {
-                    try session.addScreenshot(capture, for: id)
+                    let image = try session.addScreenshot(capture, for: id)
+                    captureReceipt.show(image)
                 }
             } catch {
                 present(title: "Screenshot wasn't added", body: error.localizedDescription, style: .warning)
@@ -402,7 +417,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openNotes() {
-        notes?.show()
+        if let session, session.state.isActive, !session.meetingId.isEmpty {
+            notes?.show(meeting: session.meetingId)
+        } else {
+            notes?.show()
+        }
     }
 
     @objc private func revealFolder() {

@@ -95,7 +95,14 @@ but headphones remove the problem rather than mitigating it.
   than width, fading rather than sliding, with the film dash convention when two
   people overlap. Optional always-on-top window so they float over your meeting.
 - **The Strip** — the meeting as a film strip. Items are marks on it; selecting a
-  note reveals its surrounding transcript passage and approximate position.
+  note reveals its surrounding transcript passage and approximate position. Captured
+  images appear as diamonds and open the conversation around the moment.
+- **Captured moments** — the Excerpt region shortcut, pasted images and dropped
+  images keep their original meeting time and nearby final speech. Images remain in
+  the document position you choose, and their surrounding passage can be expanded.
+- **Catch Up** — the latest 30–90 seconds stays readable while the meeting continues.
+  Speech still being recognized is visibly provisional and reconciles into final
+  turns without entering saved notes twice.
 - **Four categories** — decisions, action items, deadlines, open questions. Chosen
   because they have crisp linguistic signatures. Ideas, quotes and risks were cut
   for having none.
@@ -157,7 +164,13 @@ that means for you:
 for Gatekeeper and is not an Apple certificate. Its only job is keeping the app's code
 identity stable between builds: permissions are keyed to identity, and ad-hoc signing
 (`codesign -s -`) produces a new one every time, so every rebuild silently drops all
-three grants. Measured, both ways. `tools/dev-identity.sh` creates one.
+three grants. Measured, both ways. `apps/mac/tools/dev-identity.sh` creates one.
+
+`build.sh` now refuses to fall back to ad-hoc signing when that identity is missing,
+because a build that succeeds by erasing the next meeting's permissions is not a
+successful build. From the repository root, create the identity once with
+`apps/mac/tools/dev-identity.sh`. Use `EXCERPT_ALLOW_ADHOC=1` only for a disposable
+build where permission persistence does not matter.
 
 ---
 
@@ -229,6 +242,12 @@ bullet and write directly. Use the document toolbar to add blocks, change their
 style, move them, or remove them. Enter continues the document, Shift+Enter adds a
 line, and Tab/Shift+Tab indents/outdents bullets. Generated wording is previewed
 before it replaces generated text; your writing and image blocks are retained.
+
+- **Live draft:** starting a Mac meeting opens the same editor used afterwards.
+  Titles, writing, settled transcript text, pasted images, and shortcut captures
+  merge into one recoverable draft. Closing the notes window does not stop capture.
+  Ending saves and opens the meeting immediately; on-device enhancement continues
+  separately and appears as a reviewable suggestion when you already wrote notes.
 
 - **I missed that:** during a Mac meeting, press **⌘⇧J** to open a floating recent
   transcript. The compact panel opens near the captions and remembers where you

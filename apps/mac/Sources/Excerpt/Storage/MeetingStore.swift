@@ -7,6 +7,7 @@ import OSLog
 /// ~/Library/Application Support/Excerpt/
 ///   meetings/<id>.json     the finished meeting
 ///   journal/<id>.ndjson    one settled transcript event per line, written as it settles
+///   journal/<id>.draft.json  title, document, images and the latest merged snapshot
 /// ```
 ///
 /// The journal is the point. Gate 12 is not negotiable — an interruption may stop
@@ -91,6 +92,7 @@ final class MeetingStore {
         closeJournal(id: id)
         try? FileManager.default.removeItem(at: url(forJournal: id))
         try? FileManager.default.removeItem(at: imageJournal(id))
+        try? FileManager.default.removeItem(at: draftJournal(id))
     }
 
     // MARK: - Journal
@@ -118,8 +120,11 @@ final class MeetingStore {
             at: journalDirectory, includingPropertiesForKeys: nil)) ?? []
 
         return Array(Set(journals
-            .filter { $0.pathExtension == "ndjson" || $0.lastPathComponent.hasSuffix(".images.json") }
-            .map { $0.lastPathComponent.replacingOccurrences(of: ".images.json", with: "").replacingOccurrences(of: ".ndjson", with: "") }
+            .filter { $0.pathExtension == "ndjson" || $0.lastPathComponent.hasSuffix(".images.json") || $0.lastPathComponent.hasSuffix(".draft.json") }
+            .map { $0.lastPathComponent
+                .replacingOccurrences(of: ".images.json", with: "")
+                .replacingOccurrences(of: ".draft.json", with: "")
+                .replacingOccurrences(of: ".ndjson", with: "") }
             .filter { !FileManager.default.fileExists(atPath: url(forMeeting: $0).path(percentEncoded: false)) }
             )).sorted()
     }
@@ -146,6 +151,7 @@ final class MeetingStore {
         closeJournal(id: id)
         try? FileManager.default.removeItem(at: url(forJournal: id))
         try? FileManager.default.removeItem(at: imageJournal(id))
+        try? FileManager.default.removeItem(at: draftJournal(id))
     }
 
     func checkpointImages(_ images: [MeetingImage], id: String) throws {
@@ -157,7 +163,19 @@ final class MeetingStore {
         return (try? JSONDecoder.excerpt.decode([MeetingImage].self, from: data)) ?? []
     }
 
+    /// A compact atomic checkpoint complements the append-only speech journal. It
+    /// preserves writing even when no recognizer result has settled yet.
+    func checkpointDraft(_ meeting: Meeting) throws {
+        try JSONEncoder.excerpt.encode(meeting).write(to: draftJournal(meeting.id), options: .atomic)
+    }
+
+    func recoverDraft(id: String) -> Meeting? {
+        guard let data = try? Data(contentsOf: draftJournal(id)) else { return nil }
+        return try? JSONDecoder.excerpt.decode(Meeting.self, from: data)
+    }
+
     private func imageJournal(_ id: String) -> URL { journalDirectory.appending(path: "\(id).images.json") }
+    private func draftJournal(_ id: String) -> URL { journalDirectory.appending(path: "\(id).draft.json") }
 
     // MARK: - Paths
 

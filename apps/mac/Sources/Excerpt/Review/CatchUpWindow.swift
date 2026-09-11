@@ -45,7 +45,7 @@ final class CatchUpWindowController: NSObject, NSWindowDelegate {
 
     func show(events: [TranscriptEvent], now: Double,
               source: @escaping () -> (events: [TranscriptEvent], now: Double),
-              onReturn: @escaping () -> Void, onImages: @escaping ([NSItemProvider]) -> Void) {
+              onReturn: @escaping () -> Void, onImages: @escaping ([NSItemProvider], String) -> Void) {
         close()
         self.onReturn = onReturn
         content.events = events; content.now = now; content.notice = ""; content.revision = 0
@@ -112,7 +112,7 @@ final class CatchUpWindowController: NSObject, NSWindowDelegate {
 private struct CatchUpView: View {
     let content: CatchUpContent
     let onReturn: () -> Void
-    let onImages: ([NSItemProvider]) -> Void
+    let onImages: ([NSItemProvider], String) -> Void
     @State private var seconds = 60
     @State private var seen = 0
     @State private var atBottom = true
@@ -160,7 +160,12 @@ private struct CatchUpView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     ForEach(turn.events) { event in
                                         Text(event.text).font(.system(size: 15)).lineSpacing(5).textSelection(.enabled)
+                                            .foregroundStyle(event.isFinal ? ink : muted)
+                                            .italic(!event.isFinal)
                                             .frame(maxWidth: .infinity, alignment: .leading).id(event.id)
+                                        if !event.isFinal {
+                                            Text("LIVE · still being recognized").font(.system(size: 9, design: .monospaced)).foregroundStyle(muted)
+                                        }
                                     }
                                 }
                             }.frame(maxWidth: .infinity, alignment: .leading)
@@ -205,7 +210,7 @@ private struct CatchUpView: View {
                     .allowsHitTesting(false)
             }
         }
-        .onDrop(of: [UTType.image, UTType.fileURL], isTargeted: $draggingImage) { providers in onImages(providers); return true }
-        .onPasteCommand(of: [.image, .fileURL], perform: onImages)
+        .onDrop(of: [UTType.image, UTType.fileURL], isTargeted: $draggingImage) { providers in onImages(providers, "drop"); return true }
+        .onPasteCommand(of: [.image, .fileURL]) { onImages($0, "paste") }
     }
 }

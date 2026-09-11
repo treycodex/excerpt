@@ -33,6 +33,7 @@ final class NotesWindowController: NSWindowController {
 
         super.init(window: window)
         window.contentView = makeWebView()
+        bridge.onMeetingChange = { [weak self] json in self?.receive(meetingJSON: json) }
     }
 
     @available(*, unavailable)
@@ -101,6 +102,15 @@ final class NotesWindowController: NSWindowController {
         guard webView.url != nil else { show(meeting: id); return }
         webView.evaluateJavaScript("location.hash = '#/m/\(id)'")
         present()
+    }
+
+    /// Pushes settled meeting state into React without reloading the editor or moving
+    /// the person's cursor. JSONEncoder supplies a safe JavaScript string literal.
+    private func receive(meetingJSON: String) {
+        guard webView.url != nil,
+              let data = try? JSONEncoder().encode(meetingJSON),
+              let literal = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("globalThis.__excerptReceiveMeeting?.(\(literal))")
     }
 
     private func presentMissingNotes() {

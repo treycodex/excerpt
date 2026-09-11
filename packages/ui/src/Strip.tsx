@@ -7,6 +7,7 @@ export interface StripMark {
   /** Only settled items wear the accent. */
   settled?: boolean;
   label?: string;
+  kind?: 'item' | 'image';
 }
 
 export interface StripProps {
@@ -15,6 +16,7 @@ export interface StripProps {
   marks?: StripMark[];
   onScrub?: (ms: number) => void;
   onSelect?: (markId: string) => void;
+  selectedId?: string;
 }
 
 /** Tick spacing that keeps a strip legible whether a meeting ran 40s or 90 minutes. */
@@ -39,7 +41,7 @@ const stamp = (ms: number) => {
  *
  * Nothing plays. There is no audio — scrubbing moves through the transcript.
  */
-export function Strip({ duration, position, marks = [], onScrub, onSelect }: StripProps) {
+export function Strip({ duration, position, marks = [], onScrub, onSelect, selectedId }: StripProps) {
   const rail = useRef<HTMLDivElement>(null);
   const { minor, major } = useMemo(() => chooseTicks(duration), [duration]);
 
@@ -102,10 +104,11 @@ export function Strip({ duration, position, marks = [], onScrub, onSelect }: Str
           <button
             key={m.id}
             type="button"
-            className={`mark${m.settled ? ' settled' : ''}`}
+            className={`mark${m.settled ? ' settled' : ''}${m.kind === 'image' ? ' image' : ''}${selectedId === m.id ? ' selected' : ''}`}
             style={{ left: pct(m.at) }}
             title={m.label ?? ''}
-            aria-label={`${m.label ?? 'Moment'}, approximately ${stamp(m.at)}`}
+            aria-label={`${m.label ?? (m.kind === 'image' ? 'Captured moment' : 'Moment')}, approximately ${stamp(m.at)}`}
+            aria-pressed={selectedId === m.id}
             onClick={(e) => { e.stopPropagation(); onSelect?.(m.id); }}
           />
         ))}

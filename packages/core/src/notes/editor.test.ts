@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Meeting, MeetingImage, TranscriptEvent } from '@excerpt/types';
-import { editableDocument, insertMeetingImage, previewTranscriptCorrection } from './editor';
+import { editableDocument, insertMeetingImage, meetingImagePassage, previewTranscriptCorrection, reconcileMeetingImageContexts } from './editor';
 import { refreshMeetingNotes } from './summary';
 import { toHTML, toMarkdown } from '../export/markdown';
 
@@ -35,6 +35,31 @@ describe('editable notes and meeting screenshots', () => {
   it('never inserts the same capture twice', () => {
     const input = insertMeetingImage(base(), shot('s', 30000));
     expect(insertMeetingImage(input, shot('s', 30000))).toBe(input);
+  });
+  it('anchors a moment to final speech from 20 seconds before through 15 after', () => {
+    const meeting = { ...base(), events: [
+      event('too-early', 'Before the passage.', 9000),
+      event('before', 'This is the layout we are reviewing.', 10000),
+      event('after', 'Move the primary action to the top.', 44000),
+      event('too-late', 'Next topic.', 46000),
+      { ...event('live', 'Still changing', 30000), isFinal: false },
+    ] };
+    const next = insertMeetingImage(meeting, shot('s', 30000));
+    expect(next.images![0]!.context).toEqual({ eventIds: ['before', 'after'], startAt: 10000, endAt: 45000 });
+    expect(meetingImagePassage(next, next.images![0]!).map((e) => e.id)).toEqual(['before', 'after']);
+  });
+  it('reconciles speech that settles after capture without moving the image block', () => {
+    const captured = insertMeetingImage({ ...base(), events: [event('before', 'First idea.', 20000)] }, shot('s', 30000));
+    const imageIndex = captured.notes!.blocks!.findIndex((b) => b.imageId === 's');
+    const settled = { ...captured, events: [...captured.events, event('after', 'The follow-up.', 40000)] };
+    const next = reconcileMeetingImageContexts(settled);
+    expect(next.images![0]!.context!.eventIds).toEqual(['before', 'after']);
+    expect(next.notes!.blocks!.findIndex((b) => b.imageId === 's')).toBe(imageIndex);
+  });
+  it('keeps an expanded moment passage source-backed', () => {
+    const meeting = { ...base(), events: [event('wide', 'Earlier context.', 0), ...base().events] };
+    const next = insertMeetingImage(meeting, shot('s', 30000));
+    expect(meetingImagePassage(next, next.images![0]!, true).map((e) => e.id)).toContain('wide');
   });
   it('previews a corrected deadline without mutating the original meeting', () => {
     const original = base();

@@ -128,6 +128,10 @@ actor SourceTranscriber {
     /// without an actor hop back to ask.
     struct LiveEdge: Sendable, Equatable {
         var text: String
+        /// Pending speech only. Catch Up replaces this stable row until it settles;
+        /// it must never be journalled or extracted as final speech.
+        var provisionalText: String
+        var localStart: Double
         var localEnd: Double
         var sourceStart: Double
     }
@@ -214,6 +218,9 @@ actor SourceTranscriber {
             }
             emit.yield(segment)
         }
+        // Promotion changes the pending-only Catch Up row even if no new recognition
+        // result arrives. Publish that removal so settled text is never duplicated.
+        publishLiveEdge()
     }
 
     /// Measured in Stage 0: overlapping promotions produce near-duplicate segments —
@@ -374,6 +381,8 @@ actor SourceTranscriber {
         let unsettled = pending.map { Segment(start: $0.start, end: $0.end, text: $0.text) }
         emitLive.yield(LiveEdge(
             text: CaptionEdge.card(settled: recentlyEmitted, pending: unsettled),
+            provisionalText: unsettled.sorted { $0.start < $1.start }.map(\.text).joined(separator: " "),
+            localStart: unsettled.map(\.start).min() ?? stats.lastRangeEnd,
             localEnd: stats.lastRangeEnd,
             sourceStart: haveOffset ? sourceOffset.seconds : 0
         ))

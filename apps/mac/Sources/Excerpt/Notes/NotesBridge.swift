@@ -4,10 +4,9 @@ import WebKit
 
 /// The native half of `packages/core/src/store/bridge.ts`.
 ///
-/// Seven methods, and deliberately no eighth: transcript events never cross here.
-/// The webview receives finished meetings, because live speech is needed by the
-/// overlay every frame and a round trip through JavaScript would put the caption
-/// behind the words.
+/// The editor receives settled meeting snapshots. Live captions remain native, while
+/// title/document writes are merged by MeetingSession so they cannot replace speech
+/// or screenshots that arrived after the webview loaded.
 @MainActor
 final class NotesBridge: NSObject {
 
@@ -32,11 +31,26 @@ final class NotesBridge: NSObject {
 
     private let store: MeetingStore
     private let preferences: PreferencesStore
+    private let activeMeeting: (String?) -> Meeting?
+    private let ownsEditorWrites: (String) -> Bool
+    private let updateActiveMeeting: (Meeting) throws -> Meeting
     private let log = Logger(subsystem: "com.excerpt.app", category: "bridge")
+    var onMeetingChange: ((String) -> Void)?
 
-    init(store: MeetingStore, preferences: PreferencesStore) {
+    init(store: MeetingStore, preferences: PreferencesStore,
+         activeMeeting: @escaping (String?) -> Meeting? = { _ in nil },
+         ownsEditorWrites: @escaping (String) -> Bool = { _ in false },
+         updateActiveMeeting: @escaping (Meeting) throws -> Meeting = { meeting in meeting }) {
         self.store = store
         self.preferences = preferences
+        self.activeMeeting = activeMeeting
+        self.ownsEditorWrites = ownsEditorWrites
+        self.updateActiveMeeting = updateActiveMeeting
+    }
+
+    func publish(_ meeting: Meeting) {
+        guard let encoded = try? json(meeting) else { return }
+        onMeetingChange?(encoded)
     }
 
     /// The JavaScript side of the seam. Installed at document start so the React app
@@ -63,6 +77,11 @@ final class NotesBridge: NSObject {
         exportMarkdown:  (name, md)  => send('exportMarkdown', [name, md]),
         exportHTML:      (name, html) => send('exportHTML', [name, html]),
         summarizeNotes:  (meeting)   => send('summarizeNotes', [JSON.stringify(meeting)]),
+      };
+      globalThis.__excerptReceiveMeeting = (json) => {
+        try {
+          window.dispatchEvent(new CustomEvent('excerpt:meeting', { detail: JSON.parse(json) }));
+        } catch (_) { /* a malformed native update is ignored; the saved copy remains */ }
       };
       globalThis.__excerptNative = true;
       // Marked on the root element, at document start, so the first paint already
@@ -104,10 +123,16 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
         case .summarizeNotes:
             throw Failure.badArguments("summarizeNotes")
         case .listMeetings:
-            return try json(store.list())
+            var meetings = store.list()
+            if let active = activeMeeting(nil) {
+                meetings.removeAll { $0.id == active.id }
+                meetings.insert(active, at: 0)
+            }
+            return try json(meetings)
 
         case .loadMeeting:
             guard let id = arguments.first as? String else { throw Failure.badArguments("loadMeeting") }
+            if let active = activeMeeting(id) { return try json(active) }
             return (try? store.load(id: id)).flatMap { try? json($0) }
 
         case .saveMeeting:
@@ -115,11 +140,18 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
                   let meeting = try? decode(Meeting.self, from: body) else {
                 throw Failure.badArguments("saveMeeting")
             }
+            if ownsEditorWrites(meeting.id) {
+                return try json(updateActiveMeeting(meeting))
+            }
             try store.save(meeting)
-            return nil
+            publish(meeting)
+            return try json(meeting)
 
         case .deleteMeeting:
             guard let id = arguments.first as? String else { throw Failure.badArguments("deleteMeeting") }
+            if activeMeeting(id) != nil {
+                throw Failure.badArguments("deleteMeeting: a live meeting cannot be deleted")
+            }
             try store.delete(id: id)
             return nil
 
