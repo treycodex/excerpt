@@ -15,7 +15,7 @@ final class NotesBridge: NSObject {
     /// webview should see, not a silent undefined.
     private enum Method: String {
         case listMeetings, loadMeeting, saveMeeting, deleteMeeting
-        case loadPreferences, savePreferences, exportMarkdown
+        case loadPreferences, savePreferences, exportMarkdown, exportHTML, summarizeNotes
     }
 
     private enum Failure: Error, LocalizedError {
@@ -61,6 +61,8 @@ final class NotesBridge: NSObject {
         loadPreferences: ()          => send('loadPreferences', []),
         savePreferences: (prefs)     => send('savePreferences', [JSON.stringify(prefs)]),
         exportMarkdown:  (name, md)  => send('exportMarkdown', [name, md]),
+        exportHTML:      (name, html) => send('exportHTML', [name, html]),
+        summarizeNotes:  (meeting)   => send('summarizeNotes', [JSON.stringify(meeting)]),
       };
       globalThis.__excerptNative = true;
       // Marked on the root element, at document start, so the first paint already
@@ -83,6 +85,11 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
 
         do {
             guard let method = Method(rawValue: name) else { throw Failure.unknownMethod(name) }
+            if method == .summarizeNotes {
+                guard let body = arguments.first as? String else { throw Failure.badArguments(name) }
+                let meeting = try decode(Meeting.self, from: body)
+                return (try await json(NotesSummarizer.summarize(meeting)), nil)
+            }
             return (try handle(method, arguments), nil)
         } catch {
             log.error("bridge \(name) failed: \(error.localizedDescription)")
@@ -94,6 +101,8 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
     /// rather than a dictionary shape that can quietly disagree with the TypeScript type.
     private func handle(_ method: Method, _ arguments: [Any]) throws -> Any? {
         switch method {
+        case .summarizeNotes:
+            throw Failure.badArguments("summarizeNotes")
         case .listMeetings:
             return try json(store.list())
 
@@ -125,7 +134,7 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
             preferences.save(prefs)
             return nil
 
-        case .exportMarkdown:
+        case .exportMarkdown, .exportHTML:
             guard arguments.count == 2,
                   let filename = arguments[0] as? String,
                   let markdown = arguments[1] as? String else {
@@ -133,14 +142,15 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
             }
             // A real save panel, not a browser download: a file:// webview's download
             // goes nowhere the user can find, which reads as the export having failed.
-            save(markdown: markdown, suggesting: filename)
+            save(markdown: markdown, suggesting: filename, html: method == .exportHTML)
             return nil
         }
     }
 
-    private func save(markdown: String, suggesting filename: String) {
+    private func save(markdown: String, suggesting filename: String, html: Bool) {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = filename.hasSuffix(".md") ? filename : "\(filename).md"
+        let suffix = html ? ".html" : ".md"
+        panel.nameFieldStringValue = filename.hasSuffix(suffix) ? filename : "\(filename)\(suffix)"
         panel.canCreateDirectories = true
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }

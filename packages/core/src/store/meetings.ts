@@ -1,5 +1,5 @@
 import { createStore, del, get, keys, set } from 'idb-keyval';
-import type { Meeting } from '@excerpt/types';
+import type { Meeting, MeetingImage } from '@excerpt/types';
 import type { ProcessingMode, TranscriptEvent } from '@excerpt/types';
 import { bridge } from './bridge';
 
@@ -17,6 +17,7 @@ export interface CaptureDraft {
   elapsed: number;
   processing: ProcessingMode;
   events: TranscriptEvent[];
+  images?: MeetingImage[];
 }
 
 /**

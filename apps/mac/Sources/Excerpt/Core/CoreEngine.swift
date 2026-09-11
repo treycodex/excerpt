@@ -46,7 +46,7 @@ final class CoreEngine {
 
     /// Bumped in `packages/core/src/engine.ts` whenever the contract changes, so a
     /// stale bundle fails loudly at launch instead of quietly at the first meeting.
-    private static let expectedVersion = "1"
+    private static let expectedVersion = "2"
 
     private let context: JSContext
     private let engine: JSValue
@@ -125,6 +125,23 @@ final class CoreEngine {
     /// which is why the overlay does not carry a second one that drifts.
     func subtitleLines(_ text: String, maxChars: Int) throws -> [String] {
         try decode([String].self, from: call("subtitleLines", [text, maxChars]))
+    }
+
+    /// The extractive notes document: excerpts of what was said, with the quote each
+    /// one came from. This is the website's long-standing fallback, and the Mac's
+    /// only notes when the optional on-device summary is unavailable or produces
+    /// nothing a quote supports.
+    func notes(for meeting: Meeting) throws -> NotesDocument {
+        let json = try String(decoding: JSONEncoder.excerpt.encode(meeting), as: UTF8.self)
+        return try decode(NotesDocument.self, from: call("notes", [json]))
+    }
+
+    /// What kind of recording this is, when it is not the kind Excerpt is for — one
+    /// voice throughout, which is a talk rather than a conversation. Empty when there
+    /// is nothing worth saying. Shared with the website so the two cannot disagree.
+    func shapeNotice(for meeting: Meeting) throws -> String {
+        let json = try String(decoding: JSONEncoder.excerpt.encode(meeting), as: UTF8.self)
+        return try call("shapeNotice", [json])
     }
 
     func markdown(for meeting: Meeting) throws -> String {

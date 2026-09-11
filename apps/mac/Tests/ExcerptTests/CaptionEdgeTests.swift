@@ -17,63 +17,116 @@ struct CaptionEdgeTests {
 
     // MARK: - The live edge
 
-    @Test func `the edge spans settled speech and speech still being revised`() {
-        let text = CaptionEdge.text(
+    @Test func `the card spans settled speech and speech still being revised`() {
+        let text = CaptionEdge.card(
             settled: [segment(0, 2, "Okay, let's move the launch")],
-            pending: [segment(2, 4, "to October.")]
+            pending: [segment(2, 4, "to October")]
         )
-        #expect(text == "Okay, let's move the launch to October.")
+        #expect(text == "Okay, let's move the launch to October")
     }
 
     /// The regression the whole type exists for. `SourceTranscriber` moves a region out
     /// of `pending` and into the transcript when the analyzer's volatile window passes
     /// it; nothing on screen may move because of it.
     @Test func `settling a region does not change what the caption reads`() {
-        let before = CaptionEdge.text(
+        let before = CaptionEdge.card(
             settled: [segment(0, 2, "I'll take the revised deck")],
-            pending: [segment(2, 4, "and get it over by Thursday")]
+            pending: [segment(2, 4, "and get it over")]
         )
-        let after = CaptionEdge.text(
+        let after = CaptionEdge.card(
             settled: [segment(0, 2, "I'll take the revised deck"),
-                      segment(2, 4, "and get it over by Thursday")],
+                      segment(2, 4, "and get it over")],
             pending: []
         )
         #expect(before == after)
     }
 
     @Test func `regions are read in the order they were said, not the order they arrived`() {
-        let text = CaptionEdge.text(
-            settled: [segment(4, 6, "before Friday?")],
+        let text = CaptionEdge.card(
+            settled: [segment(4, 6, "before Friday")],
             pending: [segment(2, 4, "Can you send the numbers")]
         )
-        #expect(text == "Can you send the numbers before Friday?")
+        #expect(text == "Can you send the numbers before Friday")
     }
 
-    @Test func `a long edge keeps its tail and drops its head`() {
-        let text = CaptionEdge.text(
-            settled: [segment(0, 2, "one two three four five")],
-            pending: [segment(2, 4, "six seven eight")],
-            limit: 20
-        )
-        #expect(text.hasSuffix("six seven eight"))
-        #expect(!text.contains("one"))
-        #expect(text.count <= 20)
+    /// The film rule, and the one this type was rewritten for: a card holds still and is
+    /// replaced. It must never slide a word at a time through a two-line window.
+    @Test func `a card grows by appending and never reflows what is already on screen`() {
+        let words = "we are not moving the whole campaign just the hero spot and if legal".split(separator: " ")
+        var previous = ""
+        for count in 1...words.count {
+            let said = words.prefix(count).joined(separator: " ")
+            let card = CaptionEdge.card(settled: [], pending: [segment(0, 2, said)])
+
+            // Either the card grew from what was there, or the screen cut to a new one.
+            // What it may never do is show a shifted view of the same speech.
+            let grew = card.hasPrefix(previous)
+            let cut = said.hasSuffix(card)
+            #expect(grew || cut, "“\(previous)” → “\(card)” is neither a growth nor a cut")
+            previous = card
+        }
     }
 
-    @Test func `trimming never cuts a word in half`() {
-        let text = CaptionEdge.text(settled: [], pending: [segment(0, 2, "unmistakably enormous")], limit: 15)
-        #expect(text == "enormous")
+    @Test func `a card never exceeds two lines' worth of characters`() {
+        let long = "we are not moving the whole campaign just the hero spot and if legal signs off we will go with the October date"
+        let card = CaptionEdge.card(settled: [], pending: [segment(0, 2, long)])
+        #expect(card.count <= CaptionTokens.maxCharsPerLine * CaptionTokens.maxLines)
     }
 
-    /// A budget smaller than the last word still has to draw something, and half a word
-    /// is not something.
-    @Test func `a single word longer than the budget survives whole`() {
-        let text = CaptionEdge.text(settled: [], pending: [segment(0, 2, "antidisestablishmentarianism")], limit: 5)
+    @Test func `the cut lands at a sentence ending, the way a film subtitle does`() {
+        let text = CaptionEdge.card(settled: [], pending: [
+            segment(0, 3, "Okay, let's move the launch to October."),
+            segment(3, 5, "I'll take the deck"),
+        ])
+        #expect(text == "I'll take the deck")
+    }
+
+    /// A sentence that has just ended is still the thing to read. Blanking the screen
+    /// the moment someone stops talking is how a caption blinks.
+    @Test func `a finished sentence stays up until something replaces it`() {
+        let text = CaptionEdge.card(settled: [], pending: [segment(0, 3, "That's decided, then.")])
+        #expect(text == "That's decided, then.")
+    }
+
+    /// Otherwise every "Okay." and "Right." flashes on screen alone for an instant.
+    @Test func `a sentence too short to read does not get a card of its own`() {
+        let text = CaptionEdge.card(settled: [], pending: [
+            segment(0, 1, "Okay."),
+            segment(1, 3, "Let's move the launch"),
+        ])
+        #expect(text == "Okay. Let's move the launch")
+    }
+
+    @Test func `a single word longer than a line survives whole`() {
+        let text = CaptionEdge.card(settled: [], pending: [segment(0, 2, "antidisestablishmentarianism")])
         #expect(text == "antidisestablishmentarianism")
     }
 
     @Test func `silence produces nothing rather than a blank line`() {
-        #expect(CaptionEdge.text(settled: [], pending: []).isEmpty)
+        #expect(CaptionEdge.card(settled: [], pending: []).isEmpty)
+    }
+
+    @Test func `punctuation only recognition cannot replace a finished caption`() {
+        let speech = segment(0, 3, "That's decided, then.")
+        let text = CaptionEdge.card(settled: [speech], pending: [
+            segment(3, 4, "."), segment(4, 5, ".."), segment(5, 6, "… …"),
+        ])
+        #expect(text == speech.text)
+        #expect(CaptionEdge.card(settled: [], pending: [segment(0, 1, ". . .......")]).isEmpty)
+    }
+
+    @Test func `stray dots inside a speech result do not become a new card`() {
+        let text = CaptionEdge.card(settled: [], pending: [
+            segment(0, 3, "That's decided, then. . .. ......."),
+        ])
+        #expect(text == "That's decided, then.")
+    }
+
+    @Test func `dot runs collapse without changing ordinary punctuation or numbers`() {
+        #expect(CaptionEdge.card(settled: [], pending: [segment(0, 1, "Wait.......")]) == "Wait…")
+        #expect(CaptionEdge.card(settled: [], pending: [segment(0, 1, "Wait...")]) == "Wait…")
+        #expect(CaptionEdge.card(settled: [], pending: [segment(0, 1, "Wait…")]) == "Wait…")
+        #expect(CaptionEdge.card(settled: [], pending: [segment(0, 1, "It's 3.14, right?")]) == "It's 3.14, right?")
     }
 
     // MARK: - Whose caption it is

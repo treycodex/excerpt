@@ -74,10 +74,9 @@ final class OverlayController {
     private(set) var visible = false
     private(set) var screenName = "—"
 
-    /// The latest words, held whether or not they are being drawn. Not observed: it is
-    /// the input to `caption`, and re-rendering the overlay on it would defeat the
-    /// point of holding it.
-    @ObservationIgnored private var pendingText: (speaker: String, text: String) = ("", "")
+    /// Recognition revisions remain off screen until the next presentation boundary.
+    @ObservationIgnored private var presentation = SubtitlePresentation()
+    @ObservationIgnored private var presentationTask: Task<Void, Never>?
 
     private(set) var preset: CaptionPreset
     private(set) var size: CaptionSize
@@ -203,9 +202,8 @@ final class OverlayController {
         visible = true
         screenName = target.localizedName
         DockPresence.shared.overlay(isShowing: true)
-        // Whatever was said while the overlay was down is drawn the moment it comes up,
-        // rather than after the next word.
-        rebreakHeldText()
+        // Resume the presentation clock, discarding speech that expired while hidden.
+        startPresentationClock()
 
         // Gate 11: follow display changes rather than being stranded on a screen
         // that no longer exists.
@@ -229,6 +227,8 @@ final class OverlayController {
     func hide() {
         window?.orderOut(nil)
         visible = false
+        presentationTask?.cancel()
+        presentationTask = nil
         DockPresence.shared.overlay(isShowing: false)
     }
 
@@ -246,36 +246,50 @@ final class OverlayController {
     func update(speaker: String, text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            pendingText = ("", "")
+            presentation = SubtitlePresentation()
+            presentationTask?.cancel()
+            presentationTask = nil
             if caption != nil { caption = nil }
             return
         }
-        pendingText = (speaker, trimmed)
+        presentation.receive(speaker: speaker, text: trimmed, at: ProcessInfo.processInfo.systemUptime)
 
         // Off screen, the words are worth keeping but breaking them is not: `show()`
         // breaks whatever is held. This is what lets the session push unconditionally
         // and stop caring whether the overlay is up.
         guard visible else { return }
 
-        let next = CaptionLine(speaker: speaker, text: trimmed, lines: breakLines(trimmed))
-        // `@Observable` notifies on assignment, not on change, and the live edge
-        // republishes the same words whenever a result lands without adding any. This
-        // guard is what keeps a push cheaper than the poll it replaced.
-        guard next != caption else { return }
-        caption = next
+        startPresentationClock()
     }
 
-    /// Break what is held, for the overlay coming up on words that were said while it
-    /// was down.
-    ///
-    /// Not needed when the look changes: the budget is `maxCharsPerLine`, a count of
-    /// characters, and every preset and size shares it. The frame a line is drawn in
-    /// changes with the size; where the line breaks does not.
-    private func rebreakHeldText() {
-        let (speaker, text) = pendingText
-        guard visible, !text.isEmpty else { return }
-        let next = CaptionLine(speaker: speaker, text: text, lines: breakLines(text))
-        if next != caption { caption = next }
+    /// Only run while a cue is waiting or visible. The timer updates presentation,
+    /// never the recognition stream or stored transcript.
+    private func startPresentationClock() {
+        guard visible, presentationTask == nil else { return }
+        // Tick immediately on showing the window: expired speech stays expired.
+        presentTick()
+        guard presentation.needsTick else { return }
+        presentationTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+                guard let self, self.visible else { return }
+                self.presentTick()
+                if !self.presentation.needsTick {
+                    self.presentationTask = nil
+                    return
+                }
+            }
+        }
+    }
+
+    private func presentTick() {
+        presentation.tick(at: ProcessInfo.processInfo.systemUptime)
+        guard let cue = presentation.displayed else {
+            if caption != nil { caption = nil }
+            return
+        }
+        guard caption?.speaker != cue.speaker || caption?.text != cue.text else { return }
+        caption = CaptionLine(speaker: cue.speaker, text: cue.text, lines: breakLines(cue.text))
     }
 
     /// At most two lines, keeping the tail, splitting on spaces at the token's budget.

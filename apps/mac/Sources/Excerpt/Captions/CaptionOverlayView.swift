@@ -27,7 +27,7 @@ struct CaptionOverlayView: View {
                 Color.clear
                 if let caption = controller.caption {
                     block(caption, style: style)
-                        .frame(maxWidth: style.maxWidth)
+                        .frame(width: style.maxWidth, height: style.fontSize * CaptionTokens.leading * 2 + style.preset.padding.top + style.preset.padding.bottom, alignment: .bottom)
                         .position(x: geometry.size.width / 2,
                                   y: geometry.size.height * style.centreFraction)
                         .transition(.opacity)
@@ -55,13 +55,15 @@ struct CaptionOverlayView: View {
                         .font(Font(style.font))
                         .tracking(style.tracking)
                         .foregroundStyle(style.preset.color)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
                         .modifier(TextShadows(shadows: style.preset.shadows))
                         .padding(style.preset.padding)
                         .background(style.preset.backdrop)
                 }
             }
             .multilineTextAlignment(.center)
+            .transaction { $0.animation = nil }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(caption.speaker) said: \(caption.text)")

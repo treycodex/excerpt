@@ -17,9 +17,10 @@ export function findDeadline(sentence: Sentence, reference: Date): Deadline | nu
   const text = sentence.norm;
   const results = chrono.parse(text, reference, { forwardDate: true });
 
+  let found: Deadline | null = null;
   for (const r of results) {
     const preceding = text.slice(Math.max(0, r.index - 18), r.index);
-    if (!PREPOSITION.test(preceding)) continue;
+    if (!PREPOSITION.test(preceding) && !(found && /\b(?:actually|rather|make that|instead)\s*[,—-]?\s*$/i.test(preceding))) continue;
 
     const date = r.start.date();
     if (Number.isNaN(date.getTime())) continue;
@@ -28,7 +29,7 @@ export function findDeadline(sentence: Sentence, reference: Date): Deadline | nu
     const dayBefore = reference.getTime() - 24 * 60 * 60 * 1000;
     if (date.getTime() < dayBefore) continue;
 
-    return { iso: date.toISOString().slice(0, 10), text: r.text };
+    found = { iso: date.toISOString().slice(0, 10), text: r.text };
   }
-  return null;
+  return found;
 }

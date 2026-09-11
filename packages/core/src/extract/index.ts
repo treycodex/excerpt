@@ -67,7 +67,7 @@ export function extractItems(events: TranscriptEvent[], reference = new Date()):
       category,
       state,
       title: title(s.text),
-      evidence: [evidenceOf(s)],
+      evidence: s.evidence ?? [evidenceOf(s)],
       assignee: 'unassigned',
       salience: state === 'decided' ? 2 : 1,
       ...extra,
@@ -120,7 +120,17 @@ export function extractItems(events: TranscriptEvent[], reference = new Date()):
     if (due) push(s, 'deadline', 'decided', { due: due.iso });
   }
 
-  return items.sort((a, b) => (a.evidence[0]?.tArrived ?? 0) - (b.evidence[0]?.tArrived ?? 0));
+  const unique: Item[] = [];
+  for (const item of items) {
+    const duplicate = unique.find((previous) => previous.category === item.category && previous.state === item.state &&
+      previous.assignee === item.assignee && previous.due === item.due &&
+      previous.title.toLowerCase() === item.title.toLowerCase() &&
+      previous.evidence[0]?.speakerLabel === item.evidence[0]?.speakerLabel &&
+      Math.abs(previous.evidence[0]!.tArrived - item.evidence[0]!.tArrived) < 30_000);
+    if (duplicate) duplicate.evidence.push(...item.evidence);
+    else unique.push(item);
+  }
+  return unique.sort((a, b) => (a.evidence[0]?.tArrived ?? 0) - (b.evidence[0]?.tArrived ?? 0));
 }
 
 export { classify, extractDecisions, isBareConfirmation } from './decisions';

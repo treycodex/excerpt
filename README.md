@@ -221,3 +221,48 @@ the harness itself.
 
 MIT — see [LICENSE](LICENSE). The coastline photograph on the landing page is
 from Unsplash under its own licence; see `apps/web/public/media/CREDITS.md`.
+
+## Write, review, and keep the visual context
+
+Meeting notes are now an editable document. Click into any paragraph, heading, or
+bullet and write directly. Use the document toolbar to add blocks, change their
+style, move them, or remove them. Enter continues the document, Shift+Enter adds a
+line, and Tab/Shift+Tab indents/outdents bullets. Generated wording is previewed
+before it replaces generated text; your writing and image blocks are retained.
+
+- **I missed that:** during a Mac meeting, press **⌘⇧J** to open a floating recent
+  transcript. The compact panel opens near the captions and remembers where you
+  move it. Choose 30, 60, or 90 seconds, scroll back further, and return to live
+  captions with Escape or the pinned footer button. New speech arrives without
+  moving your reading position; “New conversation below” takes you to the latest
+  text. This is settled text, so the newest speech may still be arriving. The browser offers the same view from Capture and its floating window;
+  its shortcut works while either Excerpt window has focus.
+- **Screenshots:** during a Mac meeting, press **⌘⇧S** and select a region. Escape
+  cancels. Excerpt attaches the image with its capture time, and places it beside
+  the nearest preceding note from the conversation. These shortcuts are registered
+  only while listening. You can also paste/drop an image in the Mac catch-up panel,
+  or paste/drop/add images in browser Capture. Imported images during capture use
+  their insertion time. Excerpt does not watch the macOS screenshot folder.
+- **Images in finished notes:** paste, drop, or use **+ Image**, then choose the
+  meeting time. Images have editable captions and can be moved like other blocks;
+  moving them does not change their original timestamp.
+- **Review:** the Review tab keeps decisions, ownership, and due dates out of the
+  freeform document. Confirm an item, correct it, assign it to yourself, or dismiss
+  it. Confirming is distinct from marking a task complete.
+- **Transcript corrections:** choose Correct beside a passage, edit its wording,
+  and review the affected notes before applying. The original text and correction
+  history remain saved. Generated notes and deadlines refresh; your edited or
+  previously reviewed content stays intact and is flagged for another review.
+- **Export with images:** produces one self-contained HTML file that opens offline.
+  Markdown remains available, but image rendering from embedded data URLs depends
+  on the destination Markdown app.
+
+Screenshots are stored locally with each meeting. Capture images are checkpointed
+for interruption recovery, including meetings with no transcript yet. Images are
+normalized to JPEG at up to 2400 pixels on their longest side; imports are limited
+to 20 MB per image. PNG, JPEG, and WebP can be imported in the notes editor. There is
+no screenshot OCR or background screenshot collection.
+
+The older `CONTEXT.md` describes the original deterministic-only product. The Mac
+app now also has optional on-device summaries, and the editable document described
+above is the current notes experience.

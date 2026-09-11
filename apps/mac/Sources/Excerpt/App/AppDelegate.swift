@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The whole of Excerpt's chrome.
 ///
@@ -15,6 +16,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var listenItem: NSMenuItem?
     private var captionsItem: NSMenuItem?
     private var lookMenu: NSMenu?
+    private let shortcuts = MeetingShortcuts()
+    private let catchUp = CatchUpWindowController()
+    private var capturingScreenshot = false
+    private var shortcutsRegistered = false
+    private var screenshotItem: NSMenuItem?
+    private var catchUpItem: NSMenuItem?
 
     private var engine: CoreEngine?
     private var store: MeetingStore?
@@ -39,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         OverlayBridge.shared.controller = overlay
         makeStatusItem()
+        makeEditingMenu()
+        shortcuts.onCatchUp = { [weak self] in self?.showCatchUp() }
+        shortcuts.onScreenshot = { [weak self] in self?.takeScreenshot() }
 
         do {
             let store = try MeetingStore()
@@ -52,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ?? OverlayController.fallbackLines(text)
             }
             session = MeetingSession(engine: engine, store: store, overlay: overlay)
+            session?.onStateChange = { [weak self] in self?.refresh() }
             notes = NotesWindowController(bridge: NotesBridge(store: store, preferences: preferences))
             offerRecovery(store: store)
         } catch {
@@ -139,6 +150,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(captions)
         captionsItem = captions
 
+        let catchUp = NSMenuItem(title: "I missed that…", action: #selector(showCatchUp), keyEquivalent: "j")
+        catchUp.keyEquivalentModifierMask = [.command, .shift]
+        catchUp.target = self
+        menu.addItem(catchUp)
+        catchUpItem = catchUp
+        let screenshot = NSMenuItem(title: "Capture screenshot for notes…", action: #selector(takeScreenshot), keyEquivalent: "s")
+        screenshot.keyEquivalentModifierMask = [.command, .shift]
+        screenshot.target = self
+        menu.addItem(screenshot)
+        screenshotItem = screenshot
+
         // The look, one level deeper: the common path is on, the choice is behind it.
         let look = NSMenuItem(title: "Caption look", action: nil, keyEquivalent: "")
         look.image = Self.symbol("textformat.size", "Caption look")
@@ -218,11 +240,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let session else { return }
         Task {
             if session.state.isActive {
+                guard !capturingScreenshot else { return }
+                catchUp.close()
                 await session.stop()
                 refresh()
                 // The meeting is the point, so it opens itself. Nothing is lost if the
                 // user closes it — the notes are already on disk.
-                if let saved = session.lastSaved, !saved.items.isEmpty {
+                if let saved = session.lastSaved {
                     notes?.navigate(toMeeting: saved.id)
                 }
             } else {
@@ -233,6 +257,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 suggestHeadphonesIfNeeded()
             }
         }
+    }
+
+    @objc private func showCatchUp() {
+        guard let session, session.canCaptureImage else { return }
+        if catchUp.isVisible { catchUp.close(); overlay.show(); return }
+        overlay.hide()
+        catchUp.show(events: TranscriptAssembly.assemble(session.events), now: session.elapsedMilliseconds,
+                     source: { [weak session] in (TranscriptAssembly.assemble(session?.events ?? []), session?.elapsedMilliseconds ?? 0) },
+                     onReturn: { [weak self] in self?.overlay.show() },
+                     onImages: { [weak self] providers in self?.addMeetingImages(providers) })
+    }
+
+    private func addMeetingImages(_ providers: [NSItemProvider]) {
+        guard let session, session.canCaptureImage else { return }
+        let id = session.meetingId
+        let capturedAt = Date()
+        for provider in providers {
+            Task {
+                do {
+                    let data: Data = try await withCheckedThrowingContinuation { continuation in
+                        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                            provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, error in
+                                do {
+                                    if let error { throw error }
+                                    guard let data, let url = URL(dataRepresentation: data, relativeTo: nil), url.isFileURL else { throw MeetingScreenshot.Failure.unreadable }
+                                    let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                                    guard size <= 20 * 1024 * 1024 else { throw MeetingScreenshot.Failure.unreadable }
+                                    continuation.resume(returning: try Data(contentsOf: url))
+                                } catch { continuation.resume(throwing: error) }
+                            }
+                        } else {
+                            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
+                                if let error { continuation.resume(throwing: error) }
+                                else if let data { continuation.resume(returning: data) }
+                                else { continuation.resume(throwing: MeetingScreenshot.Failure.unreadable) }
+                            }
+                        }
+                    }
+                    try session.addScreenshot(MeetingScreenshot.fromData(data, capturedAt: capturedAt), for: id)
+                    catchUp.showNotice("Image added to your notes")
+                    refresh()
+                } catch {
+                    present(title: "Image wasn't added", body: error.localizedDescription, style: .warning)
+                }
+            }
+        }
+    }
+
+    @objc private func takeScreenshot() {
+        guard let session, session.canCaptureImage, !capturingScreenshot else { return }
+        capturingScreenshot = true
+        let id = session.meetingId
+        let restoreCaptions = overlay.visible
+        overlay.hide()
+        catchUp.close()
+        refresh()
+        Task {
+            defer {
+                capturingScreenshot = false
+                if restoreCaptions && session.canCaptureImage { overlay.show() }
+                refresh()
+            }
+            do {
+                if let capture = try await MeetingScreenshot.captureRegion() {
+                    try session.addScreenshot(capture, for: id)
+                }
+            } catch {
+                present(title: "Screenshot wasn't added", body: error.localizedDescription, style: .warning)
+            }
+        }
+    }
+
+    private func makeEditingMenu() {
+        let main = NSMenu()
+        let app = NSMenuItem(); app.submenu = NSMenu()
+        app.submenu?.addItem(withTitle: "Quit Excerpt", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        main.addItem(app)
+        let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        let menu = NSMenu(title: "Edit")
+        for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
+            menu.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
+        }
+        edit.submenu = menu
+        main.addItem(edit)
+        NSApp.mainMenu = main
     }
 
     /// Asks for what is missing, one grant at a time, and explains the consequence of
@@ -436,6 +545,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Everything the menu shows, recomputed from the session rather than tracked
     /// alongside it. There is no state here that can disagree with what is happening.
     private func refresh() {
+        let wantsShortcuts = session?.canCaptureImage == true
+        if wantsShortcuts && !shortcutsRegistered {
+            shortcutsRegistered = true
+            if !shortcuts.register() { NSLog("Excerpt: a global shortcut is unavailable; use the menu.") }
+        } else if !wantsShortcuts && shortcutsRegistered {
+            shortcuts.unregister()
+            shortcutsRegistered = false
+            catchUp.close()
+        }
+        screenshotItem?.isEnabled = session?.canCaptureImage == true && !capturingScreenshot
+        catchUpItem?.isEnabled = session?.canCaptureImage == true
         let listening = session?.state.isActive ?? false
         let captionsOn = overlay.visible
 
@@ -470,6 +590,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// every settled line, so the worst case is a recovery prompt next launch — but
     /// stopping cleanly turns it into a saved meeting instead.
     func applicationWillTerminate(_ notification: Notification) {
+        shortcuts.unregister()
         guard let session, session.state.isActive else { return }
         let finished = DispatchSemaphore(value: 0)
         Task { await session.stop(); finished.signal() }

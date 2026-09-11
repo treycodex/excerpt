@@ -11,26 +11,42 @@
 .setup-page em { font-family: var(--serif); font-weight: 400; }
 .setup-description { color: var(--muted); font-size: 16px; line-height: 1.7; max-width: 56ch; }
 .get-started { max-width: 1060px; padding: 65px 30px 100px; margin: auto; }
-.setup-platforms { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 42px; }
-.setup-platform { position: relative; display: flex; flex-direction: column; padding: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--raise); }
-/* The recommended card carries the weight: a lighter ground, a brighter edge, and
-   the only filled button on the screen. Two identical cards make a choice out of
-   something that is not really one. */
-.setup-platform.mac { background: #20241d; border-color: #6c7160; box-shadow: 0 0 0 1px #6c716033; }
-.setup-badge { position: absolute; top: 26px; right: 26px; background: var(--paper); color: #141711; font: 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 7px 10px; border-radius: 2px; }
-.setup-platform-icon { font-size: 32px; margin-bottom: 24px; color: var(--paper); }
+.setup-badge { background: var(--paper); color: #141711; font: 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 7px 9px; border-radius: 2px; }
+.setup-platform-icon { font-size: 32px; color: var(--paper); }
 .setup-page h2 { font-size: 28px; font-weight: 500; letter-spacing: -.035em; margin: 12px 0; color: var(--paper); }
-.setup-platform p { color: var(--muted); font-size: 15px; line-height: 1.7; }
-.setup-platform ul { padding: 0 0 20px 18px; font-size: 14px; line-height: 2; color: #c0c2b4; }
 .setup-primary { display: inline-flex; align-items: center; justify-content: space-between; gap: 25px; padding: 14px 20px; background: var(--paper); color: #141711 !important; border: 1px solid var(--paper); border-radius: 0; font-size: 14px; min-height: 48px; }
 .setup-primary:hover { background: #fff; }
 /* Same shape, no fill — the fallback should read as available, not as equal. */
 .setup-secondary { display: inline-flex; align-items: center; justify-content: space-between; gap: 25px; padding: 14px 20px; background: none; color: var(--paper) !important; border: 1px solid #55574d; border-radius: 0; font-size: 14px; min-height: 48px; }
 .setup-secondary:hover { border-color: var(--paper); }
-.setup-platform > .setup-primary, .setup-platform > .setup-secondary { margin-top: auto; }
-.setup-platform small { color: #989c8d; font-size: 12px; margin: 13px 0 0; }
-.setup-platform .setup-release-note { font-size: 12px; margin: 18px 0 0; }
 .setup-demo-link { font-size: 13px; margin-top: 22px; color: var(--paper) !important; }
+.setup-comparison { margin-top: 54px; }
+.setup-comparison-heading { display: flex; align-items: end; justify-content: space-between; gap: 35px; padding: 0 2px 25px; }
+.setup-comparison-heading h2 { font-size: clamp(32px, 4vw, 48px); line-height: 1; margin: 0; text-align: right; }
+.comparison-table { overflow: hidden; border: 1px solid #55594d; border-radius: 10px; background: #171916; box-shadow: 0 26px 80px #0005; }
+.comparison-row { display: grid; grid-template-columns: minmax(130px, .55fr) minmax(260px, 1.25fr) minmax(240px, 1.1fr); }
+.comparison-row > * { min-width: 0; margin: 0; padding: 18px 24px; border-left: 1px solid var(--line); }
+.comparison-row > :first-child { border-left: 0; color: #92958a; font: 12px/1.5 var(--mono); letter-spacing: .04em; }
+.comparison-row > :nth-child(2) { background: #20241d; color: var(--paper); }
+.comparison-row > :last-child { color: var(--muted); }
+.comparison-head { border-bottom: 1px solid #55594d; }
+.comparison-head > * { padding-top: 31px; padding-bottom: 30px; }
+.comparison-corner { display: flex; align-items: flex-end; text-transform: uppercase; letter-spacing: .12em !important; }
+.comparison-product { display: block; }
+.comparison-product-top { display: flex; min-height: 48px; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 30px; }
+.comparison-product .setup-eyebrow { color: #989c8d; }
+.comparison-product h3 { margin: 10px 0 13px; color: var(--paper); font-size: clamp(28px, 3vw, 40px); font-weight: 500; letter-spacing: -.045em; }
+.comparison-product p { max-width: 36ch; color: #b8baad; font-size: 15px; line-height: 1.65; }
+.comparison-install { color: #969a8d; font: 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; padding-top: 7px; }
+.comparison-feature { border-bottom: 1px solid var(--line); }
+.comparison-feature > * { display: flex; align-items: center; min-height: 74px; }
+.comparison-feature > p { gap: 12px; font-size: 15px; line-height: 1.55; }
+.comparison-feature > p i { color: #bfcda7; font-size: 7px; font-style: normal; flex: 0 0 auto; }
+.comparison-actions > * { padding-top: 27px; padding-bottom: 30px; }
+.comparison-actions > :first-child { text-transform: uppercase; letter-spacing: .12em; }
+.comparison-actions > div { display: flex; flex-direction: column; align-items: stretch; }
+.comparison-actions small { color: #8f9287; font-size: 12px; margin-top: 12px; }
+.comparison-actions .setup-release-note { margin: 16px 0 0; }
 .setup-install { margin-top: 70px; padding-top: 35px; border-top: 1px solid var(--line); }
 .setup-install h2 { font-size: 36px; margin: 20px 0 30px; }
 .setup-install ol { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; }
@@ -73,4 +89,21 @@
 .setup-terms p { color: #898d82; font-size: 13px; }
 .setup-error { color: #f08a76; font-size: 13px; line-height: 1.6; }
 @media (max-width: 900px) { .setup-wizard { margin: 25px 20px; grid-template-columns: 210px minmax(0,1fr); } .setup-rail { padding: 30px 20px; } .setup-wizard-content { padding: 30px 24px; } .setup-presets { grid-template-columns: 1fr; } .setup-presets span { display: none; } }
-@media (max-width: 640px) { .setup-badge { top: 20px; right: 20px; } .setup-nav { padding: 20px; } .setup-nav > :last-child { font-size: 11px; } .get-started { padding: 40px 20px; } .setup-platforms, .setup-install ol { grid-template-columns: 1fr; } .setup-platform { padding: 26px; } .setup-wizard { display: block; margin: 20px 12px; } .setup-rail { padding: 20px; } .setup-rail h2, .setup-rail p, .setup-rail > .setup-eyebrow:last-child { display: none; } .setup-rail ol { display: flex; flex-wrap: wrap; gap: 18px; margin: 16px 0 0; } .setup-wizard-content { padding: 26px 20px; } .setup-wizard-footer { flex-wrap: wrap; } .setup-subtitle-scene { height: 195px; } }
+@media (max-width: 760px) {
+  .setup-comparison-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .setup-comparison-heading h2 { text-align: left; }
+  .comparison-row { grid-template-columns: 1fr 1fr; }
+  .comparison-row > :first-child { grid-column: 1 / -1; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  .comparison-row > :nth-child(2) { border-left: 0; }
+  .comparison-head > :first-child { display: none; }
+  .comparison-head > * { padding: 24px 18px; }
+  .comparison-product-top { margin-bottom: 23px; }
+  .comparison-product h3 { font-size: clamp(23px, 6vw, 32px); }
+  .comparison-product p { font-size: 14px; }
+  .comparison-feature > * { min-height: 0; }
+  .comparison-feature > p { align-items: flex-start; padding: 16px 18px 20px; font-size: 14px; }
+  .comparison-actions > :first-child { display: none; }
+  .comparison-actions > div { padding: 20px 18px 24px; }
+}
+@media (max-width: 640px) { .setup-nav { padding: 20px; } .setup-nav > :last-child { font-size: 11px; } .get-started { padding: 40px 20px; } .setup-install ol { grid-template-columns: 1fr; } .setup-wizard { display: block; margin: 20px 12px; } .setup-rail { padding: 20px; } .setup-rail h2, .setup-rail p, .setup-rail > .setup-eyebrow:last-child { display: none; } .setup-rail ol { display: flex; flex-wrap: wrap; gap: 18px; margin: 16px 0 0; } .setup-wizard-content { padding: 26px 20px; } .setup-wizard-footer { flex-wrap: wrap; } .setup-subtitle-scene { height: 195px; } }
+@media (max-width: 440px) { .comparison-row { grid-template-columns: 1fr; } .comparison-row > :nth-child(2), .comparison-row > :last-child { border-left: 0; } .comparison-head > :last-child { border-top: 1px solid var(--line); } .comparison-feature > p::before { content: "MAC"; width: 46px; flex: 0 0 46px; color: #989c8d; font: 10px/1.6 var(--mono); letter-spacing: .1em; } .comparison-feature > p:last-child::before { content: "WEB"; } .comparison-feature > p i { display: none; } .comparison-actions > div:last-child { border-top: 1px solid var(--line); } }

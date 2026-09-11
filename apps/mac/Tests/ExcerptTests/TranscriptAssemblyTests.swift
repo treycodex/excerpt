@@ -33,6 +33,109 @@ struct TranscriptAssemblyTests {
         #expect(assembled.first?.tEnd == 10.24)
     }
 
+    // MARK: - Re-reported seconds (11 September)
+
+    /// Every consecutive same-source pair in two real captures overlapped in time by
+    /// about four seconds: the recogniser hands back the tail it had already settled
+    /// and recognises it again, differently. `gap >= 0` refused to join those, so the
+    /// overlap reached the transcript twice, in two spellings, and the notes carried
+    /// both as separate points.
+    @Test func `re-reported seconds are spliced, not printed twice`() {
+        let assembled = TranscriptAssembly.coalesce([
+            event(.remote, "There you go. So that's the best adviser, Paolo Martel.", 104.68, 110.14),
+            event(.remote, "So that's the best advisor, Paulo Martel. I think he was talking about you, right?", 106.30, 117.44),
+        ])
+        #expect(assembled.count == 1)
+        // The later reading wins — it was made with more audio behind it — and nothing
+        // it heard after the repeat is lost. That loss is trap 11.
+        #expect(assembled.first?.text
+                == "There you go. So that's the best advisor, Paulo Martel. I think he was talking about you, right?")
+        #expect(assembled.first?.tEnd == 117.44)
+    }
+
+    @Test func `a repeat is cut where it actually starts`() {
+        // The eight-word window is the real repeat and scores 0.75; a ten-word window
+        // reaches past it to a word that happens to recur and scrapes exactly 0.60.
+        // Taking the longest match that clears the bar ate "you go".
+        let head = "There you go. So that's the best adviser, Paolo Martel."
+        let tail = "So that's the best advisor, Paulo Martel. I think he was talking."
+        #expect(TranscriptAssembly.spliceRepeat(head, tail)?.hasPrefix("There you go. So that's") == true)
+    }
+
+    @Test func `a name recognised two ways is still one utterance`() {
+        let assembled = TranscriptAssembly.coalesce([
+            event(.remote, "Well, here you go. Elsie Ramo, I know that's not your real name, but", 85.92, 98.20),
+            event(.remote, "Elsie Reclamo, uh, I know that's not your real name, but hi.", 94.34, 102.34),
+        ])
+        #expect(assembled.count == 1)
+        let text = try! #require(assembled.first?.text)
+        #expect(text.contains("Elsie Reclamo"))
+        #expect(!text.contains("Elsie Ramo,"))
+        // Said once, not twice.
+        #expect(text.components(separatedBy: "not your real name").count == 2)
+    }
+
+    @Test func `the two sides of a repeat need not be the same length`() {
+        // Eleven words answered by twelve: the second hearing inserts "uh" and adds
+        // "hi". Forcing one length made a window reaching back past the repeat score
+        // higher than the repeat itself, and cut "go" out of "Well, here you go."
+        let head = "Well, here you go. Elsie Ramo, I know that's not your real name, but"
+        let tail = "Elsie Reclamo, uh, I know that's not your real name, but hi."
+        #expect(TranscriptAssembly.spliceRepeat(head, tail) == "Well, here you go. \(tail)")
+    }
+
+    @Test func `a word recognised two ways is still the same word`() {
+        #expect(TranscriptAssembly.sameWord("adviser", "advisor"))
+        #expect(TranscriptAssembly.sameWord("paolo", "paulo"))
+        // Short words must match exactly, or every filler matches every other.
+        #expect(!TranscriptAssembly.sameWord("but", "bit"))
+        #expect(!TranscriptAssembly.sameWord("ramo", "reclamo"))
+    }
+
+    @Test func `an unrelated utterance is never spliced onto the one before it`() {
+        #expect(TranscriptAssembly.spliceRepeat(
+            "We agreed to move the launch to October.",
+            "The marketing budget is still an open question.") == nil)
+    }
+
+    // MARK: - Long turns
+
+    /// Continuous narration never pauses for `utteranceGap`, so a 3½-minute capture
+    /// coalesced into four rows, two of them 243 and 284 words. Unreadable, and every
+    /// note built from one pointed at a 78-second block instead of at a sentence.
+    @Test func `narration is broken into turns at a sentence end`() {
+        let segments = (0..<12).map { index in
+            event(.remote, "This is sentence number \(index) and it carries a few words.",
+                  Double(index) * 3, Double(index) * 3 + 3)
+        }
+        let assembled = TranscriptAssembly.coalesce(segments)
+        #expect(assembled.count > 1)
+        #expect(assembled.allSatisfy { $0.text.split(whereSeparator: \.isWhitespace).count <= 100 })
+        // Nothing is interpolated: every boundary is a real segment's own range.
+        let starts = Set(segments.compactMap(\.tStart)), ends = Set(segments.compactMap(\.tEnd))
+        #expect(assembled.allSatisfy { starts.contains($0.tStart ?? -1) && ends.contains($0.tEnd ?? -1) })
+        // And every word survives the break.
+        let words = assembled.flatMap { $0.text.split(whereSeparator: \.isWhitespace) }.count
+        #expect(words == segments.flatMap { $0.text.split(whereSeparator: \.isWhitespace) }.count)
+    }
+
+    @Test func `a turn is never broken in the middle of a sentence`() {
+        // Nothing here ends a sentence, so nothing may be cut — a fragment read as a
+        // complete sentence is trap 9, and how half a sentence became a decision.
+        let segments = (0..<20).map { index in
+            event(.remote, "and then another clause carrying onward number \(index)",
+                  Double(index) * 2, Double(index) * 2 + 2)
+        }
+        #expect(TranscriptAssembly.coalesce(segments).count == 1)
+    }
+
+    @Test func `a short turn is left whole`() {
+        let segments = (0..<3).map { index in
+            event(.remote, "A short sentence. ", Double(index) * 2, Double(index) * 2 + 2)
+        }
+        #expect(TranscriptAssembly.coalesce(segments).count == 1)
+    }
+
     @Test func `a real pause keeps two utterances apart`() {
         let assembled = TranscriptAssembly.coalesce([
             event(.remote, "That's decided.", 10.2, 11.2),

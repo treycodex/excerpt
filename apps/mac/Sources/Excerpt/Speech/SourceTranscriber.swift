@@ -18,6 +18,11 @@ struct TranscriptStats: Sendable {
     /// be derived from what the analyzer actually reports rather than assumed.
     var samples: [String] = []
     var settleCalls = 0
+    /// Settles that had to cut at an arbitrary instant because the analyzer had
+    /// reported no region boundary to cut on. These are where words go missing.
+    var forcedSettles = 0
+    /// What the analyzer had offered as region boundaries at each settle.
+    var settleSamples: [String] = []
     var finalizedSamples: [String] = []
 }
 
@@ -74,14 +79,28 @@ actor SourceTranscriber {
     private var finalizeTask: Task<Void, Never>?
     /// Seconds of trailing audio left volatile, so the overlay still has live text
     /// while everything older is settled.
-    private static let volatileTail: Double = 2.0
+    ///
+    /// A `var` so `SpeechFidelityTests` can sweep it against real audio; nothing in
+    /// the app writes to it. The same goes for `forceSettleAfter` below. Both were
+    /// chosen by measurement, and the measurement has to stay repeatable.
+    nonisolated(unsafe) static var volatileTail: Double = 2.0
     /// Every four seconds, which is what Stage 0 measured and what produced legible
     /// text. Settling at detected pauses instead was tried and reverted: an RMS gate
     /// read ordinary speech as silence about half the time, so the cut landed inside
     /// words rather than between sentences and the transcript came back as
-    /// `"Okay. . let's move the... , to."` The cut has to land somewhere, and
-    /// TranscriptAssembly is what makes the seam not matter.
+    /// `"Okay. . let's move the... , to."`
     private static let settleEvery: Duration = .seconds(4)
+
+    /// The least audio that may accumulate before it is settled. See `settle()` for
+    /// the measurements that chose 15 over the 4 this shipped with.
+    ///
+    /// The timer still ticks every `settleEvery`; this decides when a tick acts, so
+    /// a cut lands as soon as its interval is up rather than on a coarser grid.
+    nonisolated(unsafe) static var minimumSettleInterval: Double = 15.0
+
+    /// Cut where the analyzer says its current region ends, rather than at an
+    /// arbitrary instant inside it.
+    nonisolated(unsafe) static var alignToRegionEnd = true
     private var settledThrough: Double = 0
     private var sourceOffset: CMTime = .zero
     private var haveOffset = false
@@ -230,11 +249,60 @@ actor SourceTranscriber {
     }
 
     /// Finalize everything except a short trailing window.
+    ///
+    /// **How often this runs is the single biggest lever on transcript quality, and
+    /// it was set seven times too aggressively.** Measured by `SpeechFidelityTests`
+    /// over two clips of clean synthesised narration with no pause in them, three
+    /// trials each — the word error rate is against the script that was spoken:
+    ///
+    /// | settling | clip 1 | clip 2 | words kept | cuts |
+    /// |---|---|---|---|---|
+    /// | any instant, every 4s (was shipped) | 26.6% | 26.5% | 101/134 · 106/127 | 10 |
+    /// | region end, every 4s | 25.9% | — | 99/134 | 9 |
+    /// | any instant, every 15s | 5.0% | — | 128/134 | 2 |
+    /// | **region end, every 15s** | **2.0%** | **15.0%** | 132/134 · 112/127 | 2 |
+    ///
+    /// Every forced `finalize(through:)` truncates the analyzer's context, and the
+    /// words spanning the cut are lost: *"and choose speaker view instead of gallery
+    /// view"* came back as *", you, of Gallery View"*. Ten cuts in 36 seconds cost a
+    /// quarter of everything said — from audio with no noise, no accent and no
+    /// crosstalk in it. This is where `", ........,"` and `"I'm cooking spotlight
+    /// forever"` came from; it was never SODA's accuracy.
+    ///
+    /// Cutting at a boundary the analyzer itself reported is the smaller effect but
+    /// not a free one: at 15 seconds it took clip 1 from 5.0% to 2.0% and, more
+    /// usefully, from 5/1/8 across trials to 2/2/2. Where the cut lands stops being
+    /// luck.
+    ///
+    /// This is not the RMS gate that was tried and reverted. That guessed at silence
+    /// from audio energy and was wrong about half the time; this uses the analyzer's
+    /// own segmentation and guesses at nothing.
+    ///
+    /// The cost is latency: a settled transcript now trails live speech by up to
+    /// `minimumSettleInterval`. Captions do not pay it — they are driven by `live`,
+    /// pushed the instant a result lands — and `stop()` promotes everything, so no
+    /// meeting ends short. A transcript that arrives late is recoverable; a
+    /// transcript missing a quarter of its words is not.
     private func settle() async {
         guard let analyzer else { return }
         let fedSeconds = Double(framesFed) / feedRate
-        let through = fedSeconds - Self.volatileTail
-        guard through > settledThrough + 0.5 else { return }
+        let latest = fedSeconds - Self.volatileTail
+        guard latest > settledThrough + 0.5 else { return }
+
+        guard latest - settledThrough >= Self.minimumSettleInterval else { return }
+
+        let offered = pending.map(\.end).sorted()
+        let atRegionEnd = Self.alignToRegionEnd
+            ? offered.filter { $0 > settledThrough + 0.5 && $0 <= fedSeconds }.max()
+            : nil
+        let through = atRegionEnd ?? latest
+        if atRegionEnd == nil { stats.forcedSettles += 1 }
+        if stats.settleSamples.count < 12 {
+            stats.settleSamples.append(String(format: "fed %.1f settled %.1f | offered %@ -> cut %.1f%@",
+                fedSeconds, settledThrough,
+                offered.map { String(format: "%.1f", $0) }.joined(separator: ","),
+                through, atRegionEnd == nil ? " (arbitrary)" : ""))
+        }
 
         do {
             try await analyzer.finalize(through: CMTime(seconds: through, preferredTimescale: 1000))
@@ -305,7 +373,7 @@ actor SourceTranscriber {
     private func publishLiveEdge() {
         let unsettled = pending.map { Segment(start: $0.start, end: $0.end, text: $0.text) }
         emitLive.yield(LiveEdge(
-            text: CaptionEdge.text(settled: recentlyEmitted, pending: unsettled),
+            text: CaptionEdge.card(settled: recentlyEmitted, pending: unsettled),
             localEnd: stats.lastRangeEnd,
             sourceStart: haveOffset ? sourceOffset.seconds : 0
         ))

@@ -8,6 +8,7 @@ import { CallFrame, Captions } from './CallFrame';
 import type { Spoken } from './CallFrame';
 import { openCaptionWindow, supportsPiP } from '../pip';
 import { CAPTION_PRESETS, applyPreset, currentPreset } from '../captionPreset';
+import { CatchUp } from './CatchUp';
 import { Wordmark } from './Wordmark';
 import './player.css';
 import type { CaptionPreset } from '../captionPreset';
@@ -25,6 +26,7 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
   const [playing, setPlaying] = useState(true);
   const [pip, setPip] = useState<Document | null>(null);
   const [preset, setPreset] = useState<CaptionPreset>(() => currentPreset());
+  const [catchUp, setCatchUp] = useState(false);
   const [sound, setSound] = useState(false);
   const ambience = useRef<Ambience | null>(null);
   const collected = useRef<TranscriptEvent[]>([]);
@@ -78,6 +80,7 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
     const target = Math.max(0, Math.min(duration, ms));
     base.current = { at: performance.now(), offset: target };
     setElapsed(target);
+    setCatchUp(false);
     setSpoken({});
     collected.current = adapter.finalsUpTo(target);
     void adapter.seek(target);
@@ -111,9 +114,10 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
         <span className="ed-label">SUBTITLES AS THEY ARE SAID</span>
       </div>
 
-      <CallFrame fresh={fresh} elapsed={elapsed} />
+      <CallFrame fresh={catchUp ? [] : fresh} elapsed={elapsed} />
 
-      {pip && createPortal(<Captions fresh={fresh} standalone />, pip.body)}
+      {pip && createPortal(<Captions fresh={catchUp ? [] : fresh} standalone />, pip.body)}
+      {catchUp && <CatchUp events={collected.current} now={elapsed} onClose={() => setCatchUp(false)} />}
 
       <div className="transport-rows">
       <div className="transport">
@@ -166,6 +170,7 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
             {pip ? 'Close float' : 'Float captions'}
           </button>
         )}
+        <button onClick={() => setCatchUp(true)}>Catch up</button>
         <span className="spacer" />
         <button className="skip" onClick={finish}>Skip to notes</button>
       </div>

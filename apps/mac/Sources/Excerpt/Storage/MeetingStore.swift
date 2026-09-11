@@ -90,6 +90,7 @@ final class MeetingStore {
         try? FileManager.default.removeItem(at: url(forMeeting: id))
         closeJournal(id: id)
         try? FileManager.default.removeItem(at: url(forJournal: id))
+        try? FileManager.default.removeItem(at: imageJournal(id))
     }
 
     // MARK: - Journal
@@ -116,11 +117,11 @@ final class MeetingStore {
         let journals = (try? FileManager.default.contentsOfDirectory(
             at: journalDirectory, includingPropertiesForKeys: nil)) ?? []
 
-        return journals
-            .filter { $0.pathExtension == "ndjson" }
-            .map { $0.deletingPathExtension().lastPathComponent }
+        return Array(Set(journals
+            .filter { $0.pathExtension == "ndjson" || $0.lastPathComponent.hasSuffix(".images.json") }
+            .map { $0.lastPathComponent.replacingOccurrences(of: ".images.json", with: "").replacingOccurrences(of: ".ndjson", with: "") }
             .filter { !FileManager.default.fileExists(atPath: url(forMeeting: $0).path(percentEncoded: false)) }
-            .sorted()
+            )).sorted()
     }
 
     /// Replays a journal. A truncated final line — the shape a crash leaves — is
@@ -144,7 +145,19 @@ final class MeetingStore {
     func discardJournal(id: String) {
         closeJournal(id: id)
         try? FileManager.default.removeItem(at: url(forJournal: id))
+        try? FileManager.default.removeItem(at: imageJournal(id))
     }
+
+    func checkpointImages(_ images: [MeetingImage], id: String) throws {
+        try JSONEncoder.excerpt.encode(images).write(to: imageJournal(id), options: .atomic)
+    }
+
+    func recoverImages(id: String) -> [MeetingImage] {
+        guard let data = try? Data(contentsOf: imageJournal(id)) else { return [] }
+        return (try? JSONDecoder.excerpt.decode([MeetingImage].self, from: data)) ?? []
+    }
+
+    private func imageJournal(_ id: String) -> URL { journalDirectory.appending(path: "\(id).images.json") }
 
     // MARK: - Paths
 

@@ -1,0 +1,41 @@
+.catch-up-window { --catch-bg:#20211e; --catch-muted:#a8aba0; color:#f3f1e8; background:var(--catch-bg); border:1px solid #474940; border-radius:12px; box-sizing:border-box; display:flex; flex-direction:column; overflow:hidden; font-family:Archivo,system-ui,sans-serif; text-align:left; color-scheme:dark; }
+.catch-up-window.floating { position:fixed; z-index:1000; width:min(460px,calc(100vw - 24px)); height:min(440px,calc(100dvh - 24px)); }
+.catch-up-window.embedded { position:relative; width:100%; height:100dvh; border-radius:0; }
+.catch-up-window:focus { outline:none; }
+.catch-up-window button { cursor:pointer; font:inherit; text-transform:none; letter-spacing:normal; border:0; margin:0; color:inherit; background:transparent; box-shadow:none; }
+.catch-up-window button:focus-visible,.catch-up-window [tabindex]:focus-visible { outline:2px solid #d4d5bd; outline-offset:-2px; }
+.catch-up-header { display:flex; align-items:center; gap:12px; padding:15px 16px; border-bottom:1px solid #383a32; flex-shrink:0; }
+.catch-up-drag { display:flex; align-items:center; gap:10px; flex:1; min-width:0; touch-action:none; cursor:grab; user-select:none; }
+.catch-up-drag:active { cursor:grabbing; }
+.embedded .catch-up-drag { cursor:default; }
+.catch-up-mark { font-family:'IBM Plex Mono',monospace; font-size:12px; color:#a9ac9b; white-space:nowrap; }
+.catch-up-header h2 { font-size:17px; font-weight:500; line-height:1.4; margin:0; color:#f3f1e8; text-transform:none; letter-spacing:-.2px; }
+.catch-up-range { display:flex; background:#2b2d26; padding:3px; border-radius:6px; }
+.catch-up-range button { padding:6px 8px; border-radius:4px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--catch-muted); }
+.catch-up-range button[aria-pressed=true] { background:#e1e2d2; color:#20211e; }
+.catch-up-window .catch-up-close { font-size:23px; padding:0; width:30px; height:30px; color:var(--catch-muted); }
+.catch-up-close:hover { color:#fff; }
+.catch-up-transcript { min-height:0; flex:1; overflow:auto; overscroll-behavior:contain; overflow-anchor:none; padding:20px 22px; scrollbar-width:thin; scrollbar-color:#54584b transparent; }
+.catch-up-turn { margin:0 0 23px; padding:0; border:0; }
+.catch-up-turn:last-child { margin-bottom:5px; }
+.catch-up-speaker { display:flex; align-items:baseline; gap:10px; font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.8px; color:var(--catch-muted); }
+.catch-up-speaker time { font-size:10px; letter-spacing:0; color:#898d7f; }
+.catch-up-turn.you .catch-up-speaker>span { color:#c9d1ae; }
+.catch-up-turn p { margin:7px 0 0; font-size:15px; line-height:1.65; font-weight:400; color:#f0eee7; white-space:pre-wrap; }
+.catch-up-footer { display:flex; flex-direction:column; flex-shrink:0; gap:10px; padding:10px 16px 15px; border-top:1px solid #383a32; }
+.catch-up-status { min-height:20px; font-size:11px; color:var(--catch-muted); text-align:center; line-height:20px; }
+.catch-up-window .catch-up-new { color:#d5ddbd; font-size:12px; padding:0 4px; }
+.catch-up-window .catch-up-return { display:flex; justify-content:center; align-items:center; gap:14px; width:100%; padding:11px 14px; background:#dfe1ce; color:#24261f; font-size:13px; font-weight:500; border-radius:6px; }
+.catch-up-return:hover { background:#f0f1e5; }
+.catch-up-return kbd { border:1px solid #aeb39b; border-radius:3px; padding:1px 4px; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:400; }
+.catch-up-empty { padding:35px 12px; text-align:center; }
+.catch-up-empty p { font-size:16px; line-height:1.6; margin:0 0 8px; }
+.catch-up-empty span { font-size:12px; color:var(--catch-muted); }
+.catch-up-drop { position:absolute; inset:7px; border:1px dashed #c9d1ae; border-radius:8px; background:rgba(32,33,30,.97); display:flex; justify-content:center; align-items:center; flex-direction:column; gap:12px; pointer-events:none; z-index:2; }
+.catch-up-drop>span { font-size:30px; color:#dfe1ce; }
+.catch-up-drop strong { font-size:15px; font-weight:500; }
+.catch-up-drop small { color:var(--catch-muted); font-size:12px; }
+@media (max-width:420px) { .catch-up-header { gap:6px; padding:12px; } .catch-up-mark { display:none; } .catch-up-transcript { padding:16px; } }
+@media (prefers-contrast:more) { .catch-up-window { border-color:#e1e2d2; } .catch-up-speaker,.catch-up-speaker time,.catch-up-status { color:#d4d6ca; } }
+
+.catch-up-speaker { position:sticky; top:-20px; z-index:1; background:var(--catch-bg); padding:3px 0; }

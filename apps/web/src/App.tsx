@@ -102,6 +102,7 @@ export function App() {
         }
         return (
           <Notes
+            key={meeting.id}
             meeting={prefs ? { ...meeting, items: applyPreferences(meeting.items, prefs) } : meeting}
             prefs={prefs}
             initialSaveFailed={meetingSaveFailed}

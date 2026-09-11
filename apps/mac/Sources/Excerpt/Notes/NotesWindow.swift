@@ -1,6 +1,7 @@
 import AppKit
 import OSLog
 import WebKit
+import UniformTypeIdentifiers
 
 /// The notes editor: the same React app the website serves, in a window, reading the
 /// Mac's own meetings through `NotesBridge`.
@@ -59,6 +60,7 @@ final class NotesWindowController: NSWindowController {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")   // the page owns its ground
         webView.allowsBackForwardNavigationGestures = false
         self.webView = webView
@@ -127,5 +129,16 @@ extension NotesWindowController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
         Logger(subsystem: "com.excerpt.app", category: "notes")
             .error("notes failed to load: \(error.localizedDescription)")
+    }
+}
+
+extension NotesWindowController: WKUIDelegate {
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.allowedContentTypes = [.png, .jpeg, .webP]
+        panel.begin { response in completionHandler(response == .OK ? panel.urls : nil) }
     }
 }

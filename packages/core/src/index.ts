@@ -16,9 +16,11 @@ export {
 export type { CaptureDraft } from './store/meetings';
 export { bridge, hasBridge, isNativeHost } from './store/bridge';
 export type { ExcerptBridge } from './store/bridge';
-export { toMarkdown } from './export/markdown';
+export { toMarkdown, toHTML } from './export/markdown';
+export { buildNotesDocument, preserveNoteEdits, refreshMeetingNotes, noteTitle, shapeNotice } from './notes/summary';
 export {
   DEFAULT_PREFERENCES, applyPreferences, deriveBoosts, matchedBoosts, scoreItem,
   orderCategories,
 } from './scoring';
 export { loadPreferences, savePreferences } from './store/preferences';
+export { editableDocument, insertMeetingImage, previewTranscriptCorrection, preserveDocument, safeImageUrl } from './notes/editor';

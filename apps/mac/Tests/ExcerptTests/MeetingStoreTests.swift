@@ -56,6 +56,39 @@ struct MeetingStoreTests {
         #expect(store.list().map(\.id) == ["m-good"])
     }
 
+    @Test func `summary edits and completed actions survive the native store`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let evidence = Evidence(eventIds: ["e0"], tArrived: 0, quote: "I'll send the deck.", speakerLabel: "YOU")
+        var original = meeting(items: [Item(id: "action", category: .action, state: .decided,
+            title: "Send the deck", evidence: [evidence], assignee: .you, salience: 1, completed: true)])
+        original.notes = NotesDocument(method: "on-device", keyPoints: [NoteBullet(id: "p", text: "My edited note", evidence: [evidence], userEdited: true)], topics: [])
+        try store.save(original)
+        #expect(try store.load(id: original.id) == original)
+    }
+
+    @Test func `screenshots recover even before the first transcript event`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = MeetingImage(id: "shot", dataUrl: "data:image/png;base64,aGVsbG8=",
+            capturedAt: "2026-09-10T15:20:30Z", at: 30000, caption: "Launch plan")
+        try store.checkpointImages([image], id: "m-1")
+        #expect(store.recoverable() == ["m-1"])
+        #expect(store.recoverImages(id: "m-1") == [image])
+        var original = meeting()
+        original.images = [image]
+        original.events[0].originalText = "Original speech"
+        original.events[0].corrections = [TranscriptCorrection(text: original.events[0].text, correctedAt: "2026-09-10T16:00:00Z")]
+        original.notes = NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [
+            NoteBlock(id: "image-shot", kind: "image", text: "My caption", evidence: [], at: 30000, imageId: "shot", userEdited: true)
+        ])
+        try store.save(original)
+        store.discardJournal(id: "m-1")
+        #expect(store.recoverable().isEmpty)
+        #expect(store.recoverImages(id: "m-1").isEmpty)
+        #expect(try store.load(id: "m-1") == original)
+    }
+
     @Test func `journalled events replay in the order they settled`() throws {
         let (store, root) = try makeStore()
         defer { try? FileManager.default.removeItem(at: root) }

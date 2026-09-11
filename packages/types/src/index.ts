@@ -39,6 +39,8 @@ export interface TranscriptEvent {
    */
   tStart?: number;
   tEnd?: number;
+  originalText?: string;
+  corrections?: { text: string; correctedAt: string }[];
 }
 
 /** A verbatim pointer back into the transcript. Quotes are never paraphrased. */
@@ -65,6 +67,61 @@ export interface Item {
   salience: number;
   userEdited?: boolean;
   dismissed?: boolean;
+  completed?: boolean;
+  confirmed?: boolean;
+  needsReview?: boolean;
+}
+
+export interface NoteBullet {
+  id: string;
+  text: string;
+  evidence: Evidence[];
+  userEdited?: boolean;
+}
+
+export interface NoteTopic {
+  id: string;
+  title: string;
+  bullets: NoteBullet[];
+}
+
+export interface NotesDocument {
+  version: 1;
+  method: 'extractive' | 'on-device';
+  /**
+   * Why these are the transcript-based notes rather than the summarized ones.
+   *
+   * Set only when a host tried the optional on-device summary and it was
+   * unavailable, timed out, or produced nothing a quote supported. The reader is
+   * told which of the two they are holding and why, instead of being left to
+   * wonder why a set of notes came out thinner than the last.
+   */
+  notice?: string;
+  keyPoints: NoteBullet[];
+  topics: NoteTopic[];
+  /** Ordered, freely editable document. Legacy sections remain readable. */
+  blocks?: NoteBlock[];
+}
+
+export interface MeetingImage {
+  id: string;
+  dataUrl: string;
+  capturedAt: string;
+  /** Milliseconds on the meeting clock; independent of document position. */
+  at: number;
+  caption: string;
+}
+
+export interface NoteBlock {
+  id: string;
+  kind: 'paragraph' | 'heading' | 'bullet' | 'image';
+  text: string;
+  evidence: Evidence[];
+  at?: number;
+  imageId?: string;
+  userEdited?: boolean;
+  needsReview?: boolean;
+  indent?: number;
 }
 
 export interface Preferences {
@@ -82,6 +139,8 @@ export interface Meeting {
   processing: ProcessingMode;
   events: TranscriptEvent[];
   items: Item[];
+  notes?: NotesDocument;
+  images?: MeetingImage[];
 }
 
 export type AdapterStatus =

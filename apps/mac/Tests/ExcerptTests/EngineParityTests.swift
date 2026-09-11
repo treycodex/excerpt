@@ -89,6 +89,50 @@ struct EngineParityTests {
         }
     }
 
+    /// The app's fallback when the optional on-device summary is unavailable. It was
+    /// missing from the bundle entirely, so a failed summary left a meeting carrying
+    /// no notes at all — which is what happened to a real capture on 11 September.
+    @Test func `the extractive notes document is reachable from the app`() throws {
+        let engine = try Self.makeEngine()
+        let events = ["The onboarding flow loses new teams at the permissions step.",
+                      "Legal approval is still pending, so the launch moves to October."]
+            .enumerated().map { index, text in
+                TranscriptEvent(id: "e\(index)", sessionId: "notes", role: .remote, speakerLabel: "SPEAKER",
+                                text: text, isFinal: true, tArrived: Double(index) * 4000)
+            }
+        let meeting = Meeting(id: "notes", title: "Launch review", startedAt: "2026-09-07T09:00:00Z",
+                              processing: .onDevice, events: events, items: [])
+        let notes = try engine.notes(for: meeting)
+        #expect(notes.method == "extractive")
+        #expect(!notes.keyPoints.isEmpty)
+        // Extractive means every bullet cites something that was actually said.
+        for bullet in notes.keyPoints + notes.topics.flatMap(\.bullets) {
+            let quote = try #require(bullet.evidence.first?.quote)
+            #expect(events.contains { $0.text.contains(quote) }, "“\(quote)” was never said")
+        }
+    }
+
+    /// One definition of "this was a talk, not a conversation", shared by both
+    /// surfaces so they cannot tell a user two different things about one meeting.
+    @Test func `the shape of a recording is judged by the shared engine`() throws {
+        let engine = try Self.makeEngine()
+        let talk = (0..<32).map { index in
+            TranscriptEvent(id: "t\(index)", sessionId: "shape", role: .remote, speakerLabel: "SPEAKER",
+                            text: "so the next archetype is the one everybody in college knows about.",
+                            isFinal: true, tArrived: Double(index) * 4000)
+        }
+        let meeting = { (events: [TranscriptEvent]) in
+            Meeting(id: "shape", title: "Recording", startedAt: "2026-09-07T09:00:00Z",
+                    processing: .onDevice, events: events, items: [])
+        }
+        #expect(try engine.shapeNotice(for: meeting(talk)).contains("Only one voice"))
+
+        let conversation = talk + [TranscriptEvent(id: "mine", sessionId: "shape", role: .you,
+            speakerLabel: "YOU", text: "I'll take the revised deck and send it Friday.",
+            isFinal: true, tArrived: 200_000)]
+        #expect(try engine.shapeNotice(for: meeting(conversation)).isEmpty)
+    }
+
     @Test func `subtitle lines come from the shared breaker, not a Swift copy`() throws {
         let engine = try Self.makeEngine()
         let lines = try engine.subtitleLines(

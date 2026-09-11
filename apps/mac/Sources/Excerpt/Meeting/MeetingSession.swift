@@ -27,7 +27,8 @@ final class MeetingSession {
         }
     }
 
-    private(set) var state: State = .idle
+    var onStateChange: (() -> Void)?
+    private(set) var state: State = .idle { didSet { onStateChange?() } }
     private(set) var events: [TranscriptEvent] = []
     private(set) var lastSaved: Meeting?
 
@@ -49,6 +50,12 @@ final class MeetingSession {
     /// "Nothing worth noting was said" is the right answer to exactly one of them, and
     /// saying it for all four is how a broken app looks like a working one.
     private(set) var diagnosis = ""
+
+    /// Why the notes in the last meeting are the extractive ones, when they are.
+    /// Nil when the on-device summary succeeded or no meeting has finished. The
+    /// user is told which of the two they are reading rather than left to guess
+    /// why a set of notes looks thinner than the last.
+    private(set) var notesNotice: String?
     private var audioStats: [SourceKind: SourceStats] = [:]
     private var speechStats: [SourceKind: TranscriptStats] = [:]
 
@@ -69,7 +76,8 @@ final class MeetingSession {
          .microphone: SourceTranscriber(kind: .microphone)]
     }
 
-    private var meetingId = ""
+    private(set) var meetingId = ""
+    private(set) var images: [MeetingImage] = []
     private var clock = MeetingClock()
     private var pumps: [Task<Void, Never>] = []
     private var edgePumps: [Task<Void, Never>] = []
@@ -86,6 +94,20 @@ final class MeetingSession {
         self.overlay = overlay
     }
 
+    var elapsedMilliseconds: Double { clock.positionMilliseconds() }
+    var canCaptureImage: Bool { if case .listening = state { return true }; return false }
+
+    func addScreenshot(_ capture: MeetingScreenshot.Capture, for id: String) throws {
+        guard id == meetingId, canCaptureImage else { throw NSError(domain: "Excerpt", code: 1, userInfo: [NSLocalizedDescriptionKey: "The meeting ended before the screenshot could be added."]) }
+        let image = MeetingImage(id: UUID().uuidString, dataUrl: capture.dataURL,
+            capturedAt: ISO8601DateFormatter().string(from: capture.capturedAt),
+            at: clock.positionMilliseconds(at: capture.capturedAt), caption: "")
+        let next = images + [image]
+        try store.checkpointImages(next, id: meetingId)
+        images = next
+        status = "Screenshot added · \(images.count) in this meeting"
+    }
+
     // MARK: - Start
 
     func start() async {
@@ -96,6 +118,7 @@ final class MeetingSession {
         meetingId = "m-\(Int(Date().timeIntervalSince1970 * 1000))"
         clock = MeetingClock()
         events = []
+        images = []
         eventCounter = 0
         suppressedEchoes = 0
         youEdge = nil
@@ -242,6 +265,7 @@ final class MeetingSession {
 
     private func finish(reason: FinishReason) async {
         guard state.isActive else { return }
+        if case .saving = state { return }
         state = .saving
         status = "Writing your notes…"
 
@@ -266,13 +290,53 @@ final class MeetingSession {
 
         overlay.update(speaker: "", text: "")
 
-        let meeting = buildMeeting(interrupted: reason == .interrupted)
+        var meeting = buildMeeting(interrupted: reason == .interrupted)
         do {
             try store.save(meeting)
             store.discardJournal(id: meetingId)
+            status = "Organizing key points…"
+            // `try?` here once threw away every reason the summary failed, and with no
+            // fallback behind it a meeting was saved carrying no notes at all — after
+            // the user had been told key points were being organized. The on-device
+            // model stays optional; having notes does not.
+            var document: NotesDocument?
+            do {
+                document = try await NotesSummarizer.summarize(meeting)
+                notesNotice = nil
+            } catch {
+                log.error("on-device summary unavailable: \(error.localizedDescription)")
+                notesNotice = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                document = try? engine.notes(for: meeting)
+                if document == nil {
+                    log.error("extractive notes also failed — the meeting is saved with its transcript and items only")
+                }
+            }
+            if var document {
+                // Both reasons a set of notes can come out thin, in the order they
+                // matter: what kind of recording this was, then why the summary is
+                // the transcript-based one. Carried in the document rather than only
+                // on the status line, because the notes window is where somebody
+                // reads these — and it opens again tomorrow, long after a menu bar
+                // caption has gone.
+                let shape = (try? engine.shapeNotice(for: meeting)) ?? ""
+                let notice = [shape, notesNotice].compactMap { $0 }
+                    .filter { !$0.isEmpty }.joined(separator: " ")
+                document.notice = notice.isEmpty ? nil : notice
+                var enhanced = meeting
+                enhanced.notes = document
+                do {
+                    try store.save(enhanced)
+                    meeting = enhanced
+                } catch {
+                    log.error("summary save failed; original meeting remains saved: \(error)")
+                }
+            }
             lastSaved = meeting
             state = .idle
             status = summary(of: meeting)
+            // Which of the two kinds of notes this is, said plainly. Thinner notes
+            // with a reason beat thinner notes that look like a bad summary.
+            if notesNotice != nil { status += " · transcript-based notes" }
         } catch {
             // The journal is still on disk, so nothing is lost — say that rather than
             // implying the meeting is gone.
@@ -300,7 +364,8 @@ final class MeetingSession {
             endedAt: ISO8601DateFormatter().string(from: Date()),
             processing: .onDevice,
             events: finals,
-            items: items
+            items: items,
+            images: images
         )
     }
 
@@ -376,7 +441,8 @@ final class MeetingSession {
         // The same assembly the live path uses, so a recovered meeting reads like one
         // that ended normally rather than like a pile of fragments.
         let recovered = TranscriptAssembly.assemble(store.replayJournal(id: id))
-        guard !recovered.isEmpty else {
+        let recoveredImages = store.recoverImages(id: id)
+        guard !recovered.isEmpty || !recoveredImages.isEmpty else {
             store.discardJournal(id: id)
             return nil
         }
@@ -384,17 +450,27 @@ final class MeetingSession {
         // meeting against today's date would reinterpret every "Thursday" in it.
         let started = Self.startTime(fromMeetingId: id) ?? Date()
         let items = (try? engine.extract(events: recovered, reference: started)) ?? []
-        let meeting = Meeting(
+        var meeting = Meeting(
             id: id,
             title: "\(Self.title(for: started)) (recovered)",
             startedAt: ISO8601DateFormatter().string(from: started),
             endedAt: nil,
             processing: .onDevice,
             events: recovered,
-            items: items
+            items: items,
+            images: recoveredImages
         )
-        try? store.save(meeting)
-        store.discardJournal(id: id)
-        return meeting
+        // A recovered meeting used to arrive with no notes at all. The summary is not
+        // re-run here — recovery is meant to be immediate — but the extractive document
+        // costs nothing and is what the notes window expects to open onto.
+        meeting.notes = try? engine.notes(for: meeting)
+        do {
+            try store.save(meeting)
+            store.discardJournal(id: id)
+            return meeting
+        } catch {
+            status = "Could not save recovered notes — the transcript and screenshots are still recoverable"
+            return nil
+        }
     }
 }

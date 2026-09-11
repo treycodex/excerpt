@@ -10,8 +10,9 @@
  * Nothing in this file or its imports may touch `window`, `document`, IndexedDB or
  * `fetch`. Capture, storage and rendering are the host's job on both platforms.
  */
-import type { Item, Preferences, TranscriptEvent } from '@excerpt/types';
+import type { Item, Meeting, Preferences, TranscriptEvent } from '@excerpt/types';
 import { extractItems } from './extract';
+import { buildNotesDocument, shapeNotice } from './notes/summary';
 import { splitIntoSubtitleLines, dashDialogue } from './caption/lines';
 import { applyPreferences, deriveBoosts, orderCategories, matchedBoosts, DEFAULT_PREFERENCES } from './scoring';
 import { toMarkdown } from './export/markdown';
@@ -30,11 +31,26 @@ export interface EngineAPI {
   rank(itemsJSON: string, preferencesJSON: string): string;
   boostsFor(instruction: string): string;
   subtitleLines(text: string, maxChars?: number): string;
+  /**
+   * The extractive notes document — excerpts of what was said, never a rewrite.
+   *
+   * The macOS app's optional on-device summary can be unavailable, time out, or
+   * produce nothing a quote supports. When it does, the host needs the same
+   * fallback the website has always used, rather than saving a meeting with no
+   * notes in it at all.
+   */
+  notes(meetingJSON: string): string;
+  /**
+   * A plain sentence about what kind of recording this is, or empty when there is
+   * nothing worth saying. Defined here so the website and the app cannot come to
+   * different conclusions about the same meeting.
+   */
+  shapeNotice(meetingJSON: string): string;
   markdown(meetingJSON: string): string;
   defaultPreferences(): string;
 }
 
-export const ENGINE_VERSION = '1';
+export const ENGINE_VERSION = '2';
 
 function parse<T>(json: string, fallback: T): T {
   try {
@@ -75,6 +91,16 @@ export const engine: EngineAPI = {
     // and the overlay shows one speaker at a time. Applying it to every wrapped line
     // would put a dialogue dash in front of half of one person's sentence.
     return JSON.stringify(splitIntoSubtitleLines(text ?? '', maxChars ? { maxChars } : {}));
+  },
+
+  notes(meetingJSON) {
+    const meeting = parse<Meeting | null>(meetingJSON, null);
+    return meeting ? JSON.stringify(buildNotesDocument(meeting)) : '';
+  },
+
+  shapeNotice(meetingJSON) {
+    const meeting = parse<Meeting | null>(meetingJSON, null);
+    return (meeting && shapeNotice(meeting)) || '';
   },
 
   markdown(meetingJSON) {

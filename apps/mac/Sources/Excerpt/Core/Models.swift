@@ -46,6 +46,8 @@ struct TranscriptEvent: Codable, Sendable, Identifiable, Equatable {
     /// they do not.
     var tStart: Double?
     var tEnd: Double?
+    var originalText: String?
+    var corrections: [TranscriptCorrection]?
 }
 
 struct Evidence: Codable, Sendable, Equatable {
@@ -69,6 +71,9 @@ struct Item: Codable, Sendable, Identifiable, Equatable {
     var salience: Double
     var userEdited: Bool?
     var dismissed: Bool?
+    var completed: Bool?
+    var confirmed: Bool?
+    var needsReview: Bool?
     /// Which boost terms fired, filled in by `rank`. Not stored.
     var matched: [String]?
 }
@@ -94,6 +99,31 @@ struct Meeting: Codable, Sendable, Identifiable, Equatable {
     var processing: ProcessingMode
     var events: [TranscriptEvent]
     var items: [Item]
+    var notes: NotesDocument?
+    var images: [MeetingImage]?
+}
+
+struct NoteBullet: Codable, Sendable, Equatable, Identifiable {
+    var id: String
+    var text: String
+    var evidence: [Evidence]
+    var userEdited: Bool?
+}
+
+struct NoteTopic: Codable, Sendable, Equatable, Identifiable {
+    var id: String
+    var title: String
+    var bullets: [NoteBullet]
+}
+
+struct NotesDocument: Codable, Sendable, Equatable {
+    var version = 1
+    var method: String
+    /// Why these are the transcript-based notes. See `NotesDocument` in packages/types.
+    var notice: String?
+    var keyPoints: [NoteBullet]
+    var topics: [NoteTopic]
+    var blocks: [NoteBlock]?
 }
 
 extension JSONEncoder {
@@ -108,4 +138,29 @@ extension JSONEncoder {
 
 extension JSONDecoder {
     static let excerpt = JSONDecoder()
+}
+
+struct TranscriptCorrection: Codable, Sendable, Equatable {
+    var text: String
+    var correctedAt: String
+}
+
+struct MeetingImage: Codable, Sendable, Equatable, Identifiable {
+    var id: String
+    var dataUrl: String
+    var capturedAt: String
+    var at: Double
+    var caption: String
+}
+
+struct NoteBlock: Codable, Sendable, Equatable, Identifiable {
+    var id: String
+    var kind: String
+    var text: String
+    var evidence: [Evidence]
+    var at: Double?
+    var imageId: String?
+    var userEdited: Bool?
+    var needsReview: Bool?
+    var indent: Int?
 }

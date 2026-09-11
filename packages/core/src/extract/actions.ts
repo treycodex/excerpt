@@ -2,6 +2,7 @@ import type { Assignee, Sentence } from './types';
 
 /** First-person commitment. The speaker is taking this on themselves. */
 const SELF_COMMIT = [
+  /\bi(?:'?ll| will)\s+(review|check|confirm|schedule|update|share|prepare|book|follow up|publish|complete|finish|test|fix|create)\b/i,
   /\bi'?ll\s+(take|own|do|send|handle|get|write|draft|pick up|sort)\b/i,
   /\bi\s+can\s+(take|own|do|send|handle|get|write|draft)\b/i,
   /\bi'?ve\s+got\s+(it|this|that)\b/i,
@@ -49,6 +50,8 @@ export interface ActionMatch {
 export function classifyAction(sentence: Sentence): ActionMatch | null {
   const text = sentence.norm;
   const fromYou = sentence.event.role === 'you';
+
+  if (/\b(if|unless|hypothetically|maybe)\b/i.test(text) || /\b(?:can|could) you (?:hear|see|imagine|believe|remember|explain|tell me)\b/i.test(text)) return null;
 
   if (VAGUE.some((r) => r.test(text))) return null;
 
