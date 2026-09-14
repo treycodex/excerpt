@@ -4,6 +4,36 @@ Everything another agent needs to continue this project: what it is, what was
 decided and why, what is proven versus assumed, and the traps that already cost
 hours. Read this before changing anything.
 
+**Current audience, September 13:** The user shifted Excerpt toward agency-side
+marketers: creative, media, performance, strategy, and account teams. The core job
+is keeping creative assets and report views together with their discussion and
+agreed next actions. Read [AGENCY-PRODUCT-INTENT.md](AGENCY-PRODUCT-INTENT.md).
+This supersedes the earlier designer/product-builder audience. Report context
+does not imply automatic report analysis or new integrations. The saved top-three
+to-do plan has been updated; app positioning changes remain unimplemented.
+
+**Product to-do, September 13 — the top three are implemented, not deployed.**
+Immediate notes before optional setup, capability-accurate enhancement controls, and
+agency campaign-review positioning. See
+[PRODUCT-EXPERIENCE-TODO.md](PRODUCT-EXPERIENCE-TODO.md) for the plan, what was
+verified, and what was not; and [AGENCY-PRODUCT-INTENT.md](AGENCY-PRODUCT-INTENT.md)
+for the audience the positioning now serves. The other seven audit opportunities
+remain out of scope. Three things to know before touching this work:
+
+- **The demo no longer ends on a wizard.** Completion and "Skip to notes" both open
+  `/m/:id` directly; `#/welcome/:id` and `#/setup` are rewritten in `router.parse`
+  to the meeting and to Record. `Onboarding.tsx` still exists and is unreachable.
+- **The notes toolbar is derived, not fixed.** `notesCapability` decides what may be
+  offered from the environment and the host's `getNotesProviderStatus`; a bridge
+  that cannot say which provider is ready gets the extractive rebuild and a link to
+  settings, never three buttons nothing will serve. A failed rewrite keeps the
+  current notes and offers the local rebuild as an explicit choice.
+- **Both home-page stills are generated from the running app** by
+  `apps/web/tools/render-product-shot.mjs`. They go stale the moment the notes view
+  changes — re-run it rather than editing a picture.
+
+Nothing here is deployed, and this entry is not approval to deploy it.
+
 **Strategy update, September 11:** See [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md)
 for the user-approved direction and proposed build sequence: visual meeting memory
 for screen-based reviews, editable live drafts, synchronized screenshots and speech,

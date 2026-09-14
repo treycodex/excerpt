@@ -83,7 +83,11 @@ export function toMarkdown(meeting: Meeting): string {
 
   out.push('## Transcript', '');
   for (const e of meeting.events.filter((x) => x.isFinal)) {
-    if (e.originalText !== undefined) out.push(`_Original: ${e.originalText}_`, '');
+    if (e.originalText !== undefined) {
+      out.push(`_Original: ${e.originalText}_`);
+      for (const correction of e.corrections ?? []) out.push(`_Corrected ${correction.correctedAt}: ${correction.text}_`);
+      out.push('');
+    }
     out.push(`**${e.speakerLabel}** ${e.tStart !== undefined ? clock(e.tStart * 1000) : `~${clock(e.tArrived)}`} — ${e.text}`, '');
   }
 
@@ -106,5 +110,9 @@ export function toHTML(meeting: Meeting): string {
     return `<p>${text}</p>`;
   }).join('\n');
   const review = meeting.items.filter((i) => !i.dismissed).map((i) => `<li>${escape(noteTitle(i))}${i.due ? ` · Due ${escape(i.due)}` : ''}${i.assignee === 'you' ? ' · Assigned to you' : ''}${i.confirmed ? ' · Confirmed by you' : ''}</li>`).join('');
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>${escape(meeting.title)}</title><style>body{max-width:760px;margin:60px auto;padding:0 24px;font:17px/1.65 system-ui;color:#242424}h1{font-size:36px;line-height:1.2}h2{margin-top:32px;font-size:23px}p,ul{margin:8px 0}figure{margin:28px 0}img{max-width:100%;height:auto}figcaption{font-size:13px;color:#666}details{margin-top:48px}li{white-space:normal}</style><h1>${escape(meeting.title)}</h1><p>${escape(meeting.startedAt)}</p>${body}${review ? `<details><summary>Decisions and commitments</summary><ul>${review}</ul></details>` : ''}</html>`;
+  const transcript = meeting.events.filter((event) => event.isFinal).map((event) => {
+    const history = event.originalText === undefined ? '' : `<small>Original: ${escape(event.originalText)}${(event.corrections ?? []).map((correction) => `<br>Corrected ${escape(correction.correctedAt)}: ${escape(correction.text)}`).join('')}</small>`;
+    return `<p><b>${escape(event.speakerLabel)}</b> ${event.tStart !== undefined ? clock(event.tStart * 1000) : `~${clock(event.tArrived)}`} — ${escape(event.text)}${history}</p>`;
+  }).join('');
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>${escape(meeting.title)}</title><style>body{max-width:760px;margin:60px auto;padding:0 24px;font:17px/1.65 system-ui;color:#242424}h1{font-size:36px;line-height:1.2}h2{margin-top:32px;font-size:23px}p,ul{margin:8px 0}figure{margin:28px 0}img{max-width:100%;height:auto}figcaption,small{display:block;font-size:13px;color:#666}details{margin-top:48px}li{white-space:normal}</style><h1>${escape(meeting.title)}</h1><p>${escape(meeting.startedAt)}</p>${body}${review ? `<details><summary>Decisions and commitments</summary><ul>${review}</ul></details>` : ''}${transcript ? `<details><summary>Transcript and correction history</summary>${transcript}</details>` : ''}</html>`;
 }

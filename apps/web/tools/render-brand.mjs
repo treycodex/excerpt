@@ -62,10 +62,10 @@ writeFileSync(join(work, 'og.html'), `<!doctype html><meta charset="utf-8"><styl
   .rule{border-top:1px solid #393b32;padding-top:22px;display:flex;justify-content:space-between;
         font-size:16px;letter-spacing:.08em;font-family:ui-monospace,Menlo,monospace;color:${MUTED}}
 </style>
-<div class="top"><span>FREE, OPEN-SOURCE MEETING NOTES</span><span>CINEMATIC SUBTITLES. CLEAR NOTES.</span></div>
+<div class="top"><span>MEETING MEMORY FOR CREATIVE AND MEDIA AGENCIES</span><span>FREE. OPEN SOURCE. ON YOUR DEVICE.</span></div>
 <div><div class="wordmark">excerpt<span>&#10035;</span></div>
-<p class="tag">Meeting notes. Cinematic feel. <em>Free. Open source.</em></p></div>
-<div class="rule"><span>LIVE SUBTITLES &middot; TRANSCRIPTS &middot; MEETING NOTES</span><span>EXCERPT</span></div>`);
+<p class="tag">The creative, the numbers, and <em>the conversation.</em></p></div>
+<div class="rule"><span>REPORTS &middot; CREATIVE &middot; TRANSCRIPT-LINKED NOTES</span><span>EXCERPT</span></div>`);
 
 /**
  * Headless Chrome writes the screenshot and then does not exit — measured, and it
@@ -73,6 +73,10 @@ writeFileSync(join(work, 'og.html'), `<!doctype html><meta charset="utf-8"><styl
  * the process.
  */
 async function shoot(page, out, size, transparent = false) {
+  // Wait-for-the-file is how this knows Chrome is done, so an existing file from a
+  // previous run satisfies the wait immediately and the asset is silently never
+  // regenerated. Removing it first is the whole fix.
+  rmSync(out, { force: true });
   const chrome = spawn(CHROME, [
     '--headless=new', '--disable-gpu', '--hide-scrollbars',
     ...(transparent ? ['--default-background-color=00000000'] : []),

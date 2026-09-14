@@ -83,11 +83,13 @@ struct Preferences: Codable, Sendable, Equatable {
     var boosts: [String]
     var instruction: String
     var transcriptionChoice: String?
+    var notesProvider: String?
 
     static let `default` = Preferences(
         order: [.decision, .action, .deadline, .question],
         boosts: [],
-        instruction: ""
+        instruction: "",
+        notesProvider: "apple"
     )
 }
 
@@ -105,6 +107,7 @@ struct Meeting: Codable, Sendable, Identifiable, Equatable {
     var draftRevision: Int?
     /// Enhancement is reviewable and never replaces the user's current document.
     var suggestedNotes: NotesDocument?
+    var sourceRevision: Int? = nil
 }
 
 struct NoteBullet: Codable, Sendable, Equatable, Identifiable {
@@ -128,6 +131,34 @@ struct NotesDocument: Codable, Sendable, Equatable {
     var keyPoints: [NoteBullet]
     var topics: [NoteTopic]
     var blocks: [NoteBlock]?
+    var generation: NotesGeneration? = nil
+}
+
+struct NotesGeneration: Codable, Sendable, Equatable {
+    var provider: String
+    var model: String
+    var generatedAt: String
+    var sourceRevision: Int
+    var style: String
+}
+
+struct NotesGenerationRequest: Codable, Sendable, Equatable {
+    var style: String
+}
+
+/// What the notes window is allowed to offer, answered without making a request.
+///
+/// Whether a provider is *selected* and whether it can be *asked* are different
+/// questions, and only the second one licenses an "Improve notes" button. Apple's
+/// availability is a local property read; the OpenAI answer is whether a key exists
+/// in Keychain. Neither costs anything, and neither sends a token anywhere.
+struct NotesProviderStatus: Codable, Sendable, Equatable {
+    var openAIKeyConfigured: Bool
+    var selected: String
+    var ready: Bool
+    var reason: String?
+    var providerName: String
+    var processing: String
 }
 
 extension JSONEncoder {
@@ -158,6 +189,7 @@ struct MeetingImage: Codable, Sendable, Equatable, Identifiable {
     var caption: String
     var origin: String? = nil
     var context: MeetingImageContext? = nil
+    var needsReview: Bool? = nil
 }
 
 struct MeetingImageContext: Codable, Sendable, Equatable {

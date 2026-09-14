@@ -124,6 +124,7 @@ final class MeetingSession {
 
     private let engine: CoreEngine
     private let store: MeetingStore
+    private let preferences: PreferencesStore
     private let overlay: OverlayController
     private let log = Logger(subsystem: "com.excerpt.app", category: "meeting")
 
@@ -161,9 +162,11 @@ final class MeetingSession {
     private var youEdge: LiveState?
     private var remoteEdge: LiveState?
 
-    init(engine: CoreEngine, store: MeetingStore, overlay: OverlayController) {
+    init(engine: CoreEngine, store: MeetingStore, preferences: PreferencesStore,
+         overlay: OverlayController) {
         self.engine = engine
         self.store = store
+        self.preferences = preferences
         self.overlay = overlay
     }
 
@@ -482,7 +485,8 @@ final class MeetingSession {
             items: items,
             notes: draftNotes,
             images: MeetingMoments.reconcile(images, events: finals),
-            draftRevision: nil
+            draftRevision: nil,
+            sourceRevision: 0
         )
     }
 
@@ -493,7 +497,8 @@ final class MeetingSession {
             startedAt: ISO8601DateFormatter().string(from: clock.startedAt),
             endedAt: nil, processing: .onDevice,
             events: settled, items: [],
-            notes: draftNotes, images: MeetingMoments.reconcile(images, events: settled), draftRevision: draftRevision
+            notes: draftNotes, images: MeetingMoments.reconcile(images, events: settled),
+            draftRevision: draftRevision, sourceRevision: 0
         )
     }
 
@@ -532,9 +537,11 @@ final class MeetingSession {
         var document: NotesDocument?
         var failureNotice: String?
         do {
-            document = try await NotesSummarizer.summarize(source)
+            document = try await NotesProviderCoordinator.summarize(
+                source, preferences: preferences.load(),
+                request: NotesGenerationRequest(style: "balanced"))
         } catch {
-            log.error("on-device summary unavailable: \(error.localizedDescription)")
+            log.error("note enhancement unavailable: \(error.localizedDescription)")
             failureNotice = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             document = try? engine.notes(for: source)
         }

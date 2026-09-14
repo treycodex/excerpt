@@ -45,7 +45,9 @@ export function editableDocument(meeting: Meeting): NotesDocument {
     const bullets = [...section.bullets].sort((a, b) => (timeOf(a.evidence) ?? 0) - (timeOf(b.evidence) ?? 0));
     const first = bullets[0];
     if (section.title && section.title !== 'Discussion excerpts' && first) {
-      blocks.push({ id: `heading-${section.id}`, kind: 'heading', text: section.title, evidence: [], ...(timeOf(first.evidence) !== undefined ? { at: timeOf(first.evidence)! } : {}) });
+      blocks.push({ id: `heading-${section.id}`, kind: 'heading', text: section.title,
+        evidence: bullets.flatMap((bullet) => bullet.evidence),
+        ...(timeOf(first.evidence) !== undefined ? { at: timeOf(first.evidence)! } : {}) });
     }
     for (const bullet of bullets) {
       const key = bullet.text.toLowerCase().trim();
@@ -117,16 +119,20 @@ export function previewTranscriptCorrection(meeting: Meeting, eventId: string, t
   const updated = { ...event, text: text.trim(), originalText: event.originalText ?? event.text,
     corrections: [...(event.corrections ?? []), { text: text.trim(), correctedAt }] };
   const events = meeting.events.map((e) => e.id === eventId ? updated : e);
-  const rebuilt = refreshMeetingNotes({ ...meeting, events, items: meeting.items.filter((i) => !uses(i.evidence, eventId)) });
+  const sourceRevision = (meeting.sourceRevision ?? 0) + 1;
+  const rebuilt = refreshMeetingNotes({ ...meeting, events, sourceRevision, items: meeting.items.filter((i) => !uses(i.evidence, eventId)) });
   const oldDocument = editableDocument(meeting);
   const fresh = editableDocument({ ...rebuilt, notes: buildNotesDocument(rebuilt), images: [] });
   const affected = fresh.blocks!.filter((b) => uses(b.evidence, eventId));
   const changes: { before: string; after: string }[] = [];
+  const generatedDocument = meeting.notes?.method === 'cloud' || meeting.notes?.method === 'on-device';
   let inserted = false;
   const blocks = oldDocument.blocks!.flatMap((block): NoteBlock[] => {
     if (!uses(block.evidence, eventId)) return [block];
-    if (block.userEdited) {
-      changes.push({ before: block.text, after: 'Your wording is kept and flagged for review.' });
+    if (generatedDocument || block.userEdited) {
+      changes.push({ before: block.text, after: generatedDocument && !block.userEdited
+        ? 'Generated wording is kept and flagged until you refresh or review it.'
+        : 'Your wording is kept and flagged for review.' });
       return [{ ...block, needsReview: true }];
     }
     if (inserted) { changes.push({ before: block.text, after: 'Merged into the corrected passage.' }); return []; }
@@ -134,7 +140,7 @@ export function previewTranscriptCorrection(meeting: Meeting, eventId: string, t
     changes.push({ before: block.text, after: affected.map((b) => b.text).join('\n') || 'No longer extracted as a note.' });
     return affected;
   });
-  if (!inserted && affected.length) for (const block of affected) insertAtTime(blocks, block);
+  if (!generatedDocument && !inserted && affected.length) for (const block of affected) insertAtTime(blocks, block);
   const protectedItems = meeting.items.filter((i) => uses(i.evidence, eventId) && (i.userEdited || i.completed || i.dismissed || i.confirmed));
   const freshItems = rebuilt.items.filter((i) => uses(i.evidence, eventId));
   for (const old of meeting.items.filter((i) => uses(i.evidence, eventId))) {
@@ -144,7 +150,15 @@ export function previewTranscriptCorrection(meeting: Meeting, eventId: string, t
   const items = protectedItems.length
     ? [...rebuilt.items.filter((i) => !uses(i.evidence, eventId)), ...protectedItems.map((i) => ({ ...i, confirmed: false, needsReview: true }))]
     : rebuilt.items;
-  return { meeting: { ...rebuilt, items, notes: { ...rebuilt.notes!, blocks } }, changes };
+  const images = meeting.images?.map((image) => {
+    if (!image.context?.eventIds.includes(eventId)) return image;
+    changes.push({ before: image.caption || `Captured moment at ${Math.round(image.at / 1000)}s`, after: 'Its nearby transcript context will be marked for review.' });
+    return { ...image, needsReview: true };
+  });
+  const notes = generatedDocument ? { ...meeting.notes!, blocks } : { ...rebuilt.notes!, blocks };
+  const nextMeeting = { ...rebuilt, sourceRevision, items, notes, ...(images ? { images } : {}) };
+  delete nextMeeting.suggestedNotes;
+  return { meeting: nextMeeting, changes };
 }
 
 export function safeImageUrl(url: string): boolean {

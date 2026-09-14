@@ -3,8 +3,8 @@
 The landing page's free-start buttons open `#/get-started`:
 
 - Mac: a DMG download when `VITE_MAC_DOWNLOAD_URL` is configured; otherwise an honest source-build link.
-- Browser: `#/setup` for subtitle style and optional note priorities, then `#/record` for audio setup.
-- Demo: `#/session`; first-time users see personalization before their saved demo notes.
+- Browser: `#/record` for audio setup. Subtitle style and note priorities are optional and live in `#/preferences`.
+- Demo: `#/session`; finishing it, or Skip to notes, opens the saved demo meeting directly.
 
 The native app opens setup automatically on first launch. Setup covers subtitle style,
 microphone/system-audio/speech permissions, Apple's on-device speech model, and menu-bar usage.

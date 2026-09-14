@@ -62,7 +62,7 @@ struct SetupView: View {
                 .tracking(2.5)
                 .foregroundStyle(Palette.ink)
                 .padding(.bottom, 10)
-            Text("Free, open-source\nmeeting notes.")
+            Text("The work, the numbers,\nthe conversation.")
                 .font(.system(size: 13))
                 .lineSpacing(4)
                 .foregroundStyle(Palette.dim)
@@ -123,8 +123,8 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 26) {
             heading(
                 "WELCOME TO EXCERPT",
-                "Meeting notes. A cinematic touch.",
-                "Live subtitles during your meeting. Decisions and action items afterwards. Choose your subtitle style to get started."
+                "Remember the screen, and the conversation.",
+                "Capture the report or creative on screen, keep the discussion beside it, and read editable notes afterwards. Subtitles follow the conversation while you watch the work — choose how they look to get started."
             )
 
             subtitlePreview

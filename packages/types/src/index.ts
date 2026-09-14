@@ -87,7 +87,7 @@ export interface NoteTopic {
 
 export interface NotesDocument {
   version: 1;
-  method: 'extractive' | 'on-device';
+  method: 'extractive' | 'on-device' | 'cloud';
   /**
    * Why these are the transcript-based notes rather than the summarized ones.
    *
@@ -101,6 +101,40 @@ export interface NotesDocument {
   topics: NoteTopic[];
   /** Ordered, freely editable document. Legacy sections remain readable. */
   blocks?: NoteBlock[];
+  /** How this wording was produced. Kept separate from transcription provenance. */
+  generation?: NotesGeneration;
+}
+
+export interface NotesGeneration {
+  provider: 'apple' | 'openai';
+  model: string;
+  generatedAt: string;
+  sourceRevision: number;
+  style: 'balanced' | 'shorter' | 'detailed';
+}
+
+export interface NotesGenerationRequest {
+  style: 'balanced' | 'shorter' | 'detailed';
+}
+
+/**
+ * What the host can be asked to do right now, read without making a request.
+ *
+ * Every field past the first is optional so that an older app build, which reports
+ * only the stored-key flag, still parses — and so that the web side treats "did not
+ * say" as "not proven ready" rather than as a working provider.
+ */
+export interface NotesProviderStatus {
+  openAIKeyConfigured: boolean;
+  /** The provider the user has chosen, not the one that happens to be compiled in. */
+  selected?: 'apple' | 'openai';
+  /** Whether that provider can be asked now. Determined without a paid request. */
+  ready?: boolean;
+  reason?: 'no-key' | 'model-unavailable' | 'model-not-ready' | 'not-configured';
+  /** Shown to the reader, so it must name the actual provider. */
+  providerName?: string;
+  /** Where the rewriting happens. Never assumed to be the Mac. */
+  processing?: 'on-device' | 'cloud';
 }
 
 export interface MeetingImage {
@@ -117,6 +151,8 @@ export interface MeetingImage {
    * and ends 15 seconds after; event ids are reconciled as final speech arrives.
    */
   context?: MeetingImageContext;
+  /** Nearby transcript wording changed after capture; the image itself is untouched. */
+  needsReview?: boolean;
 }
 
 export interface MeetingImageContext {
@@ -142,6 +178,8 @@ export interface Preferences {
   boosts: string[];
   instruction: string;
   transcriptionChoice?: 'on-device-only' | 'cloud-allowed';
+  /** Optional note wording provider. Transcription remains independent. */
+  notesProvider?: 'apple' | 'openai';
 }
 
 export interface Meeting {
@@ -158,6 +196,8 @@ export interface Meeting {
   draftRevision?: number;
   /** Finished enhancement waits here for review; it never overwrites the document. */
   suggestedNotes?: NotesDocument;
+  /** Advances only when source transcript wording changes. */
+  sourceRevision?: number;
 }
 
 export type AdapterStatus =

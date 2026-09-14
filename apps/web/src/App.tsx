@@ -8,7 +8,6 @@ import { Library } from './views/Library';
 import { Preferences } from './views/Preferences';
 import { GetStarted } from './views/GetStarted';
 import { NotesWorkspace } from './views/NotesWorkspace';
-import { Onboarding } from './views/Onboarding';
 import { Record } from './views/Record';
 import { useRoute } from './router';
 
@@ -46,8 +45,16 @@ export function App() {
     });
   }, [route]);
 
+  // `Session` latches on the first call, so anything thrown in here would leave the
+  // demo with no meeting, no navigation, and a Skip button that no longer does
+  // anything. Reading preferences is not the only way that happens: `scoreItem` walks
+  // `order` and `boosts`, and a stored record with either field null — an older write,
+  // or a host payload that spreads over the defaults — throws inside the ranking. So
+  // the ranking is attempted and the unranked list is the fallback, rather than the
+  // read being guarded and the use of the result left bare.
   const onEnd = useCallback(async (events: TranscriptEvent[]) => {
-    const p = await loadPreferences();
+    const p = await loadPreferences().catch(() => null);
+    const items = extractItems(events, new Date());
     const m: Meeting = {
       id: `m-${Date.now()}`,
       title: 'Northside — campaign review',
@@ -55,22 +62,22 @@ export function App() {
       endedAt: new Date().toISOString(),
       processing: 'demo',
       events,
-      items: applyPreferences(extractItems(events, new Date()), p),
+      items: (() => { try { return p ? applyPreferences(items, p) : items; } catch { return items; } })(),
     };
     try { await saveMeeting(m); setMeetingSaveFailed(false); }
     catch { setMeetingSaveFailed(true); }
     setMeeting(m);
-    let welcomed = false;
-    try { welcomed = localStorage.getItem('excerpt:welcomed') === '1'; } catch { /* defaults to setup */ }
-    go(welcomed ? `/m/${m.id}` : `/welcome/${m.id}`);
+    // The notes are what was asked for, so the notes are what opens. Choosing a
+    // subtitle style and a review order changes nothing about this document and is
+    // not a toll to pay before reading it; Preferences holds both, and the notes
+    // page says so once.
+    go(`/m/${m.id}`);
   }, [go]);
 
   const body = (() => {
     switch (route.name) {
       case 'get-started':
         return <GetStarted />;
-      case 'setup':
-        return <Onboarding forCapture onDone={() => go('/record')} />;
       case 'session':
         return <Session onEnd={onEnd} />;
       case 'library':
@@ -83,15 +90,6 @@ export function App() {
         return <NotesWorkspace><Preferences /></NotesWorkspace>;
       case 'record':
         return <NotesWorkspace><Record onSaved={(id) => go(`/m/${id}`)} /></NotesWorkspace>;
-      case 'onboarding':
-        return (
-          <Onboarding
-            onDone={() => {
-              try { localStorage.setItem('excerpt:welcomed', '1'); } catch { /* no storage */ }
-              go(`/m/${route.id}`);
-            }}
-          />
-        );
       case 'meeting':
         if (missing) {
           return (
@@ -130,7 +128,7 @@ export function App() {
       <button className="skip-link" onClick={() => document.querySelector<HTMLElement>('#main')?.focus()}>
         Skip to content
       </button>
-      {!['landing', 'meeting', 'library', 'setup', 'get-started', 'onboarding', 'record', 'preferences', 'session'].includes(route.name) && <nav className="nav" aria-label="Main">
+      {!['landing', 'meeting', 'library', 'get-started', 'record', 'preferences', 'session'].includes(route.name) && <nav className="nav" aria-label="Main">
         <a href="#/">Excerpt</a>
         <span className="spacer" />
         {/* Inside the Mac app, recording is the menu bar's job — this screen asks the

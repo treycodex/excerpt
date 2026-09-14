@@ -23,6 +23,8 @@ export {
   orderCategories,
 } from './scoring';
 export { loadPreferences, savePreferences } from './store/preferences';
+export { notesCapability, mergeGeneratedNotes, compareNotesDocuments, notesMetadataDifference } from './notes/generation';
+export type { NotesCapability, NotesEnhancement } from './notes/generation';
 export {
   editableDocument, insertMeetingImage, previewTranscriptCorrection, preserveDocument,
   safeImageUrl, meetingImageContext, reconcileMeetingImageContexts, meetingImagePassage,

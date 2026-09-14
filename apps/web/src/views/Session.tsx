@@ -32,7 +32,14 @@ export function Session({ onEnd }: { onEnd: (events: TranscriptEvent[]) => void 
   const collected = useRef<TranscriptEvent[]>([]);
   const base = useRef({ at: performance.now(), offset: 0 });
 
+  // The clock keeps ticking while `onEnd` reads preferences and writes the meeting,
+  // so the tick that ends the demo is not the only one that can reach this before the
+  // route changes. Without the latch the natural ending saved the same demo twice and
+  // the library showed two of it — the ending a visitor is most likely to see.
+  const ended = useRef(false);
   const finish = useCallback(() => {
+    if (ended.current) return;
+    ended.current = true;
     ambience.current?.stop();
     ambience.current = null;
     pip?.defaultView?.close();

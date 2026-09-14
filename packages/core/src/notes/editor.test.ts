@@ -86,7 +86,21 @@ describe('editable notes and meeting screenshots', () => {
     expect(next.notes!.blocks![0]!.needsReview).toBe(true);
     expect(next.items.find((i) => i.completed)!.needsReview).toBe(true);
     expect(next.items.find((i) => i.completed)!.confirmed).toBe(false);
-    expect(next.images).toEqual(input.images);
+    expect(next.images![0]).toEqual({ ...input.images![0], needsReview: true });
+    expect(next.sourceRevision).toBe(1);
+  });
+  it('keeps cloud wording for review instead of silently replacing it with extraction', () => {
+    const input = insertMeetingImage(base(), shot('s', 30000));
+    input.notes = { ...input.notes!, method: 'cloud', generation: {
+      provider: 'openai', model: 'gpt-5-mini', generatedAt: '2026-09-07T09:05:00Z', sourceRevision: 0, style: 'balanced',
+    } };
+    const before = input.notes.blocks![0]!.text;
+    const next = previewTranscriptCorrection(input, 'a', "I'll send the revised deck by Friday.").meeting;
+    expect(next.notes!.method).toBe('cloud');
+    expect(next.notes!.blocks![0]!.text).toBe(before);
+    expect(next.notes!.blocks![0]!.needsReview).toBe(true);
+    expect(next.notes!.generation!.sourceRevision).toBe(0);
+    expect(next.sourceRevision).toBe(1);
   });
   it('does not treat a source citation as permission to execute HTML in the portable export', () => {
     const input = insertMeetingImage(base(), shot('s', 30000));

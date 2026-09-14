@@ -9,10 +9,14 @@ Later phases remain proposed and must not be presented as shipped.
 
 **Remember what was said—and what was on screen.**
 
-Serve designers and product builders reviewing work on a shared screen. Their
-concrete job is to leave a review with the relevant design, its discussion, and
-agreed changes together in an editable document. Training and walkthroughs are
-secondary validation cases, not separate products or modes to build out.
+**Audience update, September 13:** Serve agency-side marketers across creative,
+media, performance, strategy, and account teams. Their concrete job is to leave
+campaign reviews with the relevant creative assets and reports, their discussion,
+and agreed next actions together in an editable document. Reports and dashboards
+are visual context alongside designs, decks, and video frames. See
+[AGENCY-PRODUCT-INTENT.md](AGENCY-PRODUCT-INTENT.md) for the current audience,
+workflow examples, and report-evidence boundaries. Training and general
+walkthroughs remain secondary cases.
 
 The switching hypothesis: an individual who currently uses Granola plus manually
 collected screenshots can replace that workflow with Excerpt. Test this with real
@@ -36,15 +40,16 @@ workflow; absence from documentation is not proof of absence from the product.
 
 Excerpt's proposed advantage is the complete interaction:
 
-1. Capture a region while someone explains a design.
+1. Capture a region while someone explains a creative asset or campaign report.
 2. Keep the image's meeting timestamp and surrounding speech together.
 3. Add a short personal observation, optionally marking a point of interest.
 4. Finish with editable notes containing that image at its capture position.
 5. Open the image to inspect the nearby conversation or correct its transcription.
 
-Example: someone says “Keep this layout, but move the price above the button.”
-The saved moment shows which layout they meant, the relevant passage, and an
-editable note describing the change. It does not guess an owner.
+Example: a team reviews a campaign report, opens the underperforming creative,
+and agrees to test a clearer opening message. Saved moments retain the report
+view and creative asset beside the relevant passages and an editable note of the
+agreed test. Excerpt does not guess an owner or claim to verify metrics from pixels.
 
 Catch Up supplies immediate value during the call. The end review helps the user
 resolve commitments afterwards. Neither requires a new AI chat interface.
@@ -198,6 +203,16 @@ NotesDocument.tsx, native/shared schemas.
 
 ## Phase 3 — Make the notes worth keeping (September 19–22)
 
+**Implemented in code:** a native NotesProvider boundary with Apple Intelligence
+and an explicitly selected OpenAI BYOK path; Keychain-only credential persistence;
+structured, quote-verified output through the Responses API; fixed provider/model
+metadata separate from transcription; screenshot-caption context without uploading
+image pixels; balanced/shorter/more-detail previews; preservation of handwritten
+blocks and image placement; and explicit authentication, timeout, rate-limit and
+unsupported-output failures. The OpenAI path still needs a real-key quality run on
+the corrected reference transcripts, plus long-meeting latency and coverage
+measurement, before this phase is release-proven.
+
 Add a NotesProvider contract with the existing Apple implementation and one
 optional cloud implementation. Before selecting a service, compare candidate
 outputs on the same manually corrected transcripts to isolate summary quality.
@@ -240,6 +255,15 @@ packages/core/src/notes/editor.ts and summary.ts, NotesDocument.tsx.
 
 ## Phase 4 — Review, corrections and a usable deliverable (September 23–24)
 
+**Implemented in code:** source revisions and full correction history; deterministic
+updates for extractive notes; review flags for dependent generated blocks, confirmed
+items and captured moments; invalidation of stale suggestions; protected user
+writing and image positions; rich clipboard content with embedded images and a
+plain Markdown fallback; standalone HTML export with embedded images, transcript
+and correction history; and regression coverage for the correction/export paths.
+Destination-by-destination paste checks and the full real-device acceptance journey
+remain before this phase is release-proven.
+
 - Keep end review short and optional: decisions, your commitments, unresolved
   ownership. Confirm/correct/dismiss in place with nearby source access.
 - A transcript correction increments source revision. Flag all dependent generated
@@ -263,7 +287,7 @@ reuse the notes, then observe where they must reconstruct missing context. Recor
 time to a usable document, cleanup edits, source lookups, failures, and whether
 they would use Excerpt instead of their current notes-plus-screenshots workflow.
 
-Build an explicitly labeled public sample: a design review with a screenshot,
+Build an explicitly labeled public sample: an agency campaign review with a screenshot,
 missed requirement, personal note, corrected name and confirmed commitment. Let
 visitors operate the editor, moment viewer, correction and export. Use curated
 sample data transparently; never imply it was transcribed live from their machine.

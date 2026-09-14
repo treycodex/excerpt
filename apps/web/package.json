@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "vitest run",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "build:notes": "vite build --outDir ../mac/Resources/notes --emptyOutDir"

@@ -1,4 +1,4 @@
-import type { Meeting, NotesDocument, Preferences } from '@excerpt/types';
+import type { Meeting, NotesDocument, NotesGenerationRequest, NotesProviderStatus, Preferences } from '@excerpt/types';
 
 /**
  * The seam between the website and the macOS app.
@@ -23,7 +23,10 @@ export interface ExcerptBridge {
   /** Hands the Markdown to a real save panel rather than a download the sandbox eats. */
   exportMarkdown(filename: string, markdown: string): Promise<void>;
   exportHTML?(filename: string, html: string): Promise<void>;
-  summarizeNotes?(meeting: Meeting): Promise<NotesDocument>;
+  summarizeNotes?(meeting: Meeting, request: NotesGenerationRequest): Promise<NotesDocument>;
+  getNotesProviderStatus?(): Promise<NotesProviderStatus>;
+  configureOpenAIKey?(): Promise<NotesProviderStatus>;
+  removeOpenAIKey?(): Promise<void>;
 }
 
 declare global {

@@ -1,12 +1,21 @@
 # Excerpt
 
-**Be in the meeting. We'll remember it.**
+**Keep the creative, the numbers, and the conversation together.**
 
 **Demo → https://excerpt-rho.vercel.app** — 102 seconds, nothing to install.
 
-A free, privacy-first meeting assistant. Cinematic captions while you talk, and
-structured notes afterwards where every item points back at the passage it came
-from — so you can check it, and correct it.
+Meeting memory for creative and media agencies. The screen you are reviewing — a
+performance report, an ad variant, a deck — goes into the notes, the speech from
+either side of it sits with the picture, and every extracted item points back at the
+passage it came from, so you can check it and correct it. Free, open source, and
+stored on your own device.
+
+A captured report is kept as a picture and the conversation as a transcript.
+Excerpt does not read numbers off a report, verify a metric, import spreadsheets or
+PDFs, or connect to an ad platform.
+
+Captions follow the conversation while the review is happening, so you can watch
+the work instead of the transcript.
 
 Built for The Build Games as a replacement for paid AI meeting-note software.
 

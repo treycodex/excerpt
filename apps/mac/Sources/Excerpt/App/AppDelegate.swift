@@ -45,6 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // A permission report must not initialize capture, notes, recovery prompts or
+        // the editor. It exists specifically to answer one TCC question and quit.
+        if CommandLine.arguments.contains("--permissions-report") {
+            Task { await writePermissionReportAndQuit() }
+            return
+        }
         OverlayBridge.shared.controller = overlay
         makeStatusItem()
         makeEditingMenu()
@@ -62,7 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 (try? engine.subtitleLines(text, maxChars: CaptionTokens.maxCharsPerLine))
                     ?? OverlayController.fallbackLines(text)
             }
-            let session = MeetingSession(engine: engine, store: store, overlay: overlay)
+            let session = MeetingSession(engine: engine, store: store,
+                                         preferences: preferences, overlay: overlay)
             self.session = session
             session.onStateChange = { [weak self] in self?.refresh() }
             let bridge = NotesBridge(
@@ -86,7 +93,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // First run opens the setup by itself. Someone who has been through it once —
         // or declined once — is never shown it again unasked.
-        if !setupModel.hasCompletedSetup && !CommandLine.arguments.contains("--diagnose") {
+        if !setupModel.hasCompletedSetup && !CommandLine.arguments.contains("--diagnose")
+            && !CommandLine.arguments.contains("--permissions-report") {
             showSetup()
         }
 
@@ -524,6 +532,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         writeDiagnosis(report)
+        NSApp.terminate(nil)
+    }
+
+    /// Read TCC from the signed app process without starting capture. This exists so a
+    /// rebuilt bundle can prove which grants macOS attached to its designated identity.
+    private func writePermissionReportAndQuit() async {
+        var report = ["Excerpt permissions — \(Date().formatted())"]
+        for permission in Permission.allCases {
+            report.append("  \(permission.rawValue): \(await Permissions.state(of: permission).rawValue)")
+        }
+        try? report.joined(separator: "\n").appending("\n").write(
+            to: URL(filePath: "/private/tmp/excerpt-permissions.txt"), atomically: true, encoding: .utf8)
         NSApp.terminate(nil)
     }
 

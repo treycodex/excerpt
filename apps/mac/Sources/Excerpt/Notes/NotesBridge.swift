@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OSLog
 import WebKit
@@ -15,6 +16,7 @@ final class NotesBridge: NSObject {
     private enum Method: String {
         case listMeetings, loadMeeting, saveMeeting, deleteMeeting
         case loadPreferences, savePreferences, exportMarkdown, exportHTML, summarizeNotes
+        case getNotesProviderStatus, configureOpenAIKey, removeOpenAIKey
     }
 
     private enum Failure: Error, LocalizedError {
@@ -76,7 +78,10 @@ final class NotesBridge: NSObject {
         savePreferences: (prefs)     => send('savePreferences', [JSON.stringify(prefs)]),
         exportMarkdown:  (name, md)  => send('exportMarkdown', [name, md]),
         exportHTML:      (name, html) => send('exportHTML', [name, html]),
-        summarizeNotes:  (meeting)   => send('summarizeNotes', [JSON.stringify(meeting)]),
+        summarizeNotes:  (meeting, request) => send('summarizeNotes', [JSON.stringify(meeting), JSON.stringify(request)]),
+        getNotesProviderStatus: ()   => send('getNotesProviderStatus', []),
+        configureOpenAIKey: ()       => send('configureOpenAIKey', []),
+        removeOpenAIKey: ()          => send('removeOpenAIKey', []),
       };
       globalThis.__excerptReceiveMeeting = (json) => {
         try {
@@ -105,9 +110,13 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
         do {
             guard let method = Method(rawValue: name) else { throw Failure.unknownMethod(name) }
             if method == .summarizeNotes {
-                guard let body = arguments.first as? String else { throw Failure.badArguments(name) }
+                guard arguments.count == 2,
+                      let body = arguments[0] as? String,
+                      let requestBody = arguments[1] as? String else { throw Failure.badArguments(name) }
                 let meeting = try decode(Meeting.self, from: body)
-                return (try await json(NotesSummarizer.summarize(meeting)), nil)
+                let request = try decode(NotesGenerationRequest.self, from: requestBody)
+                return (try await json(NotesProviderCoordinator.summarize(
+                    meeting, preferences: preferences.load(), request: request)), nil)
             }
             return (try handle(method, arguments), nil)
         } catch {
@@ -122,6 +131,16 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
         switch method {
         case .summarizeNotes:
             throw Failure.badArguments("summarizeNotes")
+        case .getNotesProviderStatus:
+            return try json(NotesProviderCoordinator.status(preferences: preferences.load()))
+
+        case .configureOpenAIKey:
+            if let key = promptForOpenAIKey() { try OpenAIKeyStore.save(key) }
+            return try json(NotesProviderCoordinator.status(preferences: preferences.load()))
+
+        case .removeOpenAIKey:
+            try OpenAIKeyStore.remove()
+            return nil
         case .listMeetings:
             var meetings = store.list()
             if let active = activeMeeting(nil) {
@@ -188,6 +207,22 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
             guard response == .OK, let url = panel.url else { return }
             try? markdown.write(to: url, atomically: true, encoding: .utf8)
         }
+    }
+
+    /// Credentials are entered in a native secure field. The notes webview receives
+    /// only the resulting configured/not-configured status.
+    private func promptForOpenAIKey() -> String? {
+        let alert = NSAlert()
+        alert.messageText = OpenAIKeyStore.exists() ? "Replace OpenAI API key" : "Add OpenAI API key"
+        alert.informativeText = "Excerpt stores this key in macOS Keychain. It is used only when OpenAI note enhancement is selected."
+        alert.addButton(withTitle: "Save key")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        field.placeholderString = "sk-…"
+        alert.accessoryView = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return key.isEmpty ? nil : key
     }
 
     private func json<T: Encodable>(_ value: T) throws -> String {
