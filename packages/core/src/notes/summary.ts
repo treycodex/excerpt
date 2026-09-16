@@ -1,7 +1,8 @@
-import type { Item, Meeting, NoteBullet, NotesDocument } from '@excerpt/types';
+import type { Item, Meeting, NoteBullet, NotesDocument, NoteTopic } from '@excerpt/types';
 import { extractItems } from '../extract';
 import { toSentences } from '../extract/sentences';
 import { classifyAction } from '../extract/actions';
+import type { Sentence } from '../extract/types';
 
 const normal = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 const sourceKey = (bullet: NoteBullet) => bullet.evidence.map((e) => `${e.eventIds.join('|')}:${e.quote}`).join('|');
@@ -93,6 +94,116 @@ export function shapeNotice(meeting: Meeting): string | undefined {
     + 'leaves it little to find.';
 }
 
+/**
+ * How much of a meeting comes back as notes has to follow the meeting.
+ *
+ * Both ends of this were fixed constants: five key points whether the call ran
+ * five minutes or ninety, and an uncapped discussion list under one heading. An
+ * eighteen-minute meeting produced seventy bullets in a single run, which is a
+ * filtered transcript rather than notes, and the same meeting at an hour produced
+ * three times that with the same five points on top.
+ */
+const KEY_POINTS_MIN = 5;
+const KEY_POINTS_MAX = 12;
+/** A passage is ten minutes of the meeting. Long enough to hold a subject. */
+const PASSAGE_MS = 10 * 60 * 1000;
+/** Excerpts kept from each passage, so selection is spread over the meeting
+    rather than taken from whichever stretch happened to be densest. */
+const PER_PASSAGE = 8;
+/** Below this, sectioning a short meeting only gets in the way. */
+const PASSAGE_FLOOR = 12;
+
+const at = (bullet: NoteBullet) => bullet.evidence[0]?.tArrived ?? 0;
+
+/** Meeting-relative span of what was selected, in milliseconds. */
+function span(bullets: NoteBullet[]): number {
+  if (bullets.length < 2) return 0;
+  const times = bullets.map(at);
+  return Math.max(...times) - Math.min(...times);
+}
+
+function keyPointBudget(ms: number): number {
+  const minutes = ms / 60_000;
+  return Math.max(KEY_POINTS_MIN, Math.min(KEY_POINTS_MAX, Math.round(minutes / 10) + 3));
+}
+
+/** Meeting-relative clock, the same one the Strip is marked with. */
+function stamp(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/**
+ * Chronological passages, titled by the clock.
+ *
+ * A time range is a fact about the recording. Naming these sections by subject
+ * would be the invented heading of `NOTE-QUALITY-PLAN.md` §2.1 arriving from the
+ * other direction — this time from keyword counting rather than from a model.
+ */
+function passages(bullets: NoteBullet[], recurring: Set<string>, end: number): NoteTopic[] {
+  if (!bullets.length) return [];
+  if (bullets.length <= PASSAGE_FLOOR || span(bullets) < PASSAGE_MS) {
+    return [{ id: 'discussion', title: 'Discussion excerpts', bullets }];
+  }
+
+  const t0 = Math.min(...bullets.map(at));
+  const groups = new Map<number, NoteBullet[]>();
+  for (const bullet of bullets) {
+    const slot = Math.floor((at(bullet) - t0) / PASSAGE_MS);
+    (groups.get(slot) ?? groups.set(slot, []).get(slot)!).push(bullet);
+  }
+
+  return [...groups.entries()].sort((a, b) => a[0] - b[0]).map(([slot, group]) => ({
+    id: `passage-${slot}`,
+    // The last passage ends where the recording does. A range that runs past the
+    // end of the meeting names time the transcript does not contain.
+    title: `${stamp(slot * PASSAGE_MS)} – ${stamp(Math.min((slot + 1) * PASSAGE_MS, end))}`,
+    bullets: [...group]
+      .sort((a, b) => substance(b.text, recurring) - substance(a.text, recurring))
+      .slice(0, PER_PASSAGE)
+      .sort((a, b) => at(a) - at(b)),
+  })).filter((topic) => topic.bullets.length > 0);
+}
+
+/**
+ * A bullet that opens by pointing at something it does not name.
+ *
+ * Selection is per sentence, so "It might come back in January." could be chosen
+ * while "Budget, mostly." — the sentence that says what "it" is — was not. The
+ * excerpt is then quoted correctly and means nothing.
+ */
+const STRANDED = /^\s*(it|this|that|these|those|they|he|she|there|then|which|both|either|neither)\b/i;
+
+/**
+ * Carry the sentence before a stranded opener, when it can honestly be carried.
+ *
+ * Only from the same speaker and within a short gap: a pronoun answered across a
+ * change of voice belongs to a different turn, and joining those would invent a
+ * connection rather than restore one. The two sentences are joined as text and
+ * both sets of evidence are kept, so every word still points at the passage it
+ * came from.
+ */
+const ANTECEDENT_GAP_MS = 15_000;
+
+function withAntecedent(sentence: Sentence, previous: Sentence | undefined) {
+  if (!previous || !STRANDED.test(sentence.text)) return undefined;
+  if (previous.event.role !== sentence.event.role) return undefined;
+  if (previous.event.speakerLabel !== sentence.event.speakerLabel) return undefined;
+  const gap = sentence.event.tArrived - previous.event.tArrived;
+  if (gap < 0 || gap > ANTECEDENT_GAP_MS) return undefined;
+  // A long lead-in is its own excerpt; this is for the short fragment that
+  // stranded the pronoun, not for gluing two full sentences together.
+  if (previous.text.split(/\s+/).length > 12) return undefined;
+  return {
+    text: `${previous.text} ${sentence.text}`,
+    evidence: [...(previous.evidence ?? []), ...(sentence.evidence ?? [])],
+  };
+}
+
 /** A useful offline fallback. These are excerpts, not claimed model summaries. */
 export function buildNotesDocument(meeting: Meeting): NotesDocument {
   const seen = new Set<string>();
@@ -105,8 +216,10 @@ export function buildNotesDocument(meeting: Meeting): NotesDocument {
     const key = normal(sentence.text);
     if (seen.has(key)) continue;
     seen.add(key);
-    bullets.push({ id: `point-${sentence.event.id}-${sentence.index}`, text: sentence.text,
-      evidence: sentence.evidence ?? [] });
+    const joined = withAntecedent(sentence, sentences[sentence.index - 1]);
+    bullets.push({ id: `point-${sentence.event.id}-${sentence.index}`,
+      text: joined?.text ?? sentence.text,
+      evidence: joined?.evidence ?? sentence.evidence ?? [] });
   }
   const decisions = meeting.items.filter((i) => i.category === 'decision' && i.state === 'decided' && !i.dismissed)
     .map((i) => ({ id: `point-${i.id}`, text: i.title, evidence: i.evidence }));
@@ -114,11 +227,10 @@ export function buildNotesDocument(meeting: Meeting): NotesDocument {
   for (const bullet of [...bullets].sort((a, b) => substance(b.text, recurring) - substance(a.text, recurring))) {
     if (!keyPoints.some((b) => normal(b.text) === normal(bullet.text))) keyPoints.push(bullet);
   }
-  // Chronological passages keep context without pretending keyword matches infer a topic.
-  const topics = bullets.length ? [{ id: 'discussion', title: 'Discussion excerpts', bullets }] : [];
   const notice = shapeNotice(meeting);
   return { version: 1, method: 'extractive', ...(notice ? { notice } : {}),
-    keyPoints: keyPoints.slice(0, 5), topics };
+    keyPoints: keyPoints.slice(0, keyPointBudget(span(bullets))),
+    topics: passages(bullets, recurring, sentences.at(-1)?.event.tArrived ?? 0) };
 }
 
 /** Regeneration cannot erase edits, including an edited point no longer selected. */

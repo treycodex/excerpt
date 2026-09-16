@@ -98,6 +98,112 @@ describe('what kind of recording this is', () => {
   });
 });
 
+describe('an excerpt that points at something', () => {
+  const remote = (id: string, text: string, at: number): TranscriptEvent =>
+    ({ ...event(id, text, at), role: 'remote', speakerLabel: 'SPEAKER' });
+
+  it('carries the sentence that says what "it" was', () => {
+    // Quoted correctly and meaning nothing is still a bad note.
+    const notes = buildNotesDocument(meeting([
+      remote('a', 'Why did the podcast read get dropped from the client plan?', 0),
+      remote('b', 'Budget, mostly.', 3000),
+      remote('c', 'It might come back in January once the client budget resets.', 6000),
+    ]));
+    const texts = [...notes.keyPoints, ...notes.topics.flatMap((t) => t.bullets)].map((b) => b.text);
+    expect(texts.some((t) => t.startsWith('Budget, mostly. It might come back'))).toBe(true);
+  });
+
+  it('keeps the evidence for both halves of what it joined', () => {
+    const notes = buildNotesDocument(meeting([
+      remote('a', 'Why did the podcast read get dropped from the client plan?', 0),
+      remote('b', 'Budget, mostly.', 3000),
+      remote('c', 'It might come back in January once the client budget resets.', 6000),
+    ]));
+    const joined = [...notes.keyPoints, ...notes.topics.flatMap((t) => t.bullets)]
+      .find((b) => b.text.startsWith('Budget, mostly.'));
+    expect(joined!.evidence.map((e) => e.eventIds[0])).toEqual(['b', 'c']);
+  });
+
+  it('never joins across a change of voice', () => {
+    // A pronoun answered by the other side belongs to a different turn; joining
+    // them would invent the connection rather than restore it.
+    const notes = buildNotesDocument(meeting([
+      { ...event('a', 'Budget, mostly.', 0), role: 'you', speakerLabel: 'YOU' },
+      remote('b', 'It might come back in January once the client budget resets.', 3000),
+    ]));
+    const texts = [...notes.keyPoints, ...notes.topics.flatMap((t) => t.bullets)].map((b) => b.text);
+    expect(texts.some((t) => t.startsWith('Budget, mostly. It'))).toBe(false);
+  });
+
+  it('leaves a bullet that names its own subject alone', () => {
+    const notes = buildNotesDocument(meeting([
+      remote('a', 'Budget, mostly.', 0),
+      remote('b', 'The podcast read is coming back in January once budget resets.', 3000),
+    ]));
+    const texts = [...notes.keyPoints, ...notes.topics.flatMap((t) => t.bullets)].map((b) => b.text);
+    expect(texts.some((t) => t.startsWith('The podcast read is coming back'))).toBe(true);
+    expect(texts.some((t) => t.startsWith('Budget, mostly. The podcast'))).toBe(false);
+  });
+});
+
+describe('notes follow the length of the meeting', () => {
+  /** A meeting of `minutes`, dense enough that selection has to choose. */
+  const long = (minutes: number) => {
+    const subjects = ['the hero film', 'the media plan', 'the paid social cut', 'the end card',
+      'the client deck', 'the out of home buy', 'the landing page', 'the retail pack'];
+    const events: TranscriptEvent[] = [];
+    const gap = 7000;
+    for (let i = 0; i * gap < minutes * 60_000; i++) {
+      const subject = subjects[i % subjects.length];
+      events.push(event(`e${i}`,
+        `The completion rate on ${subject} is up ${i + 2} points against the client benchmark.`,
+        i * gap));
+    }
+    return meeting(events);
+  };
+
+  it('keeps a short meeting in one undivided list', () => {
+    const notes = buildNotesDocument(long(4));
+    expect(notes.topics).toHaveLength(1);
+    expect(notes.topics[0]!.title).toBe('Discussion excerpts');
+  });
+
+  it('breaks a long meeting into passages titled by the clock', () => {
+    // Not by subject. A heading is an assertion about what a meeting was about,
+    // and a time range is the only one the transcript can actually support.
+    const notes = buildNotesDocument(long(35));
+    expect(notes.topics.length).toBeGreaterThan(2);
+    expect(notes.topics[0]!.title).toBe('0:00 – 10:00');
+    expect(notes.topics[1]!.title).toBe('10:00 – 20:00');
+    // and the last one ends where the recording does, not on a round number
+    expect(notes.topics.at(-1)!.title).toBe('30:00 – 34:53');
+  });
+
+  it('bounds the excerpts instead of growing them without limit', () => {
+    // An hour used to come back as one run of roughly 230 bullets.
+    const bullets = buildNotesDocument(long(60)).topics.reduce((n, t) => n + t.bullets.length, 0);
+    expect(bullets).toBeLessThan(60);
+  });
+
+  it('keeps every passage represented rather than only the densest stretch', () => {
+    const notes = buildNotesDocument(long(35));
+    for (const topic of notes.topics) expect(topic.bullets.length).toBeGreaterThan(0);
+  });
+
+  it('holds excerpts in order within a passage', () => {
+    for (const topic of buildNotesDocument(long(35)).topics) {
+      const times = topic.bullets.map((b) => b.evidence[0]!.tArrived);
+      expect([...times].sort((a, b) => a - b)).toEqual(times);
+    }
+  });
+
+  it('gives a longer meeting more key points, within a ceiling', () => {
+    expect(buildNotesDocument(long(4)).keyPoints).toHaveLength(5);
+    expect(buildNotesDocument(long(60)).keyPoints.length).toBeGreaterThan(5);
+    expect(buildNotesDocument(long(120)).keyPoints.length).toBeLessThanOrEqual(12);
+  });
+});
+
 describe('choosing excerpts without a fixed vocabulary', () => {
   it('lifts a sentence on what this meeting keeps returning to', () => {
     // Not one word of the built-in business list appears here. Before recurring
