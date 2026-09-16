@@ -395,22 +395,65 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
       ...meeting,
       items: meeting.items.map((item) => {
         if (item.id === later.id) {
-          return { ...item, userEdited: true,
+          return { ...item,
             related: [...(item.related ?? []), earlier.id],
             evidence: [...item.evidence, ...earlier.evidence] };
         }
-        if (item.id === earlier.id) return { ...item, dismissed: true, userEdited: true };
+        if (item.id === earlier.id) return { ...item, dismissed: true };
         return item;
       }),
     });
   };
 
-  /** Not the same thing. Marking it edited stops it being offered again. */
+  /**
+   * Not the same thing.
+   *
+   * Recorded as a rejection rather than as an edit. Setting `userEdited` also
+   * stopped the question, but it told the rest of the app the reader had
+   * hand-corrected this item, which `refreshMeetingNotes` then protects from
+   * being replaced by a fresh extraction. Declining a suggestion is not an edit.
+   */
   const rejectRelated = (relation: ItemRelation) => {
     persist({
       ...meeting,
       items: meeting.items.map((item) => (item.id === relation.itemId
-        ? { ...item, userEdited: true } : item)),
+        ? { ...item, unrelated: [...(item.unrelated ?? []), relation.relatedId] }
+        : item)),
+    });
+  };
+
+  /**
+   * Undo a join: give the absorbed item back its own row.
+   *
+   * The passages that came from it are matched by source and removed from the
+   * survivor, so nothing is duplicated and nothing is lost. Without this a join
+   * was the one irreversible action in a product whose whole claim is that every
+   * item can be corrected.
+   */
+  const separateRelated = (item: Item, otherId: string) => {
+    const other = meeting.items.find((i) => i.id === otherId);
+    if (!other) return;
+    const fromOther = new Set(other.evidence.map((e) => `${e.eventIds.join('|')}:${e.quote}`));
+    const remaining = item.evidence.filter((e) => !fromOther.has(`${e.eventIds.join('|')}:${e.quote}`));
+    persist({
+      ...meeting,
+      items: meeting.items.map((candidate) => {
+        if (candidate.id === item.id) {
+          const related = (candidate.related ?? []).filter((id) => id !== otherId);
+          // `related` is dropped rather than set to undefined: the last join
+          // undone should leave no trace of the field at all.
+          const { related: _joined, ...rest } = candidate;
+          return {
+            ...rest,
+            // Keep at least the passage this item was extracted from.
+            evidence: remaining.length ? remaining : candidate.evidence.slice(0, 1),
+            ...(related.length ? { related } : {}),
+            unrelated: [...(candidate.unrelated ?? []), otherId],
+          };
+        }
+        if (candidate.id === otherId) return { ...candidate, dismissed: false };
+        return candidate;
+      }),
     });
   };
 
@@ -641,6 +684,11 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
                   : undefined}
                 onJoin={joinRelated}
                 onReject={rejectRelated}
+                joined={(item.related ?? [])
+                  .map((id) => meeting.items.find((other) => other.id === id))
+                  .filter((other): other is Item => !!other)
+                  .map((other) => ({ id: other.id, title: noteTitle(other) }))}
+                onSeparate={separateRelated}
                 onUpdate={update}
               />
             </div>
@@ -671,6 +719,15 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
           Turns rather than lines — one speaker label per stretch of speech, because a
           settled result is not a unit anybody reads in. */}
       <section className="transcript" hidden={tab !== 'transcript'}>
+        {/* The way back. Opening a passage from the source panel switched tabs and
+            left nothing saying where the reader had come from, so checking a note
+            cost them their place. The panel itself is still open behind this. */}
+        {sourceNote && (
+          <button className="return-to-note" onClick={() => setTab('notes')}>
+            ← Back to the note you were checking
+            <span>“{sourceNote.text.length > 60 ? `${sourceNote.text.slice(0, 60)}…` : sourceNote.text}”</span>
+          </button>
+        )}
         {correction && correctionPreview && <div className="correction-preview" role="region" aria-label="Review transcript correction"><h2>Correct this passage</h2><textarea aria-label="Corrected transcript" value={correction.text} onChange={(e) => setCorrection({ ...correction, text: e.target.value })} /><p>The original transcript is preserved. Review the affected notes below before applying.</p>{correctionPreview.changes.map((change, index) => <div className="correction-change" key={index}><del>{change.before}</del><p>{change.after}</p></div>)}{!correctionPreview.changes.length && <p>No generated notes are affected.</p>}<button disabled={!correction.text.trim() || correctionPreview.meeting === meeting} onClick={() => { persist(correctionPreview.meeting); setCandidate(null); setGenerationError(null); setGenerationMessage('Correction saved. Any generated wording that used it is marked for review; regenerating refreshes it.'); setCorrection(null); }}>Apply correction and update notes</button><button onClick={() => setCorrection(null)}>Cancel</button></div>}
         {meeting.events.length === 0 && <p className="rubric">No transcript was captured for this meeting.</p>}
         {toTurns(meeting.events).map((turn) => (
@@ -845,7 +902,7 @@ const RELATION_COPY: Record<ItemRelation['kind'], { lead: string; join: string }
 
 function ItemCard({
   item, active, context, boosts, onEvidence, onFullTranscript, onUpdate,
-  relation, relatedTitle, onJoin, onReject,
+  relation, relatedTitle, onJoin, onReject, joined, onSeparate,
 }: {
   item: Item;
   active: boolean;
@@ -858,6 +915,9 @@ function ItemCard({
   relatedTitle?: string | undefined;
   onJoin: (relation: ItemRelation) => void;
   onReject: (relation: ItemRelation) => void;
+  /** Items this one absorbed, by the reader's own decision. */
+  joined: { id: string; title: string }[];
+  onSeparate: (item: Item, otherId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(noteTitle(item));
@@ -895,6 +955,22 @@ function ItemCard({
           </div>
         ) : (
           <h3 className={`title${item.completed ? ' completed' : ''}`}>{item.category === 'action' && <input className="action-check" type="checkbox" aria-label={`Complete: ${noteTitle(item)}`} checked={!!item.completed} onChange={(e) => onUpdate(item.id, { completed: e.target.checked })} />}{noteTitle(item)}</h3>
+        )}
+
+        {/* What this item absorbed, and a way to undo it.
+            `Item.related` was being written and never read, so joining two items
+            made one of them vanish into Dismissed with nothing to say where it
+            went — and no way back, in a product whose whole claim is that every
+            item can be corrected. */}
+        {joined.length > 0 && (
+          <div className="item-joined">
+            {joined.map((other) => (
+              <p key={other.id}>
+                <span>Joined with</span> “{other.title}”
+                <button onClick={() => onSeparate(item, other.id)}>Separate again</button>
+              </p>
+            ))}
+          </div>
         )}
 
         {/* A question, never a merge. Two items about one commitment cannot be

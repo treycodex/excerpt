@@ -67,11 +67,27 @@ describe('a proposal and the decision that settles it', () => {
 });
 
 describe('what relating never does', () => {
-  it('leaves an item the reader has already corrected alone', () => {
-    // They have said what it is; asking again is not helpful.
+  it('stops asking once the reader has said they are not the same thing', () => {
+    const request = item({ title: 'Can you send the revised deck before Friday?', at: 0 });
+    const commitment = item({ title: "I'll send the revised deck Thursday.", at: 30_000, assignee: 'you' });
+    expect(relateItems([request, commitment])).toHaveLength(1);
+    expect(relateItems([request, { ...commitment, unrelated: [request.id] }])).toEqual([]);
+  });
+
+  it('honours a rejection recorded on either item', () => {
+    // A rejection is a statement about the pair, not about whichever of the two
+    // happened to be the one offered.
+    const request = item({ title: 'Can you send the revised deck before Friday?', at: 0 });
+    const commitment = item({ title: "I'll send the revised deck Thursday.", at: 30_000, assignee: 'you' });
+    expect(relateItems([{ ...request, unrelated: [commitment.id] }, commitment])).toEqual([]);
+  });
+
+  it('keeps asking about an item whose title was merely corrected', () => {
+    // Editing a title says nothing about whether this is the same commitment as
+    // another. Conflating the two silenced the question for good.
     const request = item({ title: 'Can you send the revised deck before Friday?', at: 0 });
     const commitment = item({ title: "I'll send the revised deck Thursday.", at: 30_000, assignee: 'you', userEdited: true });
-    expect(relateItems([request, commitment])).toEqual([]);
+    expect(relateItems([request, commitment])).toHaveLength(1);
   });
 
   it('ignores dismissed items', () => {

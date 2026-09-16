@@ -98,12 +98,25 @@ function relation(earlier: Item, later: Item): RelationKind | undefined {
 }
 
 /**
- * Relations worth offering, newest-first per item.
+ * Has the reader already said these two are not the same thing?
  *
- * An item is offered at most one relation: a review that asks three questions
- * about one bullet is worse than the duplicate it was trying to resolve. Items
- * the reader has already edited are left alone — having corrected one, they have
- * said what it is.
+ * Checked in both directions. A rejection is a statement about the pair, not
+ * about whichever of them happened to be offered.
+ */
+function declined(a: Item, b: Item): boolean {
+  return a.unrelated?.includes(b.id) === true || b.unrelated?.includes(a.id) === true;
+}
+
+/**
+ * Relations worth offering, at most one per item.
+ *
+ * A review that asks three questions about one bullet is worse than the duplicate
+ * it was trying to resolve.
+ *
+ * Editing an item no longer suppresses its suggestions. That was how a declined
+ * suggestion used to be remembered, and it conflated two different things:
+ * fixing a typo in a title said nothing about whether the item was the same
+ * commitment as another, but it silenced the question for good.
  */
 export function relateItems(items: Item[]): ItemRelation[] {
   const live = items.filter((item) => !item.dismissed);
@@ -111,13 +124,12 @@ export function relateItems(items: Item[]): ItemRelation[] {
 
   for (let i = 0; i < live.length; i++) {
     const later = live[i]!;
-    if (later.userEdited) continue;
 
     let best: ItemRelation | undefined;
     for (let j = 0; j < live.length; j++) {
       if (i === j) continue;
       const earlier = live[j]!;
-      if (earlier.userEdited) continue;
+      if (declined(later, earlier)) continue;
 
       const gap = started(later) - started(earlier);
       if (gap <= 0 || gap > WINDOW_MS) continue;

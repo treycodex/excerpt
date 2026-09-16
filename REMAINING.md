@@ -1,8 +1,11 @@
 # Still owed
 
-What is left after the six commits on `note-and-transcript-quality` that closed
-the engine review and opportunities 4–10 of the product-experience review.
-Written 16 September 2026. Nothing here is scheduled.
+What is left after the work on `note-and-transcript-quality` that closed the
+engine review and opportunities 4–10 of the product-experience review. Written
+16 September 2026, and struck through as items close. Nothing here is scheduled.
+
+Open: 1, 6, 7, 8, 10, and the minor list. Closed: 2, 3, 4, 5. 9 is a decision
+rather than a task.
 
 Each item says what is wrong, where, and — where it matters — why it was left.
 
@@ -40,33 +43,30 @@ on either surface. The rule is checked twice over nine fixture cases and the
 monitor over eight, but a live meeting with one source muted is still the thing
 that would prove it.
 
-## 3. A joined commitment records its link and never shows it
+## 3. ~~A joined commitment records its link and never shows it~~ — done
 
-`Item.related` is now written — `Notes.tsx` sets it when the reader confirms two
-items were the same commitment — but **nothing reads it**. The type documents the
-field as "Other item ids shown as related moments. Never asserted as causal", and
-that display does not exist. A reader who joins two items sees one disappear into
-Dismissed and no sign of what the survivor absorbed, beyond the extra passage in
-its source panel.
+Closed 16 September 2026. A joined item now shows what it absorbed, and offers
+"Separate again", which restores the absorbed item and removes the passages that
+came from it — matched by source, so nothing is duplicated and nothing is lost.
+The join was the one irreversible action in a product whose whole claim is that
+every item can be corrected.
 
-## 4. "Not related" is recorded by overloading `userEdited`
+## 4. ~~"Not related" is recorded by overloading `userEdited`~~ — done
 
-Rejecting a suggested relation sets `userEdited: true` on the item, which stops
-`relateItems` offering it again. It works, and it avoided a schema change on both
-the TypeScript and Swift sides, but it says something broader than the reader
-meant: the item is now treated as hand-corrected everywhere, including by
-`refreshMeetingNotes`, which protects edited items from being replaced by a fresh
-extraction. A rejected suggestion is not an edit.
+Closed 16 September 2026. `Item.unrelated` carries it, mirrored in
+`Models.swift`, and is honoured in both directions — a rejection is a statement
+about the pair, not about whichever of the two happened to be offered. Joining is
+no longer recorded as an edit either.
 
-The honest fix is a field, and it costs a mirrored change in `Models.swift`.
+Editing an item no longer suppresses its suggestions, which was the other half of
+the conflation: fixing a typo in a title said nothing about whether the item was
+the same commitment as another, and silenced the question for good.
 
-## 5. No signpost back from the transcript to the note you were checking
+## 5. ~~No signpost back from the transcript to the note you were checking~~ — done
 
-The source panel keeps its state, so returning to the Notes tab does put the
-reader back where they were — but clicking "Open in transcript" lands them in the
-transcript with nothing saying how to get back. The plan called for recording the
-originating block and tab so the panel could offer a real way back; the state is
-recorded and the affordance is not.
+Closed 16 September 2026. Opening a passage from the source panel now leaves a
+way back at the top of the transcript, naming the note. The panel is still open
+behind it, so returning puts the reader exactly where they were.
 
 ## 6. The draft is rewritten in full on every finalised line
 

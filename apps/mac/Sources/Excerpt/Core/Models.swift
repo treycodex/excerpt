@@ -66,6 +66,9 @@ struct Item: Codable, Sendable, Identifiable, Equatable {
     var title: String
     var evidence: [Evidence]
     var related: [String]?
+    /// Item ids the reader has said this is not the same thing as. Separate from
+    /// `userEdited`, which would claim the item had been hand-corrected.
+    var unrelated: [String]?
     var assignee: Assignee
     var due: String?
     var salience: Double

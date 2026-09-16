@@ -62,6 +62,16 @@ export interface Item {
   evidence: Evidence[];
   /** Other item ids shown as related moments. Never asserted as causal. */
   related?: string[];
+  /**
+   * Item ids the reader has said this is NOT the same thing as.
+   *
+   * Its own field rather than a reuse of `userEdited`, which was doing this job
+   * and claiming far more than the reader meant: an item marked edited is treated
+   * as hand-corrected everywhere, including by `refreshMeetingNotes`, which then
+   * protects it from being replaced by a fresh extraction. Declining a suggestion
+   * is not an edit.
+   */
+  unrelated?: string[];
   assignee: Assignee;
   due?: string;
   salience: number;
