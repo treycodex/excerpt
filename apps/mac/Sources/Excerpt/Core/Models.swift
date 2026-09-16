@@ -131,6 +131,7 @@ struct NotesDocument: Codable, Sendable, Equatable {
     var keyPoints: [NoteBullet]
     var topics: [NoteTopic]
     var blocks: [NoteBlock]?
+    var deletedBlocks: [NoteBlock]? = nil
     var generation: NotesGeneration? = nil
 }
 

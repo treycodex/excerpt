@@ -159,10 +159,7 @@ function affinity(block: NoteBlock, incoming: NoteBlock): number {
  * scored, the best are assigned first, and each block is used once. Position then only
  * decides where the result sits, which is the reader's business and not ours.
  */
-export function mergeGeneratedNotes(current: NotesDocument, generated: NotesDocument): NotesDocument {
-  const currentBlocks = current.blocks ?? [];
-  const incoming = generated.blocks ?? [];
-
+function pairBlocks(currentBlocks: NoteBlock[], incoming: NoteBlock[]) {
   const pairs: { block: number; incoming: number; score: number }[] = [];
   currentBlocks.forEach((block, b) => {
     // An image never stands in for wording, and never has wording stand in for it.
@@ -182,6 +179,22 @@ export function mergeGeneratedNotes(current: NotesDocument, generated: NotesDocu
     matched.set(pair.block, incoming[pair.incoming]!);
     taken.add(pair.incoming);
   }
+  return { matched, taken };
+}
+
+/** Match removals alongside surviving siblings; a shared event is not a deletion of every note in it. */
+export function withoutDeletedBlocks(current: NotesDocument, generated: NotesDocument): NotesDocument {
+  const live = current.blocks ?? [];
+  const incoming = generated.blocks ?? [];
+  const { matched } = pairBlocks([...live, ...(current.deletedBlocks ?? [])], incoming);
+  const removed = new Set([...matched].filter(([index]) => index >= live.length).map(([, block]) => block));
+  return { ...generated, blocks: incoming.filter((block) => !removed.has(block)), deletedBlocks: current.deletedBlocks ?? [] };
+}
+
+export function mergeGeneratedNotes(current: NotesDocument, generated: NotesDocument): NotesDocument {
+  const currentBlocks = current.blocks ?? [];
+  const incoming = withoutDeletedBlocks(current, generated).blocks ?? [];
+  const { matched, taken } = pairBlocks(currentBlocks, incoming);
 
   const blocks = currentBlocks.flatMap((block, index): NoteBlock[] => {
     // A protected block still consumes its counterpart, so the reader is never left
@@ -194,7 +207,7 @@ export function mergeGeneratedNotes(current: NotesDocument, generated: NotesDocu
     return block.evidence.length ? [] : [block];
   });
   blocks.push(...incoming.filter((_, i) => !taken.has(i)));
-  return { ...generated, blocks };
+  return { ...generated, blocks, deletedBlocks: current.deletedBlocks ?? [] };
 }
 
 const collapse = (text: string) => text.replace(/\s+/g, ' ').trim();

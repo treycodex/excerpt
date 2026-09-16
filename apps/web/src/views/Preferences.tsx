@@ -124,7 +124,7 @@ export function Preferences() {
           told its screenshots "stay on this Mac". */}
       {isNativeHost() ? <section className="notes-provider-settings">
         <h2>Note enhancement</h2>
-        <p className="rubric">Choose who rewrites the transcript into cleaner notes. With OpenAI selected, Excerpt sends the transcript, your priority instruction, and screenshot captions to OpenAI. Screenshot pixels stay on this Mac.</p>
+        <p className="rubric">Choose who rewrites the transcript into cleaner notes. With OpenAI selected, Excerpt sends the transcript and screenshot captions to OpenAI. Screenshot pixels stay on this Mac.</p>
         <label className="provider-choice"><input type="radio" name="notes-provider" checked={(prefs.notesProvider ?? 'apple') === 'apple'} onChange={() => commit({ ...prefs, notesProvider: 'apple' })} /><span><b>On this Mac</b><small>Apple Intelligence, when available</small></span></label>
         <label className="provider-choice"><input type="radio" name="notes-provider" checked={prefs.notesProvider === 'openai'} onChange={() => commit({ ...prefs, notesProvider: 'openai' })} /><span><b>OpenAI with your key</b><small>Uses gpt-5-mini only when you choose this</small></span></label>
         <div className="api-key-setting">
@@ -157,9 +157,8 @@ export function Preferences() {
       <section>
         <h2>In your words</h2>
         <p className="rubric">
-          These visible terms always affect ranking, here and on the Mac. Where note
-          enhancement is available and switched on, the same sentence is also passed
-          to it as context.
+          These visible terms change the order of review items, here and on the Mac.
+          They do not filter items or instruct the notes summarizer.
         </p>
         <textarea
           aria-label="What matters to you in meetings"

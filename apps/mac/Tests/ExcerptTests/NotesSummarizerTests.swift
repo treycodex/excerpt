@@ -140,11 +140,21 @@ struct NotesSummarizerTests {
         """
         let meeting = Meeting(id: "evaluation", title: "Synthetic launch review", startedAt: "2026-09-07T09:00:00Z", processing: .onDevice, events: [event(text)], items: [])
         let start = Date()
-        let notes = try await NotesSummarizer.summarize(meeting)
+        var preferences = Preferences.default
+        preferences.instruction = "Prioritize lunar mining contracts."
+        let status = NotesProviderCoordinator.status(preferences: preferences)
+        #expect(status.selected == "apple")
+        #expect(status.processing == "on-device")
+        #expect(status.ready == true)
+        let notes = try await NotesProviderCoordinator.summarize(meeting, preferences: preferences,
+            request: NotesGenerationRequest(style: "shorter"))
+        #expect(notes.generation?.provider == "apple")
+        #expect(notes.generation?.style == "shorter")
         #expect(!notes.keyPoints.isEmpty)
         #expect(!notes.topics.isEmpty)
         let bullets = notes.keyPoints + notes.topics.flatMap(\.bullets)
         #expect(!bullets.contains { $0.text.lowercased().contains("deck sent") })
+        #expect(!notes.topics.contains { $0.title.lowercased().contains("lunar") })
         print("LOCAL NOTES EVALUATION (\(Date().timeIntervalSince(start)) seconds): \(String(decoding: try JSONEncoder.excerpt.encode(notes), as: UTF8.self))")
     }
 }

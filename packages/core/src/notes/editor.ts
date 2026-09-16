@@ -1,5 +1,6 @@
 import type { Meeting, MeetingImage, NoteBlock, NotesDocument, Evidence } from '@excerpt/types';
 import { buildNotesDocument, refreshMeetingNotes } from './summary';
+import { withoutDeletedBlocks } from './generation';
 
 export const evidenceTime = (e: Evidence) => e.tStart !== undefined ? e.tStart * 1000 : e.tArrived;
 const timeOf = (evidence: Evidence[]) => evidence.length ? Math.min(...evidence.map(evidenceTime)) : undefined;
@@ -107,7 +108,7 @@ export function meetingImagePassage(meeting: Pick<Meeting, 'events'>, image: Mee
 
 /** Regeneration preserves a hand-edited document in full, including deleted blocks and image placement. */
 export function preserveDocument(next: NotesDocument, previous: NotesDocument): NotesDocument {
-  return previous.blocks ? { ...next, blocks: previous.blocks } : next;
+  return previous.blocks ? { ...next, blocks: previous.blocks, deletedBlocks: previous.deletedBlocks ?? [] } : next;
 }
 
 const uses = (evidence: Evidence[], id: string) => evidence.some((source) => source.eventIds.includes(id));
@@ -122,7 +123,7 @@ export function previewTranscriptCorrection(meeting: Meeting, eventId: string, t
   const sourceRevision = (meeting.sourceRevision ?? 0) + 1;
   const rebuilt = refreshMeetingNotes({ ...meeting, events, sourceRevision, items: meeting.items.filter((i) => !uses(i.evidence, eventId)) });
   const oldDocument = editableDocument(meeting);
-  const fresh = editableDocument({ ...rebuilt, notes: buildNotesDocument(rebuilt), images: [] });
+  const fresh = withoutDeletedBlocks(oldDocument, editableDocument({ ...rebuilt, notes: buildNotesDocument(rebuilt), images: [] }));
   const affected = fresh.blocks!.filter((b) => uses(b.evidence, eventId));
   const changes: { before: string; after: string }[] = [];
   const generatedDocument = meeting.notes?.method === 'cloud' || meeting.notes?.method === 'on-device';
@@ -155,7 +156,7 @@ export function previewTranscriptCorrection(meeting: Meeting, eventId: string, t
     changes.push({ before: image.caption || `Captured moment at ${Math.round(image.at / 1000)}s`, after: 'Its nearby transcript context will be marked for review.' });
     return { ...image, needsReview: true };
   });
-  const notes = generatedDocument ? { ...meeting.notes!, blocks } : { ...rebuilt.notes!, blocks };
+  const notes = { ...(generatedDocument ? meeting.notes! : rebuilt.notes!), blocks, deletedBlocks: oldDocument.deletedBlocks ?? [] };
   const nextMeeting = { ...rebuilt, sourceRevision, items, notes, ...(images ? { images } : {}) };
   delete nextMeeting.suggestedNotes;
   return { meeting: nextMeeting, changes };

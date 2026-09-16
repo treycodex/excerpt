@@ -101,6 +101,8 @@ export interface NotesDocument {
   topics: NoteTopic[];
   /** Ordered, freely editable document. Legacy sections remain readable. */
   blocks?: NoteBlock[];
+  /** Removed blocks retained only to prevent regeneration from restoring them. */
+  deletedBlocks?: NoteBlock[];
   /** How this wording was produced. Kept separate from transcription provenance. */
   generation?: NotesGeneration;
 }

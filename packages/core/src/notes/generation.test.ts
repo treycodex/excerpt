@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Meeting, MeetingImage, NotesProviderStatus, TranscriptEvent } from '@excerpt/types';
 import { compareNotesDocuments, mergeGeneratedNotes, notesCapability } from './generation';
-import { editableDocument, insertMeetingImage } from './editor';
+import { editableDocument, insertMeetingImage, previewTranscriptCorrection } from './editor';
 import { refreshMeetingNotes } from './summary';
 
 const event = (id: string, text: string, at: number): TranscriptEvent => ({ id, text, tArrived: at, tStart: at / 1000, sessionId: 'm', isFinal: true, speakerLabel: 'YOU', role: 'you' });
@@ -12,6 +12,46 @@ const shot = (id: string, at: number): MeetingImage => ({ id, at, capturedAt: '2
 const ready: NotesProviderStatus = { openAIKeyConfigured: false, selected: 'apple', ready: true, providerName: 'Apple Intelligence', processing: 'on-device' };
 
 describe('what the notes toolbar is allowed to offer', () => {
+  it('keeps a deletion across serialized reloads, repeated refreshes, and source correction', () => {
+    const meeting = base();
+    const original = editableDocument(meeting);
+    const removed = original.blocks![0]!;
+    let notes = JSON.parse(JSON.stringify({ ...original, blocks: original.blocks!.slice(1), deletedBlocks: [removed] }));
+    for (let i = 0; i < 2; i++) {
+      const generated = editableDocument(refreshMeetingNotes({ ...meeting, notes }));
+      notes = mergeGeneratedNotes(notes, generated);
+      expect(notes.blocks.map((b: { text: string }) => b.text)).not.toContain(removed.text);
+      expect(notes.deletedBlocks).toEqual([removed]);
+    }
+    const corrected = previewTranscriptCorrection({ ...meeting, notes }, 'a', "I'll send the revised deck by Friday.").meeting;
+    expect(corrected.notes!.blocks!.some((b) => b.evidence.some((e) => e.eventIds.includes('a')))).toBe(false);
+    expect(corrected.notes!.deletedBlocks).toEqual([removed]);
+  });
+
+  it('does not mistake a deleted sibling or heading for all the notes in its source', () => {
+    const evidence = [{ eventIds: ['shared'], quote: 'The client wants a shorter cut and a clearer end card.', tArrived: 0, speakerLabel: 'YOU' }];
+    const heading = { id: 'h', kind: 'heading' as const, text: 'Client feedback', evidence };
+    const cut = { id: 'a', kind: 'bullet' as const, text: 'The client wants a shorter cut.', evidence };
+    const card = { id: 'b', kind: 'bullet' as const, text: 'The client wants a clearer end card.', evidence };
+    const generated = { version: 1 as const, method: 'extractive' as const, keyPoints: [], topics: [], blocks: [heading, cut, card] };
+    const current = { ...generated, blocks: [card], deletedBlocks: [heading, cut] };
+    const merged = mergeGeneratedNotes(current, generated);
+    expect(merged.blocks).toEqual([card]);
+    expect(mergeGeneratedNotes({ ...generated, blocks: [], deletedBlocks: generated.blocks }, generated).blocks).toEqual([]);
+    // Restoring the pre-deletion document (Undo) removes its tombstones too.
+    expect(mergeGeneratedNotes(generated, generated).blocks).toEqual(generated.blocks);
+  });
+
+  it('keeps deletions while allowing new provider wording from a different source', () => {
+    const original = editableDocument(base());
+    const removed = original.blocks![0]!;
+    const current = { ...original, blocks: original.blocks!.slice(1), deletedBlocks: [removed] };
+    const extra = { ...removed, id: 'new', text: 'Budget approval is pending.', evidence: [{ eventIds: ['new'], quote: 'Budget approval is pending.', tArrived: 90000, speakerLabel: 'YOU' }] };
+    const generated = { ...original, method: 'cloud' as const, blocks: [...original.blocks!, extra] };
+    const merged = mergeGeneratedNotes(current, generated);
+    expect(merged.blocks!.map((b) => b.text)).toEqual([original.blocks![1]!.text, extra.text]);
+    expect(merged.deletedBlocks).toEqual([removed]);
+  });
   it('offers a browser only the rebuild it can actually perform', () => {
     const capability = notesCapability({ isLiveDraft: false, hasTranscript: true, native: false });
     expect(capability.refresh).toBe(true);

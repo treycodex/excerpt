@@ -526,7 +526,7 @@ final class MeetingSession {
     }
 
     private func hasWriting(_ document: NotesDocument?) -> Bool {
-        document?.blocks?.contains(where: { block in
+        (document?.deletedBlocks?.isEmpty == false) || document?.blocks?.contains(where: { block in
             block.kind == "image" || !block.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }) == true
     }

@@ -16,9 +16,15 @@ export function NotesDocument({ document, images, onChange, onSource, onImages, 
 }) {
   const blocks = document.blocks ?? [];
   const [active, setActive] = useState<string | null>(null);
-  const [undo, setUndo] = useState<NoteBlock[] | null>(null);
+  const [undo, setUndo] = useState<Document | null>(null);
   const fields = useRef<Record<string, HTMLTextAreaElement | null>>({});
-  const commit = (next: NoteBlock[], structural = false) => { if (structural) setUndo(blocks); onChange({ ...document, blocks: next }); };
+  const commit = (next: NoteBlock[], structural = false) => {
+    if (structural) setUndo(document);
+    const retained = new Set(next.map((block) => block.id));
+    const removed = blocks.filter((block) => !retained.has(block.id));
+    const deletedBlocks = [...(document.deletedBlocks ?? []), ...removed];
+    onChange({ ...document, blocks: next, ...(deletedBlocks.length ? { deletedBlocks } : {}) });
+  };
   const focus = (id: string) => { setActive(id); requestAnimationFrame(() => fields.current[id]?.focus()); };
   const update = (id: string, patch: Partial<NoteBlock>) => commit(blocks.map((b) => b.id === id ? { ...b, ...patch, userEdited: true } : b));
   const add = (kind: NoteBlock['kind']) => {
@@ -55,7 +61,7 @@ export function NotesDocument({ document, images, onChange, onSource, onImages, 
     <div className="writing-toolbar" role="toolbar" aria-label="Document tools">
       <button onClick={() => add('paragraph')}>+ Text</button><button onClick={() => add('heading')}>+ Heading</button><button onClick={() => add('bullet')}>+ Bullet</button>
       <button onClick={() => fileInput.current?.click()}>+ Image</button>
-      {undo && <button onClick={() => { onChange({ ...document, blocks: undo }); setUndo(null); }}>Undo last structure change</button>}
+      {undo && <button onClick={() => { onChange(undo); setUndo(null); }}>Undo last structure change</button>}
       <input ref={fileInput} type="file" hidden multiple accept="image/png,image/jpeg,image/webp" onChange={(e) => { onImages(Array.from(e.target.files ?? []), 'import'); e.target.value = ''; }} />
     </div>
     {!blocks.length && <button className="empty-document" onClick={() => add('paragraph')}>Start writing, or paste a screenshot…</button>}

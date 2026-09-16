@@ -44,6 +44,18 @@ struct MeetingStoreTests {
         #expect(store.list().isEmpty)
     }
 
+    @Test func `deleted note blocks survive native storage and legacy documents decode`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var original = meeting()
+        let removed = NoteBlock(id: "removed", kind: "bullet", text: "A removed excerpt", evidence: [])
+        original.notes = NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [], deletedBlocks: [removed])
+        try store.save(original)
+        #expect(try store.load(id: original.id).notes?.deletedBlocks == [removed])
+        let legacy = Data(#"{"version":1,"method":"extractive","keyPoints":[],"topics":[],"blocks":[]}"#.utf8)
+        #expect(try JSONDecoder().decode(NotesDocument.self, from: legacy).deletedBlocks == nil)
+    }
+
     @Test func `the library survives one unreadable file`() throws {
         let (store, root) = try makeStore()
         defer { try? FileManager.default.removeItem(at: root) }
