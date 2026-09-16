@@ -7,7 +7,7 @@ import {
   meetingImageContext,
 } from '@excerpt/core';
 import type { AdapterStatus, Meeting, MeetingImage, ProcessingMode, TranscriptEvent } from '@excerpt/types';
-import { isStalled, sourceHealth } from '@excerpt/core';
+import { isStalled, sourceConcern, sourceHealth } from '@excerpt/core';
 import type { AudioInput, SourceHealth, StreamDiagnostics } from '@excerpt/core';
 import { listMicrophones, preferredMicrophone } from '@excerpt/core';
 import { Captions } from './CallFrame';
@@ -34,6 +34,11 @@ const supported = () =>
  * that a problem trains people to ignore the row that also has to carry the real
  * one.
  */
+/** What to call each source when speaking to the person using it. */
+const SOURCE_NAME: Record<StreamDiagnostics['role'], string> = {
+  you: 'Your microphone', remote: 'Meeting audio',
+};
+
 const TONE: Record<SourceHealth, string> = {
   starting: 'dim', hearing: 'ok', silent: 'dim', stalled: 'warn', failed: 'warn',
 };
@@ -457,10 +462,12 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
     const stalledHint = withError
       ? `It reported "${withError.lastError}".`
       : 'Check that the shared tab is the one making sound, and that its audio is not muted in Chrome.';
-    const stalledWhat = neverStarted || dead.length === diag.length
+    // The same sentence the Mac shows, from the same function, so one meeting is
+    // never described two ways. `d.label` is the caption label — YOU, SPEAKER —
+    // and was being printed at people as though it were a name.
+    const stalledWhat = neverStarted
       ? 'Sound is reaching Excerpt but nothing is coming back from the speech engine.'
-      : `${dead.map((d) => d.label).join(' and ')}: sound is arriving but nothing has been`
-        + ` recognised for ${Math.round(Math.max(...dead.map((d) => d.sinceFinal)))} seconds.`;
+      : dead.map((d) => sourceConcern(SOURCE_NAME[d.role], sourceHealth(d))).filter(Boolean).join(' ');
     return (
       <div className="session">
         <div className="call live">
@@ -482,7 +489,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
         <div className="live-status live-sources">
           {diag.map((d) => {
             const health = sourceHealth(d);
-            const name = d.role === 'you' ? 'Your microphone' : 'Meeting audio';
+            const name = SOURCE_NAME[d.role];
             return (
               <span key={d.role} className={`source-chip ${TONE[health]}`}
                 title={d.device || 'default device'}>

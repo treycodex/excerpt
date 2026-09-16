@@ -552,8 +552,9 @@ open build/Excerpt.app                  # always `open` — a direct exec breaks
 known-missing, written 16 September 2026 after the engine and product-experience
 reviews were closed. It records where each thing is and why it was left, so the
 next person does not rediscover a decision as a bug. The two that matter most: the
-Mac app has no equivalent of the browser's per-source capture health, and the demo
-still does not show the capture-and-discuss workflow the product exists for.
+demo still does not show the capture-and-discuss workflow the product exists for,
+and per-source capture health — now shared by both surfaces through
+`fixtures/source-health.json` — has never been watched during a real meeting.
 
 ## 11. If you change one thing, change it knowing this
 

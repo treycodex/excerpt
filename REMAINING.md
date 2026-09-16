@@ -25,17 +25,20 @@ observation, and ship a completed sample meeting reachable directly, so a visito
 can inspect the image beside its discussion, correct one passage and confirm one
 commitment.
 
-## 2. Capture health is web-only
+## 2. ~~Capture health is web-only~~ — done, but never watched live
 
-`sourceHealth` and `isStalled` live in `packages/core/src/capture/live.ts` and are
-read by the browser's capture screen. **The Mac app has no equivalent.** It
-transcribes through `SourceTranscriber`/`SpeechAnalyzer`, a different mechanism,
-so the functions do not port directly — but the failure they exist to catch does.
-A Mac recognizer that dies mid-meeting is as silent there as it was in the browser
-before this work, and the Mac is the recommended surface.
+Closed 16 September 2026. The decision and its thresholds moved to
+`packages/core/src/capture/health.ts`, mirrored in
+`apps/mac/Sources/Excerpt/Capture/SourceHealth.swift`, and both are checked
+against `packages/core/fixtures/source-health.json` the way the extraction engine
+is. `SourceHealthMonitor` derives the signals from counters the Mac already kept
+and ticks them every second while a meeting runs; only `stalled` and `failed`
+reach the menu-bar line.
 
-Not a port. It needs the same two questions answered against `SpeechAnalyzer`:
-is this source being spoken into right now, and is anything coming back from it.
+**What remains is item 8: none of this has been watched during a real capture**,
+on either surface. The rule is checked twice over nine fixture cases and the
+monitor over eight, but a live meeting with one source muted is still the thing
+that would prove it.
 
 ## 3. A joined commitment records its link and never shows it
 
@@ -87,14 +90,18 @@ and predates this work. A lightweight index would fix both. None exists.
 The native path is the same with a heavier constant: `NotesBridge.listMeetings`
 JSON-encodes every meeting, images included, across the JavaScriptCore bridge.
 
-## 8. Per-source capture indicators were never seen in a live capture
+## 8. Capture health has never been watched during a real capture
 
-`sourceHealth` is unit-tested across all five states, the rendering typechecks and
-builds, and the recovery paths were driven in the running app. But the chips
-themselves need `getDisplayMedia` and a real microphone, which could not be driven
-from here. **The mute-one-source case — the exact case the old aggregate hid — has
-not been watched happen.** Worth ten seconds with a real meeting before trusting
-it.
+**The one thing left on capture, and it applies to both surfaces now.**
+
+The rule is checked twice against a shared fixture, the browser chips typecheck
+and build, the Mac monitor is unit-tested over a simulated ten-minute stall, and
+the recovery paths were driven in the running app. But the indicators themselves
+need `getDisplayMedia` and a real microphone in the browser, and a real meeting on
+the Mac, neither of which could be driven from here.
+
+**The mute-one-source case — the exact case the old aggregate hid — has not been
+watched happen.** Ten seconds with a real meeting, on each surface.
 
 ## 9. English only, by decision rather than by oversight
 

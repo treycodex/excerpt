@@ -122,6 +122,19 @@ final class MeetingSession {
     private var audioStats: [SourceKind: SourceStats] = [:]
     private var speechStats: [SourceKind: TranscriptStats] = [:]
 
+    /// Live per-source health, and the watch that keeps it current.
+    ///
+    /// Both stats dictionaries above were only ever filled in `finish()`, to compose
+    /// a diagnostic line for a meeting that had already ended. A source that stops
+    /// being recognised halfway through is exactly the failure worth interrupting
+    /// somebody for, and it was discoverable only afterwards, in the notes.
+    private var monitors: [SourceKind: SourceHealthMonitor] = [:]
+    private(set) var health: [SourceKind: SourceHealth] = [:]
+    private var healthWatch: Task<Void, Never>?
+    /// The concern currently being shown, so the status line is not rewritten with
+    /// the same words every second.
+    private var shownConcern: String?
+
     private let engine: CoreEngine
     private let store: MeetingStore
     private let preferences: PreferencesStore
@@ -301,8 +314,65 @@ final class MeetingSession {
 
         state = .listening(since: Date())
         status = "Listening"
+        startHealthWatch()
         do { try checkpointDraftAndPublish() }
         catch { status = "Listening · live notes recovery unavailable"; log.error("draft checkpoint failed: \(error)") }
+    }
+
+    /// How often the counters are folded in. A second is far finer than the
+    /// thresholds need and cheap: it reads two in-memory structs.
+    private static let healthInterval = Duration.seconds(1)
+
+    /// Watch both sources while the meeting runs, and say so when one stops working.
+    ///
+    /// Only `stalled` and `failed` reach the status line. A microphone nobody is
+    /// speaking into is the normal state of a microphone for most of a meeting, and
+    /// reporting that would train people to ignore the line that carries the real
+    /// problem. Capture is never torn down over this: one dead source still leaves
+    /// the other working, and everything settled so far is already journalled.
+    private func startHealthWatch() {
+        healthWatch?.cancel()
+        monitors = [:]
+        health = [:]
+        shownConcern = nil
+        healthWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: MeetingSession.healthInterval)
+                guard let self, await self.state.isActive else { return }
+                await self.sampleHealth()
+            }
+        }
+    }
+
+    private func sampleHealth() async {
+        let audio = capture.statistics()
+        var speech: [SourceKind: TranscriptStats] = [:]
+        for (kind, transcriber) in transcribers { speech[kind] = await transcriber.statistics() }
+
+        var concerns: [String] = []
+        for kind in SourceKind.allCases {
+            var monitor = monitors[kind] ?? SourceHealthMonitor()
+            let state = monitor.update(
+                audio: audio[kind] ?? SourceStats(), speech: speech[kind] ?? TranscriptStats())
+            monitors[kind] = monitor
+            health[kind] = state
+            if let concern = state.concern(for: kind.sourceName) { concerns.append(concern) }
+        }
+
+        let concern = concerns.first
+        guard concern != shownConcern else { return }
+
+        if let concern {
+            shownConcern = concern
+            status = concern
+        } else {
+            // The fault cleared. Take the line back only if it is still ours — a
+            // screenshot or a recovery warning said something the user wanted, and
+            // overwriting it with "Listening" would throw that away.
+            if status == shownConcern { status = "Listening" }
+            shownConcern = nil
+        }
+        onStateChange?()
     }
 
     private func fail(_ message: String) {
@@ -421,6 +491,9 @@ final class MeetingSession {
         if case .saving = state { return }
         state = .saving
         status = "Writing your notes…"
+
+        healthWatch?.cancel()
+        healthWatch = nil
 
         // Read the meters before tearing anything down, or the evidence goes with it.
         audioStats = capture.statistics()

@@ -4,6 +4,16 @@ import ScreenCaptureKit
 enum SourceKind: String, CaseIterable, Sendable {
     case system = "System audio"      // everyone else
     case microphone = "Microphone"    // you
+
+    /// What to call this source when speaking to the person using it, rather than
+    /// in a diagnostic line. "System audio" is what we capture; "the meeting" is
+    /// what they are listening to.
+    var sourceName: String {
+        switch self {
+        case .system: return "Meeting audio"
+        case .microphone: return "Your microphone"
+        }
+    }
 }
 
 /// Per-source health. The web build proved that without these, "no captions" is

@@ -1,6 +1,8 @@
 import type {
   AdapterStatus, ProcessingMode, SourceRole, TranscriptAdapter, TranscriptEvent,
 } from '@excerpt/types';
+import { healthOf } from './health';
+import type { SourceHealth, SourceSignals } from './health';
 
 /* Chrome-only surface. Typed here because TS lib.dom does not yet carry it. */
 interface SpeechRecognitionLike extends EventTarget {
@@ -60,44 +62,37 @@ export interface StreamDiagnostics {
   gaveUp?: boolean;
 }
 
-/** How recently a stream must have heard a voice to count as hearing one. */
-const HEARING_WINDOW_SECONDS = 4;
-
 /**
  * What one stream is doing, as a single word.
+ *
+ * The rule itself lives in `health.ts`, shared with the Mac so the two surfaces
+ * cannot tell a person two different things about one meeting. This only adapts
+ * a browser stream's counters onto it.
  *
  * Kept per stream on purpose. The aggregate the status row used to show — has
  * *any* stream heard *anything* — goes green on the first second of audio and
  * stays green for the rest of the meeting, so a microphone that dies beside a
  * healthy tab is indistinguishable from one that is working.
- *
- * `silent` and `stalled` are the distinction that matters: nobody is speaking
- * into this source, versus speech is arriving and nothing is coming back.
  */
-export type SourceHealth = 'starting' | 'hearing' | 'silent' | 'stalled' | 'failed';
-
-export function sourceHealth(d: StreamDiagnostics): SourceHealth {
-  if (d.gaveUp || d.lastError === 'audio-capture') return 'failed';
-  if (!d.started) return 'starting';
-  if (isStalled(d)) return 'stalled';
-  return d.sinceVoiced <= HEARING_WINDOW_SECONDS ? 'hearing' : 'silent';
+function signalsOf(d: StreamDiagnostics): SourceSignals {
+  return {
+    started: d.started,
+    // `gaveUp` is browser-specific: the restart supervisor has stopped trying.
+    failed: d.gaveUp === true || d.lastError === 'audio-capture',
+    secondsSinceVoiced: d.sinceVoiced,
+    secondsSinceFinal: d.sinceFinal,
+    voicedSecondsSinceFinal: d.voicedSinceFinal,
+  };
 }
 
-/** Voiced audio that must go unrecognised before a stream is called stalled. */
-const STALL_VOICED_SECONDS = 8;
-/** And how long in wall time, so an ordinary pause never trips it. */
-const STALL_WALL_SECONDS = 30;
+export function sourceHealth(d: StreamDiagnostics): SourceHealth {
+  return healthOf(signalsOf(d));
+}
 
-/**
- * A stream that is being spoken into and is recognising nothing.
- *
- * Both conditions are needed. Wall time alone calls a quiet room broken; voiced
- * seconds alone trips on the gap between a long sentence and its final. The
- * check is deliberately rolling rather than "has this stream ever produced a
- * result": recognition that works for ten minutes and then dies satisfies
- * "ever" for the rest of the meeting, which is how a capture could go on
- * reporting that it was listening while nothing was being written down.
- */
+export function isStalled(d: StreamDiagnostics): boolean {
+  return d.gaveUp === true || healthOf(signalsOf(d)) === 'stalled';
+}
+
 /**
  * Words for echo comparison, Unicode-aware.
  *
@@ -114,11 +109,6 @@ export function echoWords(text: string): Set<string> {
     text.toLowerCase().replace(/[^\p{L}\p{N}' ]/gu, ' ')
       .split(/\s+/).filter((w) => w.length > 2),
   );
-}
-
-export function isStalled(d: StreamDiagnostics): boolean {
-  if (d.gaveUp) return true;
-  return d.voicedSinceFinal >= STALL_VOICED_SECONDS && d.sinceFinal >= STALL_WALL_SECONDS;
 }
 
 export interface LiveCaptureOptions {
