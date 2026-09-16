@@ -546,7 +546,16 @@ open build/Excerpt.app                  # always `open` — a direct exec breaks
 
 ---
 
-## 10. If you change one thing, change it knowing this
+## 10. What is still owed
+
+[REMAINING.md](REMAINING.md) is the running list of what is known-broken or
+known-missing, written 16 September 2026 after the engine and product-experience
+reviews were closed. It records where each thing is and why it was left, so the
+next person does not rediscover a decision as a bug. The two that matter most: the
+Mac app has no equivalent of the browser's per-source capture health, and the demo
+still does not show the capture-and-discuss workflow the product exists for.
+
+## 11. If you change one thing, change it knowing this
 
 The product's entire value is that it does **not** invent. Any edit that makes
 extraction more eager, assignment more confident, or timing sound more precise than
