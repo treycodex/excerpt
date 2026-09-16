@@ -68,23 +68,35 @@ Closed 16 September 2026. Opening a passage from the source panel now leaves a
 way back at the top of the transcript, naming the note. The panel is still open
 behind it, so returning puts the reader exactly where they were.
 
-## 6b. "Improve notes" can still fail, and I could not reproduce it
+## 6b. ~~"Improve notes" failed on the Mac~~ — fixed and measured
 
-Reported 17 September 2026: a Mac meeting with four transcript events and one
-voice returned **"Failed to deserialize a Generable type from model output"**
-above the notes.
+Reported 17 September 2026 and reproduced against the real model on the reported
+meeting. The cause was not the one first assumed: the passage sent to the local
+model was simply too large to read and answer about in one request. At the
+original 4200-character budget every response-token setting tried either failed
+to deserialize or parsed with nothing that survived verification. Measured on
+three saved meetings, 2000 characters with a 1400-token reservation is the best
+of the settings tried; the reported meeting now returns four key points in 23s
+where it returned an error.
 
-Three causes were addressed — a nested schema the local model could not hold, a
-token ceiling too low for the shape being asked for, and a framework string being
-handed to the reader — and the run now degrades instead of failing whole. **None
-of it was reproduced against the real model**, because the failure needs Apple
-Intelligence and the meeting that produced it. If it recurs, the log line
-`passage summary failed, retrying flat:` in the `summary` category says whether
-the flat retry was reached and what the model actually objected to.
+Raising the token reservation — the obvious fix — was wrong, and briefly traded
+the deserialization failure for "Exceeded model context window size": the
+reservation comes out of the same window as the passage.
 
-Also unaddressed: with `sampling: .greedy`, **"Try again" reproduces the identical
-request**. It is now much less likely to be the only option, but the button still
-cannot succeed where the first attempt failed for a deterministic reason.
+Still true, and still worth knowing:
+
+- **`sampling: .greedy` makes "Try again" deterministic.** It cannot succeed where
+  the first attempt failed for a deterministic reason. The flat-schema retry
+  exists because of this, and rescues a passage often enough to matter — run-to-run
+  variation is real even under greedy decoding.
+- **One saved meeting still summarises to nothing** (`m-1789093367992`). That is
+  the documented behaviour from `NOTE-QUALITY-PLAN.md` §8, not a regression: its
+  transcript is too degraded for any bullet to survive the citation check. It now
+  degrades to the readable message and the extractive notes.
+- **`supported()` can substitute a raw quote for the model's sentence** when the
+  text contains a modal word, to avoid turning a plan into completed work. On a
+  degraded transcript that produces a bullet full of "um" and stray punctuation.
+  Correct by design, ugly in practice, and worth revisiting.
 
 ## 6. The draft is rewritten in full on every finalised line
 

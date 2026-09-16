@@ -67,8 +67,27 @@ enum NotesSummarizer {
         var text: String
     }
 
+    /// How much transcript one request may carry.
+    ///
+    /// Measured on this Mac against three saved meetings, not chosen. At the
+    /// original 4200 the local model failed every token budget tried — either
+    /// "Failed to deserialize a Generable type from model output", which is what a
+    /// reader was shown, or output that parsed and cited nothing. The passage was
+    /// simply too much to read and answer about at once.
+    ///
+    /// | chars | outcome on the reported meeting            |
+    /// |-------|--------------------------------------------|
+    /// | 4200  | fails, or parses with 0 supported points    |
+    /// | 2400  | one passage of two fails                    |
+    /// | 2000  | both passages parse, 16 supported points    |
+    /// | 1600  | parses, but yield drops to 4                |
+    ///
+    /// Smaller is not uniformly better: below about 2000 the model loses the
+    /// context a point needs and more of what it writes fails verification.
+    static let chunkBudget = 2000
+
     /// Split oversized events as well as long meetings; never silently drop the tail.
-    static func chunks(_ events: [TranscriptEvent], budget: Int = 4200) -> [[Source]] {
+    static func chunks(_ events: [TranscriptEvent], budget: Int = chunkBudget) -> [[Source]] {
         var result: [[Source]] = []
         var current: [Source] = []
         var count = 0
@@ -139,10 +158,15 @@ enum NotesSummarizer {
     static func summarize(_ meeting: Meeting,
                           request: NotesGenerationRequest = NotesGenerationRequest(style: "balanced")) async throws -> NotesDocument {
         guard SystemLanguageModel.default.availability == .available else { throw Failure.unavailable }
+        // The budget follows the meeting. A fixed two minutes was already too short
+        // for a long one — each passage is its own request, and an hour of speech is
+        // many of them — so a flat limit reported a timeout for work that was
+        // proceeding normally.
+        let seconds = max(120, 45 * chunks(meeting.events).count)
         return try await withThrowingTaskGroup(of: NotesDocument.self) { group in
             group.addTask { try await generate(meeting, request: request) }
             group.addTask {
-                try await Task.sleep(for: .seconds(120))
+                try await Task.sleep(for: .seconds(seconds))
                 throw Failure.timedOut
             }
             defer { group.cancelAll() }
@@ -237,12 +261,15 @@ enum NotesSummarizer {
         return document
     }
 
-    /// Room for the shape actually asked for.
+    /// Room for the answer, without crowding out the question.
     ///
-    /// The schema permits twenty points, each carrying an exact quote copied from
-    /// the transcript; 1800 tokens could not always hold that, and output cut off
-    /// mid-structure is output that will not deserialize.
-    static let responseTokens = 3200
+    /// Raising this was the obvious fix for truncated output and the wrong one:
+    /// the reservation comes out of the same context window as the passage, so
+    /// 3200 bought "Exceeded model context window size" instead. What the model
+    /// needed was a smaller thing to read, not a bigger place to write. Against a
+    /// `chunkBudget` passage this is ample — the quotes it may copy cannot exceed
+    /// the passage itself.
+    static let responseTokens = 1400
 
     /// What to say when part of the meeting could not be summarised.
     ///

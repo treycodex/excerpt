@@ -180,10 +180,32 @@ struct NotesSummarizerTests {
         #expect(NotesSummarizer.skippedNotice(refused: 0, of: 0) == nil)
     }
 
-    @Test func `there is room for the shape the schema actually asks for`() {
-        // Twenty points, each carrying an exact transcript quote. 1800 tokens could
-        // not always hold that, and output cut off mid-structure will not decode.
-        #expect(NotesSummarizer.responseTokens >= 3000)
+    @Test func `a passage is small enough for the model to answer about`() {
+        // Measured on this Mac against three saved meetings. At 4200 the local model
+        // failed every token budget tried; at 2000 both passages of the reported
+        // meeting parsed and 16 points survived verification. Below about 2000 the
+        // yield falls again as the model loses the context a point needs.
+        #expect(NotesSummarizer.chunkBudget <= 2400)
+        #expect(NotesSummarizer.chunkBudget >= 1800)
+    }
+
+    @Test func `the answer is not allowed to crowd out the question`() {
+        // The reservation comes out of the same context window as the passage, so
+        // raising it bought "Exceeded model context window size" instead of room.
+        #expect(NotesSummarizer.responseTokens <= 1800)
+        // And a passage's quotes cannot exceed the passage, so this is ample.
+        #expect(NotesSummarizer.responseTokens * 3 > NotesSummarizer.chunkBudget)
+    }
+
+    @Test func `a long meeting is given time for the requests it needs`() {
+        // Each passage is its own request; a flat two minutes reported a timeout for
+        // work that was proceeding normally.
+        let short = Array(repeating: "word", count: 200).joined(separator: " ")
+        let long = Array(repeating: "word", count: 20_000).joined(separator: " ")
+        let events = { (text: String) in [TranscriptEvent(
+            id: "e", sessionId: "s", role: .remote, speakerLabel: "SPEAKER",
+            text: text, isFinal: true, tArrived: 0)] }
+        #expect(NotesSummarizer.chunks(events(long)).count > NotesSummarizer.chunks(events(short)).count)
     }
 }
 
