@@ -183,12 +183,30 @@ function pairBlocks(currentBlocks: NoteBlock[], incoming: NoteBlock[]) {
 }
 
 /** Match removals alongside surviving siblings; a shared event is not a deletion of every note in it. */
+/**
+ * How many tombstones a document keeps.
+ *
+ * A tombstone is a whole `NoteBlock`, evidence included, and nothing ever pruned
+ * them: a document edited over months accumulated every block ever removed from
+ * it, saved with the meeting forever. A tombstone only has to outlive the
+ * regeneration that would otherwise restore its block, so the oldest are the
+ * safest to drop — and dropping one costs at most a deleted block reappearing in
+ * a preview, which is still shown before anything is applied.
+ */
+const MAX_TOMBSTONES = 200;
+
+/** Keep the most recent tombstones, which are the ones regeneration can restore. */
+export function boundTombstones(deleted: NoteBlock[] | undefined): NoteBlock[] {
+  const kept = deleted ?? [];
+  return kept.length > MAX_TOMBSTONES ? kept.slice(kept.length - MAX_TOMBSTONES) : kept;
+}
+
 export function withoutDeletedBlocks(current: NotesDocument, generated: NotesDocument): NotesDocument {
   const live = current.blocks ?? [];
   const incoming = generated.blocks ?? [];
   const { matched } = pairBlocks([...live, ...(current.deletedBlocks ?? [])], incoming);
   const removed = new Set([...matched].filter(([index]) => index >= live.length).map(([, block]) => block));
-  return { ...generated, blocks: incoming.filter((block) => !removed.has(block)), deletedBlocks: current.deletedBlocks ?? [] };
+  return { ...generated, blocks: incoming.filter((block) => !removed.has(block)), deletedBlocks: boundTombstones(current.deletedBlocks) };
 }
 
 export function mergeGeneratedNotes(current: NotesDocument, generated: NotesDocument): NotesDocument {
@@ -207,7 +225,7 @@ export function mergeGeneratedNotes(current: NotesDocument, generated: NotesDocu
     return block.evidence.length ? [] : [block];
   });
   blocks.push(...incoming.filter((_, i) => !taken.has(i)));
-  return { ...generated, blocks, deletedBlocks: current.deletedBlocks ?? [] };
+  return { ...generated, blocks, deletedBlocks: boundTombstones(current.deletedBlocks) };
 }
 
 const collapse = (text: string) => text.replace(/\s+/g, ' ').trim();

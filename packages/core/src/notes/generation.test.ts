@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { boundTombstones } from './generation';
 import type { Meeting, MeetingImage, NotesProviderStatus, TranscriptEvent } from '@excerpt/types';
 import { compareNotesDocuments, mergeGeneratedNotes, notesCapability } from './generation';
 import { editableDocument, insertMeetingImage, previewTranscriptCorrection } from './editor';
@@ -278,5 +279,25 @@ describe('what a candidate may not touch', () => {
     const merged = mergeGeneratedNotes(current, { ...current, blocks: [...current.blocks!, extra] });
     expect(merged.blocks!.at(-1)!.text).toBe(extra.text);
     expect(compareNotesDocuments(current, merged)).toBe('wording');
+  });
+});
+
+describe('tombstones do not grow without limit', () => {
+  const block = (i: number) => ({ id: `b${i}`, kind: 'bullet' as const, text: `removed ${i}`, evidence: [] });
+
+  it('keeps a normal document untouched', () => {
+    const few = [block(1), block(2), block(3)];
+    expect(boundTombstones(few)).toBe(few);
+    expect(boundTombstones(undefined)).toEqual([]);
+  });
+
+  it('keeps the newest, which are the ones regeneration could restore', () => {
+    // Every tombstone is a whole block with its evidence, saved with the meeting
+    // forever; nothing pruned them.
+    const many = Array.from({ length: 260 }, (_, i) => block(i));
+    const kept = boundTombstones(many);
+    expect(kept).toHaveLength(200);
+    expect(kept.at(-1)!.id).toBe('b259');
+    expect(kept[0]!.id).toBe('b60');
   });
 });

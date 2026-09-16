@@ -95,6 +95,17 @@
 }
 
 /* The list. Two lines each, like Apple Notes: what it is, then when and how much. */
+/* A found passage under the meeting it was found in. */
+.notebook-snippet {
+  display: block; margin-top: 4px; font: 400 12px/1.45 var(--sans);
+  color: var(--faint); overflow-wrap: anywhere;
+}
+.notebook-snippet em {
+  font-style: normal; text-transform: uppercase; letter-spacing: .06em;
+  font-size: 10px; color: var(--faint); opacity: .8;
+}
+.notebook-snippet mark { background: none; color: var(--ink); font-weight: 500; }
+
 .notebook-recent { overflow-y: auto; flex: 1; margin: 0 -2px; padding: 0 2px; }
 .notebook-recent a { display: block; padding: 9px 11px; border-radius: 7px; }
 .notebook-recent strong {
@@ -493,6 +504,67 @@
 .review-actions button,.image-placement button,.document-preview button,.correction-preview button { padding:7px 12px; font:inherit; font-size:13px; cursor:pointer; }
 .confirmed { color:#55764b; }
 .image-placement,.document-preview,.correction-preview { padding:20px; margin:16px 0 28px; background:#f0eee8; border:1px solid #d9d5cc; border-radius:5px; }
+/* A proposed relation between two items. Phrased and styled as a question, not
+   as a finding: nothing here has happened until the reader answers. */
+.item-relation { margin:10px 0 4px; padding:10px 12px; border:1px dashed var(--line-strong); border-radius:6px; background:rgba(120,110,90,.03); }
+.item-relation p { margin:0; font:400 13px/1.5 var(--sans); color:var(--ink); }
+.item-relation p span { color:var(--faint); }
+.item-relation-why { margin-top:4px !important; font-size:11px !important; color:var(--faint) !important; }
+.item-relation-actions { display:flex; gap:8px; margin-top:8px; }
+.item-relation-actions button { font:12px var(--sans); padding:4px 10px; border:1px solid var(--line-strong); border-radius:4px; background:transparent; color:var(--dim); cursor:pointer; }
+.item-relation-actions button:first-child { color:var(--ink); }
+.item-relation-actions button:hover { background:#e9e6df; color:var(--ink); }
+
+/* The outcome, before the conversation it came out of. Reflects the items; it is
+   not part of the document and is never editable. */
+.recap { margin:22px 0 30px; padding:18px 20px 6px; border:1px solid var(--line); border-radius:8px; background:var(--paper-deep); }
+.recap>h2 { margin:0 0 14px; font:10px var(--mono); letter-spacing:.11em; text-transform:uppercase; color:var(--faint); }
+.recap-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:18px 26px; }
+.recap-section h3 { margin:0 0 7px; display:flex; align-items:baseline; gap:7px; font:600 13px var(--sans); color:var(--ink); }
+.recap-section h3 span { font:10px var(--mono); color:var(--faint); }
+.recap-note { margin:0 0 7px; font:400 11px/1.45 var(--sans); color:var(--faint); }
+.recap-section ul { list-style:none; margin:0 0 12px; padding:0; display:grid; gap:5px; }
+.recap-section li button {
+  display:block; width:100%; text-align:left; border:0; background:transparent; padding:3px 0;
+  font:400 13px/1.5 var(--sans); color:var(--dim); cursor:pointer;
+}
+.recap-section li button:hover { color:var(--ink); }
+.recap-section li em { font-style:normal; color:var(--faint); font-size:12px; }
+.recap-moments { display:flex; flex-wrap:wrap; gap:8px; }
+.recap-moments li button { display:flex; align-items:center; gap:7px; width:auto; }
+.recap-moments img { width:38px; height:26px; object-fit:cover; border-radius:3px; background:#171814; }
+@media (max-width:640px) { .recap { padding-inline:14px; } }
+
+/* Source passages, in the same frame as a captured moment: both answer "where
+   did this come from", and they should not look like two different products. */
+.source-panel { margin:24px 0 34px; border:1px solid var(--line); border-radius:8px; background:var(--paper-deep); overflow:hidden; }
+.source-panel>header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); }
+.source-panel>header div { display:flex; align-items:baseline; gap:12px; }
+.source-panel>header span,.source-panel>header strong { font:10px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+.source-panel>header span { color:var(--faint); } .source-panel>header strong { color:var(--ink); }
+.source-panel>header button { border:0; background:transparent; font-size:20px; color:var(--dim); cursor:pointer; }
+.source-panel>.rubric { margin:0; padding:12px 18px 16px; border-top:1px solid var(--line); font-size:12px; }
+.source-note { margin:0; padding:16px 18px 0; font:500 15px/1.6 var(--sans); color:var(--ink); }
+.source-list { list-style:none; margin:0; padding:14px 18px 4px; display:grid; gap:16px; }
+.source-list>li { padding-left:12px; border-left:2px solid var(--line-strong); min-width:0; }
+.source-meta { display:flex; gap:10px; align-items:baseline; font:10px var(--mono); letter-spacing:.09em; text-transform:uppercase; }
+.source-meta .dim { color:var(--faint); }
+.source-quote { margin:6px 0 0; font:400 14px/1.6 var(--sans); color:var(--ink); }
+.source-around { margin:6px 0 0; font:400 13px/1.6 var(--sans); color:var(--faint); }
+.source-around .matched { color:var(--ink); }
+.source-open { margin-top:7px; border:0; background:transparent; padding:0; font:12px var(--sans); color:var(--dim); cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+.source-open:hover { color:var(--ink); }
+@media (max-width:640px) { .source-list { padding-inline:14px; } }
+
+/* A citation belongs to the note, so it is always legible — not revealed on hover
+   with the editing tools, where nobody found it. */
+.block-citation {
+  border:0; background:transparent; padding:2px 0; cursor:pointer;
+  font:10px var(--mono); letter-spacing:.09em; text-transform:uppercase;
+  color:var(--faint); text-decoration:underline; text-underline-offset:3px;
+}
+.block-citation:hover { color:var(--ink); }
+
 .moment-viewer { margin:24px 0 34px; border:1px solid var(--line); border-radius:8px; background:var(--paper-deep); overflow:hidden; }
 .moment-viewer>header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); }
 .moment-viewer>header div { display:flex; align-items:baseline; gap:12px; }

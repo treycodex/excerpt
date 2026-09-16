@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { NotesWorkspace } from './NotesWorkspace';
+import { NotesWorkspace, OPEN_AT_KEY } from './NotesWorkspace';
 import { NotesDocument } from './NotesDocument';
 import { readMeetingImage } from '../meetingImages';
-import { applyPreferences, bridge, compareNotesDocuments, isNativeHost, notesMetadataDifference, matchedBoosts, mergeGeneratedNotes, notesCapability, orderCategories, saveMeeting, toMarkdown, toTurns, refreshMeetingNotes, preserveNoteEdits, noteTitle, editableDocument, insertMeetingImage, meetingImagePassage, previewTranscriptCorrection, safeImageUrl, toHTML, transcriptEventTime } from '@excerpt/core';
+import { applyPreferences, bridge, relateItems, compareNotesDocuments, isNativeHost, notesMetadataDifference, matchedBoosts, mergeGeneratedNotes, notesCapability, orderCategories, saveMeeting, toMarkdown, toTurns, refreshMeetingNotes, preserveNoteEdits, noteTitle, editableDocument, insertMeetingImage, meetingImagePassage, previewTranscriptCorrection, safeImageUrl, toHTML, transcriptEventTime } from '@excerpt/core';
 import { Frame, Strip } from '@excerpt/ui';
 import type { StripMark } from '@excerpt/ui';
-import type { Category, Item, Meeting, MeetingImage, NotesDocument as Document, NotesGenerationRequest, NotesProviderStatus, Preferences as Prefs } from '@excerpt/types';
+import type { ItemRelation } from '@excerpt/core';
+import type { Category, Evidence, Item, Meeting, MeetingImage, NoteBlock, NotesDocument as Document, NotesGenerationRequest, NotesProviderStatus, Preferences as Prefs } from '@excerpt/types';
 
 type Style = NotesGenerationRequest['style'];
 
@@ -91,6 +92,7 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
   const [meeting, setMeeting] = useState(initial);
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [focusedEvent, setFocusedEvent] = useState<string | null>(null);
+  const [sourceNote, setSourceNote] = useState<{ text: string; evidence: Evidence[] } | null>(null);
   const [selectedMoment, setSelectedMoment] = useState<string | null>(null);
   const [expandedMoment, setExpandedMoment] = useState(false);
   const [position, setPosition] = useState<number | undefined>(undefined);
@@ -304,6 +306,10 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
   const decided = live.filter((i) => i.state === 'decided' && i.category === 'decision');
   const mine = live.filter((i) => i.assignee === 'you');
   const review = live.filter((i) => i.category === 'action' && i.assignee === 'unassigned');
+  // Suggestions, derived rather than stored: nothing is written until the reader
+  // answers, so a rejected link cannot come back as stale data.
+  const relations = useMemo(() => relateItems(live), [live]);
+  const relationOf = useMemo(() => new Map(relations.map((r) => [r.itemId, r])), [relations]);
   const dismissed = meeting.items.filter((i) => i.dismissed);
 
   // Sections follow the user's stated order; ordering never hides anything.
@@ -373,14 +379,75 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
     cards.current[itemId]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
   };
 
+  /**
+   * The reader says these two were one commitment.
+   *
+   * The later item keeps the work and absorbs the earlier one's passages; the
+   * earlier is dismissed rather than deleted, so it is still in the Dismissed
+   * list and still restorable. `related` records what was joined — shown as a
+   * related moment, never asserted as a cause.
+   */
+  const joinRelated = (relation: ItemRelation) => {
+    const earlier = meeting.items.find((i) => i.id === relation.relatedId);
+    const later = meeting.items.find((i) => i.id === relation.itemId);
+    if (!earlier || !later) return;
+    persist({
+      ...meeting,
+      items: meeting.items.map((item) => {
+        if (item.id === later.id) {
+          return { ...item, userEdited: true,
+            related: [...(item.related ?? []), earlier.id],
+            evidence: [...item.evidence, ...earlier.evidence] };
+        }
+        if (item.id === earlier.id) return { ...item, dismissed: true, userEdited: true };
+        return item;
+      }),
+    });
+  };
+
+  /** Not the same thing. Marking it edited stops it being offered again. */
+  const rejectRelated = (relation: ItemRelation) => {
+    persist({
+      ...meeting,
+      items: meeting.items.map((item) => (item.id === relation.itemId
+        ? { ...item, userEdited: true } : item)),
+    });
+  };
+
   const openTranscript = (eventId: string) => {
     setFocusedEvent(eventId);
     setTab('transcript');
   };
 
+  /** Show every passage a note cites, without leaving the document to do it. */
+  const openSource = (note: { text: string; evidence: Evidence[] }) => {
+    setSourceNote(note);
+    setSelectedMoment(null);
+    setTab('notes');
+  };
+  const openBlockSource = (block: NoteBlock) => openSource(block);
+  const openItemSource = (item: Item) => openSource({ text: noteTitle(item), evidence: item.evidence });
+
+  const sourcePassages = useMemo(() => (sourceNote?.evidence ?? [])
+    .map((evidence) => ({ evidence, around: evidenceContext(meeting, evidence) })), [sourceNote, meeting]);
+
   useEffect(() => {
     if (tab === 'transcript' && focusedEvent) rows.current[focusedEvent]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
   }, [tab, focusedEvent]);
+
+  // Arrived from a library search that matched something said in this meeting:
+  // open at the passage rather than at the top, which is the whole point of
+  // searching the transcript.
+  useEffect(() => {
+    let target: string | null = null;
+    try {
+      target = sessionStorage.getItem(OPEN_AT_KEY);
+      if (target) sessionStorage.removeItem(OPEN_AT_KEY);
+    } catch { /* nothing to restore */ }
+    if (target && meeting.events.some((e) => e.id === target)) openTranscript(target);
+    // Only on arrival at a meeting, never on a later re-render of the same one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meeting.id]);
 
   useEffect(() => {
     if (tab === 'review' && activeItem) cards.current[activeItem]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
@@ -490,6 +557,9 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
         <details className="notebook-timeline"><summary>Explore meeting timeline</summary><Strip duration={duration} position={position} marks={marks} onScrub={scrub} onSelect={selectMark} {...(selectedMoment ? { selectedId: `image:${selectedMoment}` } : activeItem ? { selectedId: `item:${activeItem}` } : {})} /><p className="rubric">{meeting.events.some((e) => e.tStart !== undefined) ? 'Lines are notes; diamonds are captured moments. Select either to revisit its source.' : 'Lines are notes; diamonds are captured moments. Transcript timings are approximate.'}</p></details>
       </header>
       <div hidden={tab !== 'notes'}>
+      <Recap items={live} images={meeting.images ?? []} onItem={openItemSource} onMoment={openMoment} />
+      {sourceNote && <SourcePanel note={sourceNote} passages={sourcePassages}
+        onOpen={openTranscript} onClose={() => setSourceNote(null)} />}
       {moment && <MomentViewer image={moment} caption={momentBlock?.text ?? moment.caption} passage={momentPassage} expanded={expandedMoment} onCaption={captionMoment} onExpand={() => setExpandedMoment((value) => !value)} onClose={() => setSelectedMoment(null)} onSource={openTranscript} />}
       <div className="document-toolbar">
         {/* What produced this wording, then what the buttons beside it can actually
@@ -534,7 +604,7 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
       </section>}
       {pendingImages.length > 0 && <section className="image-placement" aria-label="Place screenshot"><h2>Place {pendingImages.length === 1 ? 'image' : 'images'} in the conversation</h2><p>Choose when this was shown. The image will sit beside the notes from that moment.</p><label>Meeting time <input aria-label="Image meeting time" value={imageTime} onChange={(e) => setImageTime(e.target.value)} placeholder="12:34" /></label><button disabled={importing} onClick={() => { void importImages(); }}>{importing ? 'Adding…' : 'Add to notes'}</button><button disabled={importing} onClick={() => setPendingImages([])}>Cancel</button>{imageError && <p role="alert">{imageError}</p>}</section>}
       <fieldset className="notes-editor" disabled={generating || importing}>
-      <NotesDocument document={noteDocument} images={meeting.images ?? []} onChange={editDocument} onSource={openTranscript} onImages={queueImages} onMoment={openMoment} selectedImageId={selectedMoment} />
+      <NotesDocument document={noteDocument} images={meeting.images ?? []} onChange={editDocument} onSource={openBlockSource} onImages={queueImages} onMoment={openMoment} selectedImageId={selectedMoment} />
       </fieldset>
       {/* Not in the Mac window. This is the website's own build running there, and
           its subtitle-style control writes to the webview's storage, not to the
@@ -565,6 +635,12 @@ export function Notes({ meeting: initial, prefs, onReplay, initialSaveFailed = f
                 boosts={prefs ? matchedBoosts(item, prefs) : []}
                 onEvidence={revealEvidence}
                 onFullTranscript={openTranscript}
+                relation={relationOf.get(item.id)}
+                relatedTitle={relationOf.has(item.id)
+                  ? noteTitle(live.find((i) => i.id === relationOf.get(item.id)!.relatedId)!)
+                  : undefined}
+                onJoin={joinRelated}
+                onReject={rejectRelated}
                 onUpdate={update}
               />
             </div>
@@ -638,8 +714,138 @@ function MomentViewer({ image, caption, passage, expanded, onCaption, onExpand, 
   </aside>;
 }
 
+/**
+ * What the meeting settled, before the meeting itself.
+ *
+ * The document is chronological, so the outcome had to be reassembled by reading
+ * the whole conversation back — and the structured version of it lived in a
+ * different tab, which is not where somebody opening their notes is looking.
+ *
+ * Deliberately read-only, and deliberately not part of the document. A block kind
+ * would need an arm in every exporter, would be editable prose the regeneration
+ * merge has to protect, and would put a generated summary inside a document its
+ * reader owns. This reflects the items; it never becomes them.
+ */
+function Recap({ items, images, onItem, onMoment }: {
+  items: Item[];
+  images: MeetingImage[];
+  onItem: (item: Item) => void;
+  onMoment: (id: string) => void;
+}) {
+  const live = items.filter((i) => !i.dismissed);
+  const decisions = live.filter((i) => i.category === 'decision' && i.state === 'decided');
+  // Shown, and shown as unsettled. Styling a proposal like a decision is the one
+  // mistake this whole extractor is built to avoid, and a recap is the likeliest
+  // place to make it.
+  const proposals = live.filter((i) => i.category === 'decision' && i.state === 'proposed');
+  const commitments = live.filter((i) => i.category === 'action' && i.assignee === 'you');
+  const unassigned = live.filter((i) => i.category === 'action' && i.assignee !== 'you');
+  const questions = live.filter((i) => i.category === 'question');
+  const dates = live.filter((i) => i.category === 'deadline');
+
+  const sections: { title: string; note?: string; items: Item[] }[] = [
+    { title: 'Decided', items: decisions },
+    { title: 'Yours to do', items: commitments },
+    { title: 'Not assigned', note: 'Said to somebody. Two streams cannot tell whom.', items: unassigned },
+    { title: 'Left open', items: questions },
+    { title: 'Dates', items: dates },
+    { title: 'Raised, not settled', note: 'Floated in conversation. Nothing here was agreed.', items: proposals },
+  ].filter((section) => section.items.length > 0);
+
+  if (!sections.length && !images.length) return null;
+
+  return <section className="recap" aria-label="What this meeting settled">
+    <h2>Before you read it back</h2>
+    <div className="recap-grid">
+      {sections.map((section) => (
+        <div key={section.title} className="recap-section">
+          <h3>{section.title} <span>{section.items.length}</span></h3>
+          {section.note && <p className="recap-note">{section.note}</p>}
+          <ul>
+            {section.items.map((item) => (
+              <li key={item.id}>
+                <button onClick={() => onItem(item)}>
+                  {noteTitle(item)}
+                  {item.due && <em> · due {item.due}</em>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {images.length > 0 && (
+        <div className="recap-section">
+          <h3>Captured <span>{images.length}</span></h3>
+          <ul className="recap-moments">
+            {images.map((image) => (
+              <li key={image.id}>
+                <button onClick={() => onMoment(image.id)}>
+                  {safeImageUrl(image.dataUrl) && <img src={image.dataUrl} alt="" />}
+                  <span>{image.caption || clock(image.at)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  </section>;
+}
+
+/**
+ * Every passage a note is built on, beside the note.
+ *
+ * Verification was a one-way trip: the control opened the first event of the
+ * first passage, switched to the Transcript tab, and recorded nothing about where
+ * it came from — so checking a note cost you your place in the document, and a
+ * note built on several passages could only ever show one of them.
+ */
+function SourcePanel({ note, passages, onOpen, onClose }: {
+  note: { text: string; evidence: Evidence[] };
+  passages: { evidence: Evidence; around: Meeting['events'] }[];
+  onOpen: (eventId: string) => void;
+  onClose: () => void;
+}) {
+  return <aside className="source-panel" aria-label="Source passages for this note">
+    <header>
+      <div><span>Source{passages.length === 1 ? '' : 's'}</span><strong>{passages.length} passage{passages.length === 1 ? '' : 's'}</strong></div>
+      <button aria-label="Close source passages" onClick={onClose}>×</button>
+    </header>
+    <blockquote className="source-note">{note.text || '(empty note)'}</blockquote>
+    <ol className="source-list">
+      {passages.map(({ evidence, around }, i) => (
+        <li key={`${evidence.eventIds.join('|')}-${i}`}>
+          <div className="source-meta">
+            <span>{evidence.speakerLabel === 'YOU' ? 'You' : evidence.speakerLabel === 'SPEAKER' ? 'Others' : evidence.speakerLabel}</span>
+            <span className="dim">{stamp(evidence)}</span>
+          </div>
+          <p className="source-quote">{evidence.quote}</p>
+          {around.length > 0 && (
+            <p className="source-around">
+              {around.map((event) => (
+                <span key={event.id} className={evidence.eventIds.includes(event.id) ? 'matched' : ''}>{event.text} </span>
+              ))}
+            </p>
+          )}
+          {evidence.eventIds[0] && (
+            <button className="source-open" onClick={() => onOpen(evidence.eventIds[0]!)}>Open in transcript ↗</button>
+          )}
+        </li>
+      ))}
+    </ol>
+    <p className="rubric">Every note points at what was said. Correct a passage in the transcript and the note follows.</p>
+  </aside>;
+}
+
+/** What kind of pair this is, in the words a reader would use. */
+const RELATION_COPY: Record<ItemRelation['kind'], { lead: string; join: string }> = {
+  'request-commitment': { lead: 'Asked for earlier, and this may be the answer to it', join: 'Same commitment' },
+  'proposal-decision': { lead: 'Raised earlier, and this may be what settled it', join: 'Resolved by this' },
+};
+
 function ItemCard({
   item, active, context, boosts, onEvidence, onFullTranscript, onUpdate,
+  relation, relatedTitle, onJoin, onReject,
 }: {
   item: Item;
   active: boolean;
@@ -648,6 +854,10 @@ function ItemCard({
   onEvidence: (itemId: string, eventId: string, at: number) => void;
   onFullTranscript: (eventId: string) => void;
   onUpdate: (id: string, patch: ItemPatch) => void;
+  relation?: ItemRelation | undefined;
+  relatedTitle?: string | undefined;
+  onJoin: (relation: ItemRelation) => void;
+  onReject: (relation: ItemRelation) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(noteTitle(item));
@@ -685,6 +895,21 @@ function ItemCard({
           </div>
         ) : (
           <h3 className={`title${item.completed ? ' completed' : ''}`}>{item.category === 'action' && <input className="action-check" type="checkbox" aria-label={`Complete: ${noteTitle(item)}`} checked={!!item.completed} onChange={(e) => onUpdate(item.id, { completed: e.target.checked })} />}{noteTitle(item)}</h3>
+        )}
+
+        {/* A question, never a merge. Two items about one commitment cannot be
+            joined by rule — the de-duplication pass is exact, and everything that
+            differs here is exactly what it compares. Only the reader can say these
+            were the same thing, so only the reader does. */}
+        {relation && relatedTitle && (
+          <div className="item-relation">
+            <p><span>{RELATION_COPY[relation.kind].lead}</span> “{relatedTitle}”</p>
+            <p className="item-relation-why">Both mention {relation.shared.map((w) => `“${w}”`).join(', ')}.</p>
+            <div className="item-relation-actions">
+              <button onClick={() => onJoin(relation)}>{RELATION_COPY[relation.kind].join}</button>
+              <button onClick={() => onReject(relation)}>Not related</button>
+            </div>
+          </div>
         )}
 
         <details className="note-evidence" open={active || undefined}><summary>Source · {item.evidence[0] ? stamp(item.evidence[0]) : 'No passage'}</summary>
@@ -741,6 +966,13 @@ function ItemCard({
       </article>
     </Frame>
   );
+}
+
+/** The speech immediately around one cited passage, for reading it in context. */
+function evidenceContext(meeting: Meeting, evidence: Evidence): Meeting['events'] {
+  const index = meeting.events.findIndex((event) => event.id === evidence.eventIds[0]);
+  if (index < 0) return [];
+  return meeting.events.slice(Math.max(0, index - 1), index + 2);
 }
 
 function transcriptContext(meeting: Meeting, item: Item): Meeting['events'] {
