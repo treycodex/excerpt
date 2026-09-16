@@ -7,7 +7,8 @@ import {
   meetingImageContext,
 } from '@excerpt/core';
 import type { AdapterStatus, Meeting, MeetingImage, ProcessingMode, TranscriptEvent } from '@excerpt/types';
-import type { AudioInput, StreamDiagnostics } from '@excerpt/core';
+import { isStalled, sourceHealth } from '@excerpt/core';
+import type { AudioInput, SourceHealth, StreamDiagnostics } from '@excerpt/core';
 import { listMicrophones, preferredMicrophone } from '@excerpt/core';
 import { Captions } from './CallFrame';
 import type { Spoken } from './CallFrame';
@@ -24,6 +25,26 @@ const LINGER = 3200;
 const supported = () =>
   ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) &&
   !!navigator.mediaDevices?.getDisplayMedia;
+
+/**
+ * One source's state in the reader's words.
+ *
+ * "Quiet" is deliberately not phrased as a fault. A microphone nobody is talking
+ * into is the normal state of a microphone for most of a meeting, and calling
+ * that a problem trains people to ignore the row that also has to carry the real
+ * one.
+ */
+const TONE: Record<SourceHealth, string> = {
+  starting: 'dim', hearing: 'ok', silent: 'dim', stalled: 'warn', failed: 'warn',
+};
+
+const SOURCE_STATE: Record<SourceHealth, (d: StreamDiagnostics) => string> = {
+  starting: () => 'starting…',
+  hearing: () => 'hearing speech',
+  silent: (d) => (d.voicedSeconds < 1 ? 'nothing yet' : 'quiet'),
+  stalled: () => 'not being recognised',
+  failed: (d) => (d.lastError === 'audio-capture' ? 'device unavailable' : 'stopped'),
+};
 
 export function Record({ onSaved }: { onSaved: (id: string) => void }) {
   const [preset, setPreset] = useState<CaptionPreset>(() => currentPreset());
@@ -42,6 +63,8 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'failed'>('idle');
   const [unsaved, setUnsaved] = useState<Meeting | null>(null);
   const [recovered, setRecovered] = useState(false);
+  const [recoveredImages, setRecoveredImages] = useState(0);
+  const [draftFailed, setDraftFailed] = useState(false);
   const [imageCount, setImageCount] = useState(0);
   const [imageMessage, setImageMessage] = useState('');
   const [catchUp, setCatchUp] = useState(false);
@@ -62,10 +85,15 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
   const checkpoint = useCallback((nextEvents: TranscriptEvent[], nextElapsed: number) => {
     const snapshot = [...nextEvents];
     const imageSnapshot = [...images.current];
-    draftWrite.current = draftWrite.current.catch(() => {}).then(() => saveCaptureDraft({
-      id: 'active', startedAt: draftStartedAt.current, elapsed: nextElapsed,
-      processing: processingUsed.current, events: snapshot, images: imageSnapshot,
-    }));
+    draftWrite.current = draftWrite.current.catch(() => {}).then(async () => {
+      // A draft that cannot be written is a capture with no recovery net. Say so
+      // while the meeting is still running and something can be done about it.
+      const stored = await saveCaptureDraft({
+        id: 'active', startedAt: draftStartedAt.current, elapsed: nextElapsed,
+        processing: processingUsed.current, events: snapshot, images: imageSnapshot,
+      });
+      setDraftFailed(!stored);
+    });
   }, []);
 
   const begin = useCallback(async (mode: Mode, cloudAllowed: boolean) => {
@@ -150,6 +178,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
       segmentOffset.current = draft.elapsed;
       setElapsed(draft.elapsed);
       setCaptured(draft.events.length);
+      setRecoveredImages(draft.images?.length ?? 0);
       setRecovered(true);
     });
     return () => { cancelled = true; };
@@ -230,6 +259,28 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
       setMicLevel(0);
       setCheckingMic(false);
     }
+  };
+
+  /**
+   * Throw the recovered draft away and start from nothing.
+   *
+   * Recovery restored the old events and continued the old clock on the next
+   * capture, so a draft you did not want was appended to rather than replaced,
+   * with no way to say so.
+   */
+  const discardDraft = () => {
+    events.current = [];
+    images.current = [];
+    provisional.current = {};
+    segmentOffset.current = 0;
+    draftStartedAt.current = new Date().toISOString();
+    setCatchUpEvents([]);
+    setCaptured(0);
+    setImageCount(0);
+    setElapsed(0);
+    setRecoveredImages(0);
+    setRecovered(false);
+    draftWrite.current = draftWrite.current.catch(() => {}).then(() => clearCaptureDraft());
   };
 
   const stop = async () => {
@@ -392,14 +443,24 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
 
   if (status.kind === 'running' || status.kind === 'starting') {
     const processing = status.kind === 'running' ? status.processing : 'on-device';
-    const hearing = diag.some((d) => d.voicedSeconds > 1.5);
     const heard = diag.some((d) => d.voicedSeconds > 3);
     const recognised = diag.some((d) => d.finals + d.interims > 0);
-    const stalled = elapsed > 15_000 && heard && !recognised;
-    const withError = diag.find((d) => d.lastError);
+    // Two different failures, and only the first used to be caught. "Never
+    // started" is a one-shot check on the opening seconds; a recognizer that
+    // works for ten minutes and then dies satisfies `recognised` for the rest of
+    // the meeting, so the screen went on saying Excerpt was listening while
+    // nothing was being written down. isStalled is rolling and per stream.
+    const neverStarted = elapsed > 15_000 && heard && !recognised;
+    const dead = diag.filter(isStalled);
+    const stalled = neverStarted || dead.length > 0;
+    const withError = (dead.find((d) => d.lastError) ?? diag.find((d) => d.lastError));
     const stalledHint = withError
       ? `It reported "${withError.lastError}".`
       : 'Check that the shared tab is the one making sound, and that its audio is not muted in Chrome.';
+    const stalledWhat = neverStarted || dead.length === diag.length
+      ? 'Sound is reaching Excerpt but nothing is coming back from the speech engine.'
+      : `${dead.map((d) => d.label).join(' and ')}: sound is arriving but nothing has been`
+        + ` recognised for ${Math.round(Math.max(...dead.map((d) => d.sinceFinal)))} seconds.`;
     return (
       <div className="session">
         <div className="call live">
@@ -413,10 +474,24 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
           )}
         </div>
 
-        <div className="live-status">
-          <span className={hearing ? 'ok' : 'warn'}>
-            {hearing ? 'Hearing the meeting' : 'Not hearing anything yet'}
-          </span>
+        {/* One chip per source, never an aggregate. "Hearing the meeting" used to
+            be true if EITHER stream had ever had a second and a half of audio, so
+            a microphone that died beside a healthy tab still showed green for the
+            rest of the meeting — the same "ever, not now" mistake the stall check
+            below exists to avoid. */}
+        <div className="live-status live-sources">
+          {diag.map((d) => {
+            const health = sourceHealth(d);
+            const name = d.role === 'you' ? 'Your microphone' : 'Meeting audio';
+            return (
+              <span key={d.role} className={`source-chip ${TONE[health]}`}
+                title={d.device || 'default device'}>
+                <Level level={d.level} />
+                <b>{name}</b> {SOURCE_STATE[health](d)}
+              </span>
+            );
+          })}
+          {diag.length === 0 && <span className="warn">Starting the speech engine…</span>}
           <span className="dim">·</span>
           <span className={processing === 'cloud' ? 'warn' : ''}>
             {processing === 'cloud' ? 'Sent to Google to transcribe' : 'Private — nothing leaves this Mac'}
@@ -453,7 +528,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
           <details className="diagnostics">
             <summary>Troubleshooting details</summary>
             {diag.map((d) => (
-              <p key={d.role}>{d.label}: {d.device || 'default device'} · {d.voicedSeconds.toFixed(0)}s sound · {d.finals} final · {d.interims} interim · {d.restarts} restarts{d.events.length ? ` · ${d.events.slice(-4).join(' → ')}` : ''}</p>
+              <p key={d.role}>{d.label}: {d.device || 'default device'} · {d.voicedSeconds.toFixed(0)}s sound · {d.finals} final · {d.interims} interim · {d.restarts} restarts · {d.sinceFinal.toFixed(0)}s since last final{d.gaveUp ? ' · gave up restarting' : ''}{d.events.length ? ` · ${d.events.slice(-4).join(' → ')}` : ''}</p>
             ))}
           </details>
         )}
@@ -462,8 +537,7 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
             recognised, say so rather than showing a hopeful spinner forever. */}
         {stalled && (
           <p className="rubric stalled">
-            Sound is reaching Excerpt but nothing is coming back from the speech
-            engine. {stalledHint}
+            {stalledWhat} {stalledHint}
           </p>
         )}
 
@@ -504,11 +578,30 @@ export function Record({ onSaved }: { onSaved: (id: string) => void }) {
           recorded. Transcription stays on-device by default; cloud processing is used
           only if local transcription fails and you explicitly choose it.
         </p>
-        {recovered && captured > 0 && (
+        {/* Say what survived, whatever it was. Gated on transcript lines alone,
+            this banner stayed hidden for a draft holding only screenshots — which
+            were restored, kept in memory, and never mentioned to the person who
+            took them. */}
+        {recovered && (captured > 0 || recoveredImages > 0) && (
           <div className="draft-banner" role="status">
-            <p><b>Recovered draft</b> · {captured} finalised {captured === 1 ? 'line' : 'lines'} from this device.</p>
-            <div className="actions"><button onClick={() => { void stop(); }}>Write notes now</button></div>
+            <p><b>Recovered draft</b> · {[
+              captured > 0 && `${captured} finalised ${captured === 1 ? 'line' : 'lines'}`,
+              recoveredImages > 0 && `${recoveredImages} captured ${recoveredImages === 1 ? 'image' : 'images'}`,
+            ].filter(Boolean).join(' and ')} from this device.</p>
+            <div className="actions">
+              <button onClick={() => { void stop(); }}>Write notes now</button>
+              {/* Without this, the next capture silently appends to a draft you
+                  may not want and continues its clock. */}
+              <button onClick={discardDraft}>Discard and start fresh</button>
+            </div>
           </div>
+        )}
+        {draftFailed && (
+          <p className="rubric warn" role="status">
+            This browser is refusing to save a recovery draft, so an interrupted
+            meeting could not be recovered. Your notes are still written when you
+            finish. Private windows and blocked site data are the usual causes.
+          </p>
         )}
       </header>
 

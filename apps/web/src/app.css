@@ -807,6 +807,21 @@ code {
 .live-status .warn { color: var(--warn); }
 .live-status .dim { color: var(--faint); }
 
+/* One chip per source. Two sources, side by side, so a dead one cannot hide
+   behind a healthy one — which is exactly what a single aggregate line did. */
+.live-sources { gap: 8px 14px; }
+.source-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px 4px 9px;
+  font: 400 14px/1.4 var(--sans); white-space: nowrap;
+}
+.source-chip b { font-weight: 500; color: var(--ink); }
+.source-chip.ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.source-chip.warn { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.source-chip.ok .level i { background: var(--ok); }
+.source-chip.warn .level i { background: var(--warn); }
+@media (max-width: 560px) { .source-chip { white-space: normal; } }
+
 .diagnostics { margin-top: 16px; }
 .diagnostics summary {
   font: var(--label); letter-spacing: var(--label-track); text-transform: uppercase;

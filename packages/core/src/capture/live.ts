@@ -44,6 +44,81 @@ export interface StreamDiagnostics {
   /** Which device this stream came from. A silent Continuity mic looks identical
       to a quiet room unless the label is on screen. */
   device?: string;
+  /** Seconds of voiced audio that have arrived since this stream last settled
+      any text. A recognizer that dies mid-meeting is silent in every other
+      measure — the counters stop moving and nothing says why. */
+  voicedSinceFinal: number;
+  /** Wall seconds since the last final, or since capture began. */
+  sinceFinal: number;
+  /** Wall seconds since a frame on this stream was last above the voice
+      threshold; `Infinity` until one ever is. `voicedSeconds` is cumulative and
+      never decays, so it can only answer "did this stream EVER hear anything" —
+      the question a live indicator has to answer is whether it is hearing
+      anything *now*. */
+  sinceVoiced: number;
+  /** Set when restarts were abandoned after repeated immediate failures. */
+  gaveUp?: boolean;
+}
+
+/** How recently a stream must have heard a voice to count as hearing one. */
+const HEARING_WINDOW_SECONDS = 4;
+
+/**
+ * What one stream is doing, as a single word.
+ *
+ * Kept per stream on purpose. The aggregate the status row used to show — has
+ * *any* stream heard *anything* — goes green on the first second of audio and
+ * stays green for the rest of the meeting, so a microphone that dies beside a
+ * healthy tab is indistinguishable from one that is working.
+ *
+ * `silent` and `stalled` are the distinction that matters: nobody is speaking
+ * into this source, versus speech is arriving and nothing is coming back.
+ */
+export type SourceHealth = 'starting' | 'hearing' | 'silent' | 'stalled' | 'failed';
+
+export function sourceHealth(d: StreamDiagnostics): SourceHealth {
+  if (d.gaveUp || d.lastError === 'audio-capture') return 'failed';
+  if (!d.started) return 'starting';
+  if (isStalled(d)) return 'stalled';
+  return d.sinceVoiced <= HEARING_WINDOW_SECONDS ? 'hearing' : 'silent';
+}
+
+/** Voiced audio that must go unrecognised before a stream is called stalled. */
+const STALL_VOICED_SECONDS = 8;
+/** And how long in wall time, so an ordinary pause never trips it. */
+const STALL_WALL_SECONDS = 30;
+
+/**
+ * A stream that is being spoken into and is recognising nothing.
+ *
+ * Both conditions are needed. Wall time alone calls a quiet room broken; voiced
+ * seconds alone trips on the gap between a long sentence and its final. The
+ * check is deliberately rolling rather than "has this stream ever produced a
+ * result": recognition that works for ten minutes and then dies satisfies
+ * "ever" for the rest of the meeting, which is how a capture could go on
+ * reporting that it was listening while nothing was being written down.
+ */
+/**
+ * Words for echo comparison, Unicode-aware.
+ *
+ * This stripped everything outside `[a-z0-9' ]`, so a line about Ángela or
+ * Grégoire lost those tokens entirely. Enough of them and the `mine.size < 3`
+ * guard short-circuits, echo suppression silently stops, and the far side is
+ * transcribed twice and attributed to you — which corrupts the one thing two
+ * streams exist to know. English meetings with non-English names hit this too.
+ *
+ * Exported for tests; not part of the package's public surface.
+ */
+export function echoWords(text: string): Set<string> {
+  return new Set(
+    text.toLowerCase().replace(/[^\p{L}\p{N}' ]/gu, ' ')
+      .split(/\s+/).filter((w) => w.length > 2),
+  );
+}
+
+export function isStalled(d: StreamDiagnostics): boolean {
+  if (d.gaveUp) return true;
+  return d.voicedSinceFinal >= STALL_VOICED_SECONDS && d.sinceFinal >= STALL_WALL_SECONDS;
 }
 
 export interface LiveCaptureOptions {
@@ -215,15 +290,11 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     this.recentRemote = this.recentRemote.filter(
       (r) => now - r.at < LiveCaptureAdapter.ECHO_WINDOW_MS,
     );
-    const mine = new Set(
-      text.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').split(/\s+/).filter((w) => w.length > 2),
-    );
+    const mine = echoWords(text);
     if (mine.size < 3) return false;   // too short to judge
 
     for (const r of this.recentRemote) {
-      const theirs = new Set(
-        r.text.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').split(/\s+/).filter((w) => w.length > 2),
-      );
+      const theirs = echoWords(r.text);
       let hits = 0;
       mine.forEach((w) => { if (theirs.has(w)) hits++; });
       if (hits / mine.size >= LiveCaptureAdapter.ECHO_OVERLAP) return true;
@@ -240,6 +311,7 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       this.audio.createMediaStreamSource(stream).connect(analyser);
       const buf = new Float32Array(analyser.fftSize);
       let last = performance.now();
+      let lastVoicedAt: number | undefined;
       const loop = () => {
         if (!this.running) return;
         analyser.getFloatTimeDomainData(buf);
@@ -250,7 +322,12 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
         const d = this.diagnostics[key];
         if (d) {
           d.level = rms;
-          if (rms > 0.01) d.voicedSeconds += (now - last) / 1000;
+          if (rms > 0.01) {
+            d.voicedSeconds += (now - last) / 1000;
+            d.voicedSinceFinal += (now - last) / 1000;
+            lastVoicedAt = now;
+          }
+          d.sinceVoiced = lastVoicedAt === undefined ? Infinity : (now - lastVoicedAt) / 1000;
         }
         last = now;
         setTimeout(loop, 100);
@@ -274,6 +351,10 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
   private static readonly MIN_CHUNK_WORDS = 12;
   /** Commit at least this often even if the speaker never pauses. */
   private static readonly MAX_HOLD_MS = 6000;
+  /** Restart delays, in order, until a result proves the recognizer is alive. */
+  private static readonly RESTART_BACKOFF_MS = [120, 250, 500, 1000, 2000, 4000, 8000];
+  /** Consecutive fruitless restarts before the stream is left alone. */
+  private static readonly RESTART_GIVE_UP = 12;
 
   private attach(
     track: MediaStreamTrack, role: SourceRole, label: string, local: boolean, attempt: number,
@@ -287,7 +368,8 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     const entry = { rec, track, stopping: false };
     const key = role;
     this.diagnostics[key] = {
-      role, label, level: 0, voicedSeconds: 0,
+      role, label, level: 0, voicedSeconds: 0, voicedSinceFinal: 0, sinceFinal: 0,
+      sinceVoiced: Infinity,
       finals: 0, interims: 0, restarts: 0, started: false, events: [], echoesDropped: 0,
       ...(track.label ? { device: track.label } : {}),
     };
@@ -314,6 +396,9 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     let committed = 0;
     let lastGrowth = performance.now();
     let lastCommit = performance.now();
+    let lastFinalAt = performance.now();
+    /** Restarts since this stream last produced anything at all. */
+    let failedRestarts = 0;
 
     const send = (text: string, isFinal: boolean, confidence?: number) => {
       if (!text) return;
@@ -358,7 +443,12 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       if (!text) return;
       send(text, true);
       const d = this.diagnostics[key];
-      if (d) d.finals++;
+      if (d) {
+        d.finals++;
+        d.voicedSinceFinal = 0;
+        d.sinceFinal = 0;
+      }
+      lastFinalAt = performance.now();
       trace(`committed ${cut - committed}w (${why})`);
       committed = cut;
       lastCommit = performance.now();
@@ -367,6 +457,8 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
     const tick = () => {
       if (!this.running || attempt !== this.attempt) return;
       const now = performance.now();
+      const d = this.diagnostics[key];
+      if (d) d.sinceFinal = (now - lastFinalAt) / 1000;
       const pending = words.length - committed;
       if (pending > 0 && now - lastGrowth > LiveCaptureAdapter.SETTLE_MS) {
         commit(words.length, 'pause');
@@ -382,10 +474,16 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
       const r = e.results[e.results.length - 1];
       const text = String(r[0].transcript).trim();
       const d = this.diagnostics[key];
-      if (d) { if (r.isFinal) d.finals++; else d.interims++; }
+      // Interims only. A final result is counted where it is actually committed —
+      // counting it here as well reported twice the finals on the one panel whose
+      // job is saying whether capture is healthy. Not every final result emits a
+      // row either: when a continuous commit has already taken the words, commit()
+      // returns without sending, and no final row is what the reader should see.
+      if (d && !r.isFinal) d.interims++;
       if (d && d.interims + d.finals <= 3) trace(r.isFinal ? 'FIRST FINAL' : 'first interim');
       if (!text) return;
 
+      failedRestarts = 0;   // it produced something: the restart streak is over
       const next = text.split(/\s+/).filter(Boolean);
       if (next.length > words.length) lastGrowth = performance.now();
       words = next;
@@ -411,6 +509,11 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
         const message = `Recognition was blocked (${e.error}).`;
         void this.stop().then(() => this.setStatus({ kind: 'error', message }));
       }
+      // The device itself is gone. Restarting against it cannot help.
+      if (e.error === 'audio-capture') {
+        entry.stopping = true;
+        if (d) { d.gaveUp = true; d.lastError = 'audio-capture'; }
+      }
       if (e.error === 'language-not-supported') {
         void this.stop().then(() => this.setStatus({ kind: 'needs-consent', reason: 'on-device-unavailable' }));
       }
@@ -418,14 +521,32 @@ export class LiveCaptureAdapter implements TranscriptAdapter {
 
     // Web Speech stops itself (~60s idle, no-speech). Restart, but never against
     // a dead track — that throws InvalidStateError.
+    //
+    // Backed off, and given up on. A restart that fails the same way it did last
+    // time will keep failing: a persistent `network` error ends the recognizer,
+    // which restarts it, which errors again, at eight attempts a second for the
+    // rest of the meeting — burning the machine and hammering the service while
+    // the screen still says Excerpt is listening. The streak is cleared by the
+    // first result to arrive, so an ordinary idle stop still restarts at once.
     rec.onend = () => {
       if (!this.running || attempt !== this.attempt || entry.stopping || track.readyState !== 'live') return;
       const d = this.diagnostics[key]; if (d) d.restarts++;
-      trace('restarting');
+
+      if (failedRestarts >= LiveCaptureAdapter.RESTART_GIVE_UP) {
+        if (d) { d.gaveUp = true; d.lastError ??= 'recognition stopped restarting'; }
+        trace(`gave up after ${failedRestarts} restarts`);
+        return;
+      }
+
+      const delay = LiveCaptureAdapter.RESTART_BACKOFF_MS[
+        Math.min(failedRestarts, LiveCaptureAdapter.RESTART_BACKOFF_MS.length - 1)
+      ]!;
+      failedRestarts++;
+      trace(`restarting in ${delay}ms`);
       setTimeout(() => {
         if (!this.running || attempt !== this.attempt || entry.stopping || track.readyState !== 'live') return;
         try { rec.start(track); } catch { /* track died mid-restart */ }
-      }, 120);
+      }, delay);
     };
 
     trace(`start(track ${track.kind}/${track.readyState})`);
