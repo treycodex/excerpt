@@ -7,7 +7,8 @@ export type Route =
   | { name: 'meeting'; id: string }
   | { name: 'library' }
   | { name: 'preferences' }
-  | { name: 'record' };
+  | { name: 'record' }
+  | { name: 'landing-legacy' };
 
 /**
  * Rewrite the address bar without adding a history entry.
@@ -29,6 +30,11 @@ export function parse(hash: string): Route {
   if (path === 'meetings') return { name: 'library' };
   if (path === 'preferences') return { name: 'preferences' };
   if (path === 'record') return { name: 'record' };
+
+  // The landing page this one replaced, kept so the two can be compared. Unlisted
+  // on purpose: nothing links to it, and it is matched before the catch-all below
+  // so that typing the address does not silently bounce back to the home page.
+  if (path === 'oldlandingpage') return { name: 'landing-legacy' };
 
   // Two links that used to open the optional personalization wizard. Setting a
   // subtitle style was never required to hear a meeting or to read its notes, so

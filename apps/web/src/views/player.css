@@ -23,7 +23,10 @@
   display: flex; justify-content: space-between; align-items: baseline; gap: 20px;
   padding: 34px 0 22px;
 }
-.player-head .ed-label {
+/* Both the demo's own nav and its head set labels this way. The rule used to live
+   in the landing stylesheet, which this screen does not load — so the nav label lost
+   its face the moment the landing page was redesigned. It belongs here. */
+.player .ed-label {
   font: 11px/1.6 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { applyPreferences, extractItems, isNativeHost, loadMeeting, loadPreferences, saveMeeting } from '@excerpt/core';
 import type { Meeting, Preferences as Prefs, TranscriptEvent } from '@excerpt/types';
 import { Landing } from './views/Landing';
+import { LandingLegacy } from './views/LandingLegacy';
 import { Session } from './views/Session';
 import { Notes } from './views/Notes';
 import { Library } from './views/Library';
@@ -118,6 +119,8 @@ export function App() {
             {...(meeting.processing === 'demo' ? { onReplay: () => go('/session') } : {})}
           />
         );
+      case 'landing-legacy':
+        return <LandingLegacy onStart={() => go('/session')} />;
       default:
         return <Landing onStart={() => go('/session')} />;
     }
@@ -128,7 +131,7 @@ export function App() {
       <button className="skip-link" onClick={() => document.querySelector<HTMLElement>('#main')?.focus()}>
         Skip to content
       </button>
-      {!['landing', 'meeting', 'library', 'get-started', 'record', 'preferences', 'session'].includes(route.name) && <nav className="nav" aria-label="Main">
+      {!['landing', 'landing-legacy', 'meeting', 'library', 'get-started', 'record', 'preferences', 'session'].includes(route.name) && <nav className="nav" aria-label="Main">
         <a href="#/">Excerpt</a>
         <span className="spacer" />
         {/* Inside the Mac app, recording is the menu bar's job — this screen asks the

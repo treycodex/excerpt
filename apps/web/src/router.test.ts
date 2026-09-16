@@ -39,6 +39,12 @@ describe('routes', () => {
     expect(replaced).toEqual(['/#/']);
   });
 
+  it('keeps the unlisted old landing page reachable by address', () => {
+    expect(parse('#/oldlandingpage')).toEqual({ name: 'landing-legacy' });
+    // No rewrite: bouncing it to the home page would make the address useless.
+    expect(replaced).toEqual([]);
+  });
+
   it('still resolves the screens the rest of the app links to', () => {
     expect(parse('#/record')).toEqual({ name: 'record' });
     expect(parse('#/preferences')).toEqual({ name: 'preferences' });
