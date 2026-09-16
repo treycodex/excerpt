@@ -208,12 +208,16 @@ Do not implement a browser AI provider, new models, or new note-generation style
   The preview becomes “Review the updated sources” / “Update the sources”.
 - [x] Keep changed-output previews and explicit application. Protect handwritten
   text, user-edited generated blocks, images, and image positions.
-- [ ] Protect **deleted content**. It is not protected, and was wrongly checked here
-  at first. A block the reader removed comes back on the next Refresh excerpts,
-  appended at the end rather than in its old place. Distinguishing "deleted" from
-  "never produced" needs a tombstone the document does not carry, which is a data
-  change rather than a fix. The restore is at least visible: it appears in the
-  preview, and nothing is applied without consent.
+- [x] Protect **deleted content**. Twice wrong here: first wrongly checked, then
+  wrongly left open. The tombstone this entry said the document does not carry was
+  since added — `NotesDocument.deletedBlocks` (`packages/types/src/index.ts`),
+  written by `commit()` in `apps/web/src/views/NotesDocument.tsx`, honoured by
+  `withoutDeletedBlocks` in `packages/core/src/notes/generation.ts`, mirrored on the
+  Mac at `Models.swift` and covered by `generation.test.ts`, including the case that
+  makes it subtle: a shared event is not a deletion of every note in it. Deletions
+  survive serialization, repeated refreshes and a source correction; Undo to the
+  pre-deletion document clears them. Still unbounded: nothing prunes `deletedBlocks`,
+  and each entry is a whole block with its evidence, kept in every saved meeting.
 - [x] Ensure stale requests cannot apply over a newer document/source revision;
   reuse current revision protections rather than inventing another persistence path.
   A request records the meeting id and `sourceRevision`; both are rechecked when it

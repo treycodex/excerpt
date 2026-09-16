@@ -197,6 +197,18 @@ necessity — `SpeechRecognition.start(audioTrack)` (Chrome 135) and `processLoc
 **The Mac app:** macOS 26 or later, Apple silicon. It uses `SpeechAnalyzer` and
 `SpeechTranscriber`, which do not exist on earlier versions.
 
+**English only — `en-US`, and not only in the recogniser.** Both surfaces ask for
+`en-US` and nothing else, but the deeper constraint is that the notes are built by
+English grammar rather than by a model. What counts as a decision or an action is a
+set of English cue phrases; sentences are split on `.`/`!`/`?` alone, so a script
+that ends sentences differently is never split; dates are read by chrono-node's
+English parser; the length budgets that trim a title and decide whether a reply
+answered a question count whitespace-separated words; and caption line breaking,
+excerpt scoring and preference matching each carry English word lists. A meeting in
+another language would therefore produce a transcript and captions of whatever
+quality the recogniser managed, and no items at all. Supporting a second language
+means writing its grammar, not changing a setting.
+
 On-device speech needs Chrome's SODA language pack, which arrives with Live Caption
 (`chrome://settings/captions`). If it is unavailable, Excerpt **stops and asks**
 before using cloud transcription — it never switches silently, and the active mode
