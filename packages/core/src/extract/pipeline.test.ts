@@ -33,6 +33,41 @@ describe('assignment is conservative', () => {
   });
 });
 
+describe('a commitment is read whatever verb completes it', () => {
+  const act = (text: string, role: 'you' | 'remote' = 'you') =>
+    classifyAction(toSentences([ev(text, role, 0)])[0]!);
+
+  it('takes any verb after a first-person cue', () => {
+    // "I'll draft" was an action and "I'll brief" was nothing, for no reason
+    // other than which verbs somebody happened to list.
+    expect(act("I'll brief the design team this afternoon.")?.assignee).toBe('you');
+    expect(act('I will move the line items today.')?.assignee).toBe('you');
+    expect(act("I'm going to rebuild the media plan.")?.assignee).toBe('you');
+    expect(act('Let me pull the last four weeks for you.')?.assignee).toBe('you');
+  });
+
+  it('still refuses a first-person cue that commits to nothing', () => {
+    expect(act("I'll think about the October date.")).toBeNull();
+    expect(act("I'll be honest with you.")).toBeNull();
+    expect(act("I'll do my best on the deadline.")).toBeNull();
+    expect(act('Let me know what you decide.')).toBeNull();
+  });
+
+  it('reads work owed by a thing as a request nobody is assigned', () => {
+    expect(act('The fifteen second version needs a new end card.')).toEqual({
+      assignee: 'unassigned', ambiguous: true,
+    });
+    expect(act('We need to re-cut the hero film.')?.ambiguous).toBe(true);
+    expect(act("Don't forget to send the revised deck.")?.ambiguous).toBe(true);
+  });
+
+  it('assigns a third party nothing, but still records the work', () => {
+    expect(act('Sarah will draft the influencer brief.', 'remote')?.assignee).toBe('unassigned');
+    // A collective commitment is a decision, not an action nobody can be shown to own.
+    expect(act('We will move the launch to October.', 'remote')).toBeNull();
+  });
+});
+
 describe('open questions', () => {
   const build = (lines: [string, 'you' | 'remote', number][]) =>
     toSentences(lines.map(([t, r, a]) => ev(t, r, a)));

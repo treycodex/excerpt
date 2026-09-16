@@ -181,7 +181,11 @@ standalone deadline. "Can you send the deck before Friday?" is an action with a 
 date, not three items.
 
 ### Guards (each exists because a naive matcher gets that sentence wrong)
-- negation — "we're *not* moving the whole campaign"
+- negation, in both directions — a decision *not* to do something is still a
+  decision ("we're not doing the podcast read"), but a negation that narrows a
+  plan is not a decision against it ("we're not moving the whole campaign, *just*
+  the hero spot" decides to move something, and filing it as a negative decision
+  would report the opposite of what was said)
 - conditional — "*if* legal signs off, we'll go with October" → proposed, not decided
 - future-discussion — "we'll *discuss* October next week" is a decision to talk
 - reported speech — "she *said* let's go with October"

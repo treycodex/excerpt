@@ -115,9 +115,11 @@ but headphones remove the problem rather than mitigating it.
 - **Four categories** — decisions, action items, deadlines, open questions. Chosen
   because they have crisp linguistic signatures. Ideas, quotes and risks were cut
   for having none.
-- **Guards** — negation, conditionals, reported speech, future-discussion and
-  questions are all rejected as decisions. "We'll discuss October next week" is a
-  decision to talk, not a decision.
+- **Guards** — conditionals, reported speech, future-discussion and questions are
+  all rejected as decisions. "We'll discuss October next week" is a decision to
+  talk, not a decision. A negation is read rather than rejected: "we're not doing
+  the podcast read" is a decision, while "we're not moving the whole campaign,
+  just the hero spot" narrows a plan and settles nothing.
 - **Preferences** — tell Excerpt what you care about; it shows you the exact terms
   it extracted and which of them lifted each note. Ordering only, never filtering.
 - **Local recovery, library and Markdown export** — finalised capture text is
