@@ -158,3 +158,55 @@ struct NotesSummarizerTests {
         print("LOCAL NOTES EVALUATION (\(Date().timeIntervalSince(start)) seconds): \(String(decoding: try JSONEncoder.excerpt.encode(notes), as: UTF8.self))")
     }
 }
+
+@Suite struct NotesSummarizerFailureTests {
+
+    @Test func `a passage the model refuses is reported, not quietly dropped`() {
+        // Returning only the part that worked would be the notes claiming a
+        // completeness they do not have.
+        #expect(NotesSummarizer.skippedNotice(refused: 1, of: 4)?.contains("One passage") == true)
+        #expect(NotesSummarizer.skippedNotice(refused: 2, of: 4)?.contains("2 passages") == true)
+        #expect(NotesSummarizer.skippedNotice(refused: 1, of: 4)?.contains("transcript is unchanged") == true)
+    }
+
+    @Test func `nothing is said when every passage worked`() {
+        #expect(NotesSummarizer.skippedNotice(refused: 0, of: 4) == nil)
+    }
+
+    @Test func `nothing is said when none of them worked`() {
+        // That case throws noSupportedNotes and falls back to the extractive
+        // document; a notice about omissions would describe notes that do not exist.
+        #expect(NotesSummarizer.skippedNotice(refused: 3, of: 3) == nil)
+        #expect(NotesSummarizer.skippedNotice(refused: 0, of: 0) == nil)
+    }
+
+    @Test func `there is room for the shape the schema actually asks for`() {
+        // Twenty points, each carrying an exact transcript quote. 1800 tokens could
+        // not always hold that, and output cut off mid-structure will not decode.
+        #expect(NotesSummarizer.responseTokens >= 3000)
+    }
+}
+
+@Suite struct BridgeErrorTests {
+
+    private struct Described: LocalizedError {
+        var errorDescription: String? { "On-device summaries need Apple Intelligence enabled." }
+    }
+    private struct Internal: Error {}
+
+    @Test func `an error written for a person is kept`() {
+        #expect(NotesBridge.readable(Described()) == "On-device summaries need Apple Intelligence enabled.")
+    }
+
+    @Test func `a framework's own wording never reaches the reader`() {
+        // "Failed to deserialize a Generable type from model output" was shown above
+        // somebody's notes, in a product that otherwise speaks in their words.
+        let shown = NotesBridge.readable(Internal())
+        #expect(!shown.contains("Generable"))
+        #expect(shown.contains("transcript is unchanged"))
+    }
+
+    @Test func `cancelling says so rather than sounding like a fault`() {
+        #expect(NotesBridge.readable(CancellationError()) == "That was cancelled.")
+    }
+}

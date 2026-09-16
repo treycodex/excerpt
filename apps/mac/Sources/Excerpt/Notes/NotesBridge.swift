@@ -121,8 +121,22 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
             return (try handle(method, arguments), nil)
         } catch {
             log.error("bridge \(name) failed: \(error.localizedDescription)")
-            return (nil, error.localizedDescription)
+            return (nil, NotesBridge.readable(error))
         }
+    }
+
+    /// What to put on screen when something fails.
+    ///
+    /// Every error was handed over verbatim, so a reader once met "Failed to
+    /// deserialize a Generable type from model output" above their notes — a
+    /// sentence about a framework's internals, in a product that otherwise says
+    /// one line in the user's words. Errors written for people are kept; the rest
+    /// are replaced, and the detail stays in the log above rather than being lost.
+    nonisolated static func readable(_ error: Error) -> String {
+        if let described = (error as? LocalizedError)?.errorDescription { return described }
+        if error is CancellationError { return "That was cancelled." }
+        return "Something went wrong on this Mac and the notes were left as they are. "
+            + "Your transcript is unchanged."
     }
 
     /// Values cross as JSON strings, decoded by the webview. One bridging surface

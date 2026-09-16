@@ -68,6 +68,24 @@ Closed 16 September 2026. Opening a passage from the source panel now leaves a
 way back at the top of the transcript, naming the note. The panel is still open
 behind it, so returning puts the reader exactly where they were.
 
+## 6b. "Improve notes" can still fail, and I could not reproduce it
+
+Reported 17 September 2026: a Mac meeting with four transcript events and one
+voice returned **"Failed to deserialize a Generable type from model output"**
+above the notes.
+
+Three causes were addressed — a nested schema the local model could not hold, a
+token ceiling too low for the shape being asked for, and a framework string being
+handed to the reader — and the run now degrades instead of failing whole. **None
+of it was reproduced against the real model**, because the failure needs Apple
+Intelligence and the meeting that produced it. If it recurs, the log line
+`passage summary failed, retrying flat:` in the `summary` category says whether
+the flat retry was reached and what the model actually objected to.
+
+Also unaddressed: with `sampling: .greedy`, **"Try again" reproduces the identical
+request**. It is now much less likely to be the only option, but the button still
+cannot succeed where the first attempt failed for a deterministic reason.
+
 ## 6. The draft is rewritten in full on every finalised line
 
 `checkpoint` in `apps/web/src/views/Record.tsx` writes the entire events array

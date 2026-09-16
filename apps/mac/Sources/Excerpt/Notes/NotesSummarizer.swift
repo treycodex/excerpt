@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import os
 
 @Generable
 struct DraftNotePoint {
@@ -31,9 +32,25 @@ struct DraftMeetingNotes {
     var topics: [DraftNoteTopic]
 }
 
+/// The same request with the nesting taken out.
+///
+/// `DraftMeetingNotes` asks a small local model for up to twenty quoted points
+/// across two levels, and when it cannot hold that shape the framework fails the
+/// whole passage with "Failed to deserialize a Generable type from model output".
+/// Flat and shorter is a materially easier thing to produce, so it is what a
+/// failed passage is asked for second. Notes without headings are worth having;
+/// no notes at all are not.
+@Generable
+struct DraftKeyPoints {
+    @Guide(description: "The most important outcomes in this passage. Omit greetings and small talk.", .maximumCount(4))
+    var keyPoints: [DraftNotePoint]
+}
+
 /// Optional local enhancement. The saved transcript and deterministic action items
 /// remain available even when Apple Intelligence is unavailable or generation fails.
 enum NotesSummarizer {
+    private static let log = Logger(subsystem: "com.excerpt.app", category: "summary")
+
     enum Failure: LocalizedError {
         case unavailable, noSupportedNotes, timedOut
         var errorDescription: String? {
@@ -165,23 +182,78 @@ enum NotesSummarizer {
 
         \(length)
         """
+        var refused = 0
         for sources in passages {
             try Task.checkCancellation()
-            let session = LanguageModelSession(model: .default, instructions: instructions)
             // JSON encoding keeps transcript data separate from the prompt structure.
             let rows = sources.enumerated().map { index, source in
                 ["source": String(index), "speaker": source.event.speakerLabel, "text": source.text]
             }
             let json = String(decoding: try JSONEncoder().encode(rows), as: UTF8.self)
-            let response = try await session.respond(
-                to: "Summarize this meeting passage. Source numbers are zero-based.\nSources: \(json)",
-                generating: DraftMeetingNotes.self,
-                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 1800)
-            )
-            drafts.append((response.content, sources))
+            let prompt = "Summarize this meeting passage. Source numbers are zero-based.\nSources: \(json)"
+
+            // One passage the model cannot produce must not cost the meeting its
+            // other passages. It used to: any throw here abandoned the whole run and
+            // handed the framework's own wording — "Failed to deserialize a Generable
+            // type from model output" — to the reader as though it meant something.
+            do {
+                let session = LanguageModelSession(model: .default, instructions: instructions)
+                let response = try await session.respond(
+                    to: prompt, generating: DraftMeetingNotes.self,
+                    options: GenerationOptions(sampling: .greedy, maximumResponseTokens: Self.responseTokens)
+                )
+                drafts.append((response.content, sources))
+                continue
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                log.error("passage summary failed, retrying flat: \(error.localizedDescription)")
+            }
+
+            // Retrying the same request would be pointless: sampling is greedy, so
+            // the model would produce the identical output and fail identically. The
+            // second attempt has to ask for something structurally easier.
+            do {
+                try Task.checkCancellation()
+                let session = LanguageModelSession(model: .default, instructions: instructions)
+                let response = try await session.respond(
+                    to: prompt, generating: DraftKeyPoints.self,
+                    options: GenerationOptions(sampling: .greedy, maximumResponseTokens: Self.responseTokens)
+                )
+                drafts.append((DraftMeetingNotes(keyPoints: response.content.keyPoints, topics: []), sources))
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                refused += 1
+                log.error("passage summary failed twice, skipping: \(error.localizedDescription)")
+            }
         }
-        guard let document = assemble(drafts) else { throw Failure.noSupportedNotes }
+        guard var document = assemble(drafts) else { throw Failure.noSupportedNotes }
+        // A summary that covers less than the meeting says so. Quietly returning the
+        // part that worked would be the notes claiming a completeness they lack.
+        if let notice = skippedNotice(refused: refused, of: passages.count) {
+            document.notice = notice
+        }
         return document
+    }
+
+    /// Room for the shape actually asked for.
+    ///
+    /// The schema permits twenty points, each carrying an exact quote copied from
+    /// the transcript; 1800 tokens could not always hold that, and output cut off
+    /// mid-structure is output that will not deserialize.
+    static let responseTokens = 3200
+
+    /// What to say when part of the meeting could not be summarised.
+    ///
+    /// Pure, so the wording is testable without Apple Intelligence installed.
+    static func skippedNotice(refused: Int, of total: Int) -> String? {
+        guard refused > 0, total > 0 else { return nil }
+        if refused >= total { return nil }   // nothing was summarised; the caller throws instead
+        let part = refused == 1 ? "One passage" : "\(refused) passages"
+        let verb = refused == 1 ? "was" : "were"
+        return "\(part) of this meeting could not be summarised and \(verb) left out. "
+            + "The full transcript is unchanged, and refreshing the excerpts covers the whole meeting."
     }
 
     /// Everything between the model's draft and the saved document: verification,
