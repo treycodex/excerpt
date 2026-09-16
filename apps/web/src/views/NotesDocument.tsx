@@ -15,7 +15,7 @@ const blockLabel: Record<NoteBlock['kind'], string> = {
 function mergedEvidence(first: NoteBlock['evidence'], second: NoteBlock['evidence']): NoteBlock['evidence'] {
   const seen = new Set<string>();
   return [...first, ...second].filter((evidence) => {
-    const key = evidence.eventIds.join('\u0000');
+    const key = `${evidence.eventIds.join('\u0000')}\u0001${evidence.quote}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

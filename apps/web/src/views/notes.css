@@ -469,33 +469,106 @@
   .notebook .meeting-row { flex-wrap: wrap; }
 }
 
-/* A document you can write in, with controls that stay out of the reading flow. */
-.document-title { display:block; width:100%; border:0; border-radius:0; background:transparent; font:inherit; font-family:var(--font-display, Georgia, serif); font-size:clamp(30px,4vw,48px); color:inherit; padding:0; margin:14px 0; }
-.free-document { padding:0 0 32px; }
-.writing-toolbar { display:flex; flex-wrap:wrap; gap:6px; padding:10px 0 20px; border-bottom:1px solid #dedbd4; margin-bottom:22px; }
-.writing-toolbar button,.block-tools button,.block-tools select { font:inherit; font-size:12px; border:0; background:transparent; color:inherit; padding:5px 7px; cursor:pointer; }
-.writing-toolbar button:hover,.block-tools button:hover { background:#e9e6df; }
-.writing-block { position:relative; padding:3px 0; }
-.writing-block textarea { display:block; width:100%; resize:none; overflow:hidden; background:transparent; border:0; border-radius:0; padding:4px 0; font:inherit; line-height:1.65; color:inherit; min-height:34px; box-sizing:border-box; }
-.writing-block textarea:focus { outline:none; box-shadow:none; }
-.writing-block:focus-within { border-radius:3px; background:rgba(120,110,90,.035); }
-.writing-block.heading { margin-top:24px; }
-.writing-block.heading textarea { font-size:23px; font-weight:600; line-height:1.4; }
-.writing-block.bullet { padding-left:23px; }
-.writing-block.bullet::before { content:'•'; position:absolute; left:4px; top:8px; }
-.block-tools { display:flex; flex-wrap:wrap; gap:2px; min-height:27px; opacity:0; }
-.writing-block:hover .block-tools,.writing-block:focus-within .block-tools { opacity:1; }
-.block-tools button:disabled { opacity:.35; cursor:default; }
-.writing-block figure { margin:18px 0 0; }
-.writing-block img { display:block; max-width:100%; max-height:620px; object-fit:contain; border:1px solid #dedbd4; border-radius:4px; }
+/* A page first, an editor second. The writing keeps its full hierarchy while the
+   machinery lives in a Notion-like gutter and only appears near the active block. */
+.document-title {
+  display:block; width:100%; border:0; border-radius:0; background:transparent;
+  font-family:var(--serif); font-size:clamp(34px,4vw,48px); line-height:1.08;
+  letter-spacing:-.025em; color:inherit; padding:0; margin:14px 0;
+}
+.document-title:focus { outline:0; box-shadow:none; }
+.free-document { padding:8px 0 36px; }
+.writing-block {
+  position:relative; display:grid; grid-template-columns:28px minmax(0,1fr);
+  align-items:start; padding:2px 0;
+}
+.block-body { position:relative; min-width:0; }
+.writing-block textarea {
+  display:block; width:100%; resize:none; overflow:hidden; box-sizing:border-box;
+  min-height:36px; padding:3px 0; border:0; border-radius:0; background:transparent;
+  color:inherit; font:400 17px/1.68 var(--sans); letter-spacing:-.006em;
+}
+.writing-block textarea::placeholder { color:color-mix(in srgb,var(--faint) 72%,transparent); }
+.writing-block textarea:focus { outline:0; box-shadow:none; }
+.writing-block.heading { margin-top:24px; margin-bottom:4px; }
+.writing-block.heading textarea {
+  min-height:42px; font:400 28px/1.22 var(--serif); letter-spacing:-.018em;
+}
+.writing-block.bullet .block-body { padding-left:22px; }
+.writing-block.bullet .block-body::before {
+  content:'•'; position:absolute; left:2px; top:4px; color:var(--ink-soft);
+  font:400 17px/1.68 var(--sans);
+}
+
+.block-gutter { position:relative; min-height:34px; }
+.block-menu { position:absolute; top:3px; left:0; z-index:7; }
+.block-menu summary {
+  display:grid; place-items:center; width:22px; height:27px; border-radius:5px;
+  color:var(--faint); opacity:0; cursor:pointer; list-style:none;
+  font:16px/1 var(--sans); transition:opacity .12s,background .12s,color .12s;
+}
+.block-menu summary::-webkit-details-marker { display:none; }
+.writing-block:hover .block-menu summary,
+.writing-block:focus-within .block-menu summary,
+.block-menu[open] summary { opacity:.72; }
+.block-menu summary:hover,.block-menu[open] summary { opacity:1; color:var(--ink); background:var(--paper-deep); }
+.block-popover {
+  position:absolute; top:32px; left:0; z-index:8; width:174px; padding:6px;
+  border:1px solid var(--line); border-radius:8px; background:#fbfaf1;
+}
+.block-popover button {
+  display:block; width:100%; padding:7px 9px; border:0; border-radius:5px;
+  background:transparent; color:var(--ink-soft); text-align:left;
+  font:13px var(--sans); cursor:pointer;
+}
+.block-popover button:hover { background:var(--paper-deep); color:var(--ink); }
+.block-popover button:disabled { opacity:.35; cursor:default; background:transparent; }
+.block-kind-picker {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:3px;
+  margin-bottom:5px; padding-bottom:6px; border-bottom:1px solid var(--line-soft);
+}
+.block-kind-picker button { padding:6px 3px; text-align:center; font-size:11px; }
+.block-kind-picker button[aria-pressed="true"] { background:var(--select); color:var(--ink); font-weight:600; }
+.block-popover .block-delete { margin-top:5px; padding-top:7px; border-top:1px solid var(--line-soft); color:var(--bad); border-radius:0 0 5px 5px; }
+
+.block-meta { display:flex; align-items:center; flex-wrap:wrap; gap:10px; min-height:18px; }
+.slash-menu {
+  position:absolute; left:0; top:calc(100% + 4px); z-index:6;
+  display:flex; align-items:center; gap:3px; padding:6px;
+  border:1px solid var(--line); border-radius:7px; background:#fbfaf1;
+}
+.slash-menu span { padding:0 6px; font:10px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+.slash-menu button { padding:5px 8px; border:0; border-radius:4px; background:transparent; color:var(--ink-soft); font:12px var(--sans); cursor:pointer; }
+.slash-menu button:hover { background:var(--paper-deep); color:var(--ink); }
+
+.writing-block figure { margin:20px 0 6px; }
+.writing-block img { display:block; max-width:100%; max-height:620px; object-fit:contain; border:1px solid var(--line); border-radius:7px; }
 .writing-block .moment-image { cursor:zoom-in; }
 .writing-block .moment-image:focus-visible { outline:2px solid var(--settled); outline-offset:3px; }
-.writing-block.selected-moment figure { margin-inline:-12px; padding:12px; background:var(--select); border-radius:7px; }
-.writing-block figcaption { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:10px 0; font-size:12px; color:#777; }
+.writing-block.selected-moment figure { margin-inline:-12px; padding:12px; background:var(--select); border-radius:9px; }
+.writing-block figcaption { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:9px 0; font-size:12px; color:var(--faint); }
 .writing-block .moment-time { padding:0; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:#c9c7ae; text-underline-offset:3px; }
 .writing-block figcaption input { flex:1; min-width:180px; padding:6px 0; border:0; border-radius:0; background:transparent; font:inherit; color:inherit; }
-.writing-hint { margin-top:30px; font-size:12px; line-height:1.8; color:#777; }
-.empty-document { width:100%; padding:28px 0; text-align:left; color:#888; border:0; background:none; font:inherit; cursor:text; }
+
+.writing-toolbar {
+  display:flex; align-items:center; flex-wrap:wrap; gap:3px;
+  margin-top:28px; padding-top:12px; border-top:1px solid var(--line-soft);
+  color:var(--dim);
+}
+.writing-toolbar>span {
+  margin-right:5px; font:10px var(--mono); letter-spacing:.1em;
+  text-transform:uppercase; color:var(--faint);
+}
+.writing-toolbar button {
+  display:inline-flex; align-items:center; gap:6px; padding:6px 8px;
+  border:0; border-radius:5px; background:transparent; color:inherit;
+  font:12px var(--sans); cursor:pointer;
+}
+.writing-toolbar button>span { min-width:13px; text-align:center; color:var(--faint); }
+.writing-toolbar button:hover { background:var(--paper-deep); color:var(--ink); }
+.writing-toolbar .writing-undo { margin-left:auto; color:var(--ink-soft); }
+.writing-hint { margin:9px 0 0; font:11px/1.65 var(--sans); color:var(--faint); }
+.empty-document { width:100%; padding:30px 28px; text-align:left; color:var(--faint); border:0; background:none; font:16px var(--sans); cursor:text; }
 .review-intro { margin:22px 0 30px; }
 .review-intro h2 { margin-bottom:10px; }
 .review-intro p { max-width:600px; line-height:1.6; color:#666; }
@@ -575,14 +648,14 @@
 .source-open:hover { color:var(--ink); }
 @media (max-width:640px) { .source-list { padding-inline:14px; } }
 
-/* A citation belongs to the note, so it is always legible — not revealed on hover
-   with the editing tools, where nobody found it. */
+/* Evidence stays visible, but reads as document metadata rather than editor chrome. */
 .block-citation {
-  border:0; background:transparent; padding:2px 0; cursor:pointer;
-  font:10px var(--mono); letter-spacing:.09em; text-transform:uppercase;
-  color:var(--faint); text-decoration:underline; text-underline-offset:3px;
+  border:0; background:transparent; padding:1px 0; cursor:pointer;
+  font:10.5px var(--sans); color:var(--faint);
 }
+.block-citation span { display:inline-block; margin-left:2px; transition:transform .12s; }
 .block-citation:hover { color:var(--ink); }
+.block-citation:hover span { transform:translate(1px,-1px); }
 
 .moment-viewer { margin:24px 0 34px; border:1px solid var(--line); border-radius:8px; background:var(--paper-deep); overflow:hidden; }
 .moment-viewer>header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); }
@@ -612,13 +685,17 @@
 .correction-change del { color:#886b61; }
 .correct-transcript { display:block; background:transparent; border:0; padding:6px 0; font:inherit; font-size:12px; color:#777; cursor:pointer; }
 .correction-original { display:block; font-size:12px; color:#888; margin-top:6px; }
-@media (hover:none) { .block-tools { opacity:1; } }
 @media(max-width:700px) { .notebook-toolbar { flex-wrap:wrap; gap:8px; } .notebook-toolbar>div { flex-wrap:wrap; } }
-
-.block-tools { position:absolute; top:100%; right:0; z-index:5; min-height:0; background:#f3f1e5; border:1px solid #dedbd4; border-radius:4px; pointer-events:none; }
-.writing-block:hover .block-tools,.writing-block:focus-within .block-tools { pointer-events:auto; }
-.writing-block { padding-bottom:6px; }
-@media (hover:none) { .block-tools { position:static; border:0; pointer-events:auto; margin-bottom:8px; } }
-
-.source-review-notice { font-size:12px; color:#866331; padding:7px 0; }
+.source-review-notice { margin:0; font-size:11px; color:#866331; padding:2px 0; }
 .source-review-notice button { font:inherit; color:inherit; background:transparent; border:0; text-decoration:underline; cursor:pointer; }
+
+@media (hover:none) {
+  .block-menu summary { opacity:.42; }
+}
+@media (max-width:640px) {
+  .writing-block { grid-template-columns:24px minmax(0,1fr); }
+  .writing-block textarea { font-size:16px; }
+  .writing-block.heading textarea { font-size:25px; }
+  .writing-toolbar button { padding-inline:6px; }
+  .writing-hint { max-width:42ch; }
+}
