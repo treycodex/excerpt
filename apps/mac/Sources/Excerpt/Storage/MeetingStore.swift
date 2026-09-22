@@ -18,6 +18,14 @@ import OSLog
 @MainActor
 final class MeetingStore {
 
+    /// Deterministic failures for integration tests. Production leaves every hook
+    /// nil and uses the same filesystem path below.
+    struct Faults {
+        var beforeWrite: ((URL) throws -> Void)?
+        var beforeRemove: ((URL) throws -> Void)?
+        var beforeJournalAppend: ((URL) throws -> Void)?
+    }
+
     enum Failure: Error, LocalizedError {
         case directoryUnavailable(String)
 
@@ -33,16 +41,18 @@ final class MeetingStore {
     private let meetingsDirectory: URL
     private let journalDirectory: URL
     private let log = Logger(subsystem: "com.excerpt.app", category: "store")
+    private let faults: Faults
 
     /// Open journals, kept so an append does not reopen the file per line.
     private var handles: [String: FileHandle] = [:]
 
-    init(root: URL? = nil) throws {
+    init(root: URL? = nil, faults: Faults = Faults()) throws {
         let base = try root ?? FileManager.default
             .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appending(path: "Excerpt")
 
         self.root = base
+        self.faults = faults
         meetingsDirectory = base.appending(path: "meetings")
         journalDirectory = base.appending(path: "journal")
 
@@ -58,14 +68,17 @@ final class MeetingStore {
     // MARK: - Meetings
 
     func save(_ meeting: Meeting) throws {
-        let data = try JSONEncoder.excerpt.encode(meeting)
+        let durable = meeting.revisioned()
+        let data = try JSONEncoder.excerpt.encode(durable)
         // Atomic: a meeting half-written by a crash is worse than one not written,
         // because it looks complete in the library.
-        try data.write(to: url(forMeeting: meeting.id), options: .atomic)
+        let destination = url(forMeeting: durable.id)
+        try faults.beforeWrite?(destination)
+        try data.write(to: destination, options: .atomic)
     }
 
     func load(id: String) throws -> Meeting {
-        try JSONDecoder.excerpt.decode(Meeting.self, from: Data(contentsOf: url(forMeeting: id)))
+        try JSONDecoder.excerpt.decode(Meeting.self, from: Data(contentsOf: url(forMeeting: id))).revisioned()
     }
 
     /// Newest first. A meeting that fails to decode is skipped and logged rather than
@@ -78,7 +91,7 @@ final class MeetingStore {
             .filter { $0.pathExtension == "json" }
             .compactMap { url in
                 do {
-                    return try JSONDecoder.excerpt.decode(Meeting.self, from: Data(contentsOf: url))
+                    return try JSONDecoder.excerpt.decode(Meeting.self, from: Data(contentsOf: url)).revisioned()
                 } catch {
                     log.error("skipping unreadable meeting \(url.lastPathComponent): \(error)")
                     return nil
@@ -88,11 +101,44 @@ final class MeetingStore {
     }
 
     func delete(id: String) throws {
-        try? FileManager.default.removeItem(at: url(forMeeting: id))
         closeJournal(id: id)
-        try? FileManager.default.removeItem(at: url(forJournal: id))
-        try? FileManager.default.removeItem(at: imageJournal(id))
-        try? FileManager.default.removeItem(at: draftJournal(id))
+        // The meeting file is removed last. If cleanup fails, the library entry is
+        // still present and the caller can truthfully report that deletion failed.
+        try removeIfPresent(url(forJournal: id))
+        try removeIfPresent(imageJournal(id))
+        try removeIfPresent(draftJournal(id))
+        try removeIfPresent(url(forMeeting: id))
+    }
+
+    func apply(_ mutation: MeetingMutation) throws -> MeetingMutationAcknowledgment {
+        let meetingURL = url(forMeeting: mutation.meetingId)
+        if !FileManager.default.fileExists(atPath: meetingURL.path(percentEncoded: false)) {
+            guard mutation.changes.count == 1,
+                  case .create = mutation.changes[0] else {
+                throw MeetingMutationFailure.missingMeeting(mutation.meetingId)
+            }
+            let acknowledgment = try MeetingMutationReducer.created(mutation)
+            try save(acknowledgment.meeting)
+            return acknowledgment
+        }
+        let current = try load(id: mutation.meetingId)
+        let acknowledgment = try MeetingMutationReducer.acknowledgment(for: mutation, applyingTo: current)
+        if acknowledgment.status == .applied || acknowledgment.status == .rebased {
+            try save(acknowledgment.meeting)
+        }
+        return acknowledgment
+    }
+
+    /// Native background work uses the same load-modify-atomic-save boundary as an
+    /// editor mutation and therefore cannot recreate a meeting after deletion.
+    func update(id: String, _ change: (inout Meeting) throws -> Void) throws -> Meeting {
+        var meeting = try load(id: id)
+        let previousRevision = meeting.revision ?? 0
+        try change(&meeting)
+        meeting.schemaVersion = Meeting.currentSchemaVersion
+        meeting.revision = previousRevision + 1
+        try save(meeting)
+        return meeting
     }
 
     // MARK: - Journal
@@ -100,16 +146,20 @@ final class MeetingStore {
     /// Appends one settled event and flushes it. Called a few times a minute, so the
     /// simple synchronous write is the right one — moving it off the main actor would
     /// buy nothing and cost the ordering guarantee that makes the file replayable.
-    func append(_ event: TranscriptEvent, toJournalFor id: String) {
+    @discardableResult
+    func append(_ event: TranscriptEvent, toJournalFor id: String) -> Bool {
         do {
             var line = try JSONEncoder.excerpt.encode(event)
             line.append(0x0A)                                 // newline-delimited JSON
+            try faults.beforeJournalAppend?(url(forJournal: id))
             try handle(for: id).write(contentsOf: line)
+            return true
         } catch {
             // A journal failure must never stop a meeting. The in-memory transcript is
             // still whole; what is lost is only the ability to recover from a crash,
             // and saying so once is more useful than failing the capture.
             log.error("journal append failed for \(id): \(error)")
+            return false
         }
     }
 
@@ -155,7 +205,9 @@ final class MeetingStore {
     }
 
     func checkpointImages(_ images: [MeetingImage], id: String) throws {
-        try JSONEncoder.excerpt.encode(images).write(to: imageJournal(id), options: .atomic)
+        let destination = imageJournal(id)
+        try faults.beforeWrite?(destination)
+        try JSONEncoder.excerpt.encode(images).write(to: destination, options: .atomic)
     }
 
     func recoverImages(id: String) -> [MeetingImage] {
@@ -166,7 +218,9 @@ final class MeetingStore {
     /// A compact atomic checkpoint complements the append-only speech journal. It
     /// preserves writing even when no recognizer result has settled yet.
     func checkpointDraft(_ meeting: Meeting) throws {
-        try JSONEncoder.excerpt.encode(meeting).write(to: draftJournal(meeting.id), options: .atomic)
+        let destination = draftJournal(meeting.id)
+        try faults.beforeWrite?(destination)
+        try JSONEncoder.excerpt.encode(meeting.revisioned()).write(to: destination, options: .atomic)
     }
 
     func recoverDraft(id: String) -> Meeting? {
@@ -185,6 +239,12 @@ final class MeetingStore {
 
     private func url(forJournal id: String) -> URL {
         journalDirectory.appending(path: "\(id).ndjson")
+    }
+
+    private func removeIfPresent(_ url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return }
+        try faults.beforeRemove?(url)
+        try FileManager.default.removeItem(at: url)
     }
 
     private func handle(for id: String) throws -> FileHandle {

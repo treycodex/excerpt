@@ -1,4 +1,7 @@
-import type { Meeting, NotesDocument, NotesGenerationRequest, NotesProviderStatus, Preferences } from '@excerpt/types';
+import type {
+  CaptionSettings, DesktopSettings, ExportOutcome, Meeting, MeetingMutation, MeetingMutationAcknowledgment,
+  NotesDocument, NotesGenerationRequest, NotesProviderStatus, Preferences,
+} from '@excerpt/types';
 
 /**
  * The seam between the website and the macOS app.
@@ -13,16 +16,26 @@ import type { Meeting, NotesDocument, NotesGenerationRequest, NotesProviderStatu
  * webview round trip would put them behind the words.
  */
 export interface ExcerptBridge {
+  /** Starts native capture through the single application coordinator. */
+  startMeeting(): Promise<void>;
+  /** Opens the native live editor for the active meeting, if one exists. */
+  openLiveNotes(): Promise<void>;
+  /** Reads native-owned caption, microphone, display, and shortcut state. */
+  loadDesktopSettings(): Promise<DesktopSettings>;
+  /** Replaces only native caption preferences; browser storage is never involved. */
+  saveCaptionSettings(settings: Pick<CaptionSettings, 'preset' | 'size' | 'position' | 'enabled' | 'displayId'>): Promise<DesktopSettings>;
+  /** Selects a stable native capture-device identifier. */
+  selectMicrophone(deviceId: string): Promise<DesktopSettings>;
   listMeetings(): Promise<Meeting[]>;
   loadMeeting(id: string): Promise<Meeting | undefined>;
-  /** Native capture may return its authoritative merged draft after a document edit. */
-  saveMeeting(meeting: Meeting): Promise<Meeting | undefined>;
+  /** Resolves only after native storage durably acknowledges the typed operation. */
+  mutateMeeting(mutation: MeetingMutation): Promise<MeetingMutationAcknowledgment>;
   deleteMeeting(id: string): Promise<void>;
   loadPreferences(): Promise<Preferences>;
   savePreferences(preferences: Preferences): Promise<void>;
   /** Hands the Markdown to a real save panel rather than a download the sandbox eats. */
-  exportMarkdown(filename: string, markdown: string): Promise<void>;
-  exportHTML?(filename: string, html: string): Promise<void>;
+  exportMarkdown(filename: string, markdown: string): Promise<ExportOutcome>;
+  exportHTML?(filename: string, html: string): Promise<ExportOutcome>;
   summarizeNotes?(meeting: Meeting, request: NotesGenerationRequest): Promise<NotesDocument>;
   getNotesProviderStatus?(): Promise<NotesProviderStatus>;
   configureOpenAIKey?(): Promise<NotesProviderStatus>;

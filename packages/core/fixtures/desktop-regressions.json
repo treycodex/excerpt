@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "description": "Regression inventory from DESKTOP-REVIEW.md. Each scenario is assigned to the phase that adds its executable boundary coverage.",
+  "scenarios": [
+    { "id": "finished-meeting-edits-persist", "phase": 1, "fixtures": ["corrected-finished", "reviewed-finished", "deleted-blocks-finished"], "outcome": "Corrections, review state, images, captions, and document edits survive reload." },
+    { "id": "finished-a-edits-while-b-records", "phase": 1, "fixtures": ["text-only-finished", "interrupted-draft"], "outcome": "A saves independently while B continues to capture." },
+    { "id": "automatic-notes-reach-open-editor", "phase": 1, "fixtures": ["text-only-finished"], "outcome": "An untouched open document accepts native-generated notes; concurrent writing is retained." },
+    { "id": "delete-invalidates-background-work", "phase": 1, "fixtures": ["text-only-finished"], "outcome": "Late save or generation callbacks cannot resurrect a deleted meeting." },
+    { "id": "immediate-stop-and-repeated-start", "phase": 2, "fixtures": ["interrupted-draft"], "outcome": "Startup, stop, and repeated sessions leave no duplicate capture resources." },
+    { "id": "partial-startup-and-capture-loss", "phase": 2, "fixtures": ["interrupted-draft"], "outcome": "Partial resources are cleaned up and interrupted meetings remain recoverable." },
+    { "id": "quit-during-speech-finalization", "phase": 2, "fixtures": ["interrupted-draft"], "outcome": "Deferred termination preserves final transcript text and a durable meeting." },
+    { "id": "late-session-callbacks", "phase": 2, "fixtures": ["interrupted-draft"], "outcome": "A callback from an old startup or session cannot alter a newer or stopped session." },
+    { "id": "desktop-editor-has-no-browser-fallback", "phase": 3, "fixtures": ["legacy-sections-finished"], "outcome": "Production requires the native bridge while explicit test hosts remain available." },
+    { "id": "native-start-and-caption-authority", "phase": 4, "fixtures": [], "outcome": "The desktop library starts native capture and all caption controls share native state." },
+    { "id": "visual-notes-compose-without-inventing-image-facts", "phase": 5, "fixtures": ["screenshot-only-finished", "handwritten-finished", "text-only-finished"], "outcome": "Automatic composition retains each image, respects manual writing, and only uses supported transcript context." },
+    { "id": "unknown-time-import", "phase": 5, "fixtures": ["screenshot-only-finished"], "outcome": "Finished-meeting imports can remain unanchored without a fabricated 0:00 source." },
+    { "id": "quiet-document-and-honest-file-operations", "phase": 6, "fixtures": ["reviewed-finished"], "outcome": "The primary document is usable while export and deletion report actual success, cancellation, or failure." },
+    { "id": "image-heavy-library-performance", "phase": 7, "fixtures": ["screenshot-only-finished"], "outcome": "Synthetic long meetings and libraries measure payloads, latency, and retained memory." },
+    { "id": "native-hardware-and-package-acceptance", "phase": 8, "fixtures": [], "outcome": "Real audio, displays, sharing, accessibility, signing, and installer behavior are measured separately from unit tests." }
+  ]
+}

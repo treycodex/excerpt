@@ -111,7 +111,143 @@ struct Meeting: Codable, Sendable, Identifiable, Equatable {
     /// Enhancement is reviewable and never replaces the user's current document.
     var suggestedNotes: NotesDocument?
     var sourceRevision: Int? = nil
+    /// Additive native persistence metadata. Missing values remain valid legacy data.
+    var schemaVersion: Int? = nil
+    var revision: Int? = nil
+    var documentRevision: Int? = nil
+    var appliedOperationIds: [String]? = nil
+    var generationStatus: NotesGenerationStatus? = nil
+    /// Why capture ended. Optional so every meeting written before Phase 2 still decodes.
+    var finishReason: MeetingFinishReason? = nil
+    /// The native capture failure that caused an interrupted finish, when there was one.
+    var captureError: String? = nil
 }
+
+enum MeetingFinishReason: String, Codable, Sendable, Equatable {
+    case stopped, interrupted, recovered
+}
+
+struct NotesGenerationStatus: Codable, Sendable, Equatable {
+    enum State: String, Codable, Sendable { case queued, running, ready, failed, cancelled }
+    var state: State
+    var generationId: String
+    var sourceRevision: Int
+    var inputFingerprint: String? = nil
+    var message: String? = nil
+}
+
+enum MeetingChange: Codable, Sendable, Equatable {
+    case create(meeting: Meeting)
+    case setTitle(title: String)
+    case setDocument(document: NotesDocument?, suggestedNotes: NotesDocument?)
+    case setReviewItems(items: [Item])
+    case correctTranscript(events: [TranscriptEvent], items: [Item], document: NotesDocument?,
+                           suggestedNotes: NotesDocument?, images: [MeetingImage], sourceRevision: Int)
+    case addImages(images: [MeetingImage], blocks: [NoteBlock])
+    case updateImage(imageId: String, caption: String, needsReview: Bool?, blockText: String)
+
+    private enum CodingKeys: String, CodingKey {
+        case type, meeting, title, document, suggestedNotes, items, events, images
+        case sourceRevision, blocks, imageId, caption, needsReview, blockText
+    }
+    private enum Kind: String, Codable {
+        case create, setTitle, setDocument, setReviewItems, correctTranscript, addImages, updateImage
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        switch try values.decode(Kind.self, forKey: .type) {
+        case .create:
+            self = .create(meeting: try values.decode(Meeting.self, forKey: .meeting))
+        case .setTitle:
+            self = .setTitle(title: try values.decode(String.self, forKey: .title))
+        case .setDocument:
+            self = .setDocument(
+                document: try values.decodeIfPresent(NotesDocument.self, forKey: .document),
+                suggestedNotes: try values.decodeIfPresent(NotesDocument.self, forKey: .suggestedNotes))
+        case .setReviewItems:
+            self = .setReviewItems(items: try values.decode([Item].self, forKey: .items))
+        case .correctTranscript:
+            self = .correctTranscript(
+                events: try values.decode([TranscriptEvent].self, forKey: .events),
+                items: try values.decode([Item].self, forKey: .items),
+                document: try values.decodeIfPresent(NotesDocument.self, forKey: .document),
+                suggestedNotes: try values.decodeIfPresent(NotesDocument.self, forKey: .suggestedNotes),
+                images: try values.decode([MeetingImage].self, forKey: .images),
+                sourceRevision: try values.decode(Int.self, forKey: .sourceRevision))
+        case .addImages:
+            self = .addImages(
+                images: try values.decode([MeetingImage].self, forKey: .images),
+                blocks: try values.decode([NoteBlock].self, forKey: .blocks))
+        case .updateImage:
+            self = .updateImage(
+                imageId: try values.decode(String.self, forKey: .imageId),
+                caption: try values.decode(String.self, forKey: .caption),
+                needsReview: try values.decodeIfPresent(Bool.self, forKey: .needsReview),
+                blockText: try values.decode(String.self, forKey: .blockText))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .create(let meeting):
+            try values.encode(Kind.create, forKey: .type)
+            try values.encode(meeting, forKey: .meeting)
+        case .setTitle(let title):
+            try values.encode(Kind.setTitle, forKey: .type)
+            try values.encode(title, forKey: .title)
+        case .setDocument(let document, let suggestedNotes):
+            try values.encode(Kind.setDocument, forKey: .type)
+            try values.encodeIfPresent(document, forKey: .document)
+            try values.encodeIfPresent(suggestedNotes, forKey: .suggestedNotes)
+        case .setReviewItems(let items):
+            try values.encode(Kind.setReviewItems, forKey: .type)
+            try values.encode(items, forKey: .items)
+        case .correctTranscript(let events, let items, let document, let suggestedNotes, let images, let sourceRevision):
+            try values.encode(Kind.correctTranscript, forKey: .type)
+            try values.encode(events, forKey: .events)
+            try values.encode(items, forKey: .items)
+            try values.encodeIfPresent(document, forKey: .document)
+            try values.encodeIfPresent(suggestedNotes, forKey: .suggestedNotes)
+            try values.encode(images, forKey: .images)
+            try values.encode(sourceRevision, forKey: .sourceRevision)
+        case .addImages(let images, let blocks):
+            try values.encode(Kind.addImages, forKey: .type)
+            try values.encode(images, forKey: .images)
+            try values.encode(blocks, forKey: .blocks)
+        case .updateImage(let imageId, let caption, let needsReview, let blockText):
+            try values.encode(Kind.updateImage, forKey: .type)
+            try values.encode(imageId, forKey: .imageId)
+            try values.encode(caption, forKey: .caption)
+            try values.encodeIfPresent(needsReview, forKey: .needsReview)
+            try values.encode(blockText, forKey: .blockText)
+        }
+    }
+}
+
+struct MeetingMutation: Codable, Sendable, Equatable {
+    var operationId: String
+    var meetingId: String
+    var baseRevision: Int
+    var baseDocumentRevision: Int
+    var baseSourceRevision: Int
+    var changes: [MeetingChange]
+}
+
+struct MeetingMutationAcknowledgment: Codable, Sendable, Equatable {
+    enum Status: String, Codable, Sendable { case applied, rebased, duplicate, conflict }
+    var operationId: String
+    var meetingId: String
+    var status: Status
+    var revision: Int
+    var documentRevision: Int
+    var sourceRevision: Int
+    var meeting: Meeting
+    var message: String? = nil
+}
+
+enum ExportOutcome: String, Codable, Sendable { case saved, cancelled }
 
 struct NoteBullet: Codable, Sendable, Equatable, Identifiable {
     var id: String

@@ -1,25 +1,21 @@
 export { splitIntoSubtitleLines, dashDialogue } from './caption/lines';
 export { toTurns } from './transcript/turns';
 export type { Turn } from './transcript/turns';
-export { DemoTranscriptAdapter } from './capture/demo';
-export type { ScriptedLine } from './capture/demo';
-export { LiveCaptureAdapter, isStalled, sourceHealth } from './capture/live';
-export type { LiveCaptureOptions, StreamDiagnostics } from './capture/live';
 export { healthOf, sourceConcern } from './capture/health';
 export type { SourceHealth, SourceSignals } from './capture/health';
-export { listMicrophones, preferredMicrophone } from './capture/devices';
-export type { AudioInput } from './capture/devices';
 export { extractItems, classify, extractDecisions, toSentences, relateItems } from './extract';
 export type { Sentence, ItemRelation, RelationKind } from './extract';
 export {
-  saveMeeting, loadMeeting, listMeetings, readMeetingLibrary, deleteMeeting,
-  saveCaptureDraft, loadCaptureDraft, clearCaptureDraft,
+  saveMeeting, loadMeeting, listMeetings, readMeetingLibrary, deleteMeeting, mutateMeeting,
+  NativeEditorHostError,
 } from './store/meetings';
-export type { CaptureDraft } from './store/meetings';
 export { searchMeetings, meetingNoteCount } from './store/search';
 export type { MeetingMatch, MeetingMatchKind } from './store/search';
 export { bridge, hasBridge, isNativeHost } from './store/bridge';
 export type { ExcerptBridge } from './store/bridge';
+export {
+  meetingMutation, reconcileMeetingUpdate, acceptsAcknowledgment, preserveGeneratedConflict,
+} from './store/meeting-sync';
 export { toMarkdown, toHTML } from './export/markdown';
 export { buildNotesDocument, preserveNoteEdits, refreshMeetingNotes, noteTitle, shapeNotice } from './notes/summary';
 export {

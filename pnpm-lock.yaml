@@ -119,7 +119,7 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9
 
-  apps/web:
+  apps/editor:
     dependencies:
       '@excerpt/core':
         specifier: workspace:*
@@ -158,9 +158,6 @@ importers:
       chrono-node:
         specifier: ^2.10.1
         version: 2.10.1
-      idb-keyval:
-        specifier: ^6.3.0
-        version: 6.3.0
     devDependencies:
       esbuild:
         specifier: ^0.25.12
@@ -914,9 +911,6 @@ packages:
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
-
-  idb-keyval@6.3.0:
-    resolution: {integrity: sha512-um+2dgAWmYsu615EXpWVwSmapJhON0G43t3Ka/EVaohzPQXSMqKEqeDK/oIW3Ow+BXaF2PvSc+oBTFp793A5Ow==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -1735,8 +1729,6 @@ snapshots:
     optional: true
 
   gensync@1.0.0-beta.2: {}
-
-  idb-keyval@6.3.0: {}
 
   js-tokens@4.0.0: {}
 

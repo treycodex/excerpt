@@ -16,11 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var listenItem: NSMenuItem?
     private var captionsItem: NSMenuItem?
     private var lookMenu: NSMenu?
+    private var displayMenu: NSMenu?
+    private var shortcutMenu: NSMenu?
     private let shortcuts = MeetingShortcuts()
     private let catchUp = CatchUpWindowController()
     private let captureReceipt = CaptureReceiptController()
-    private var capturingScreenshot = false
-    private var shortcutsRegistered = false
+    private let screenshotCapture = MeetingScreenshotCoordinator()
+    private let termination = ApplicationTerminationCoordinator()
     private var screenshotItem: NSMenuItem?
     private var catchUpItem: NSMenuItem?
 
@@ -28,11 +30,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var store: MeetingStore?
     private var preferences = PreferencesStore()
     private var overlay = OverlayController()
+    private var microphone = MicrophoneController()
     private var session: MeetingSession?
+    private var commands: MeetingCommandCoordinator?
+    private var bridge: NotesBridge?
     private var notes: NotesWindowController?
     private var gateWindow: NSWindow?
     private var setup: SetupWindowController?
     private var previewTimeout: Task<Void, Never>?
+    // Phase 4 continuation still needs to place the shared microphone controller in
+    // setup's input-check step. Until then the existing setup remains buildable.
     private lazy var setupModel = SetupModel(overlay: overlay)
 
     /// Before the first frame, not after. Coming up as a regular app and demoting in
@@ -54,8 +61,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         OverlayBridge.shared.controller = overlay
         makeStatusItem()
         makeEditingMenu()
+        shortcuts.onMeeting = { [weak self] in self?.toggleMeetingCommand() }
+        shortcuts.onCaptions = { [weak self] in self?.toggleOverlay() }
         shortcuts.onCatchUp = { [weak self] in self?.showCatchUp() }
         shortcuts.onScreenshot = { [weak self] in self?.takeScreenshot() }
+        shortcuts.onStatusChange = { [weak self] in
+            self?.refresh()
+            self?.bridge?.publishDesktopSettings()
+        }
 
         do {
             let store = try MeetingStore()
@@ -68,22 +81,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 (try? engine.subtitleLines(text, maxChars: CaptionTokens.maxCharsPerLine))
                     ?? OverlayController.fallbackLines(text)
             }
+            let capture = CaptureEngine(selectedMicrophoneID: { [weak self] in
+                guard let self else { throw MicrophoneSelectionError.unavailable }
+                return try self.microphone.selectedDeviceIDForCapture()
+            })
             let session = MeetingSession(engine: engine, store: store,
-                                         preferences: preferences, overlay: overlay)
+                                         preferences: preferences, overlay: overlay,
+                                         capture: capture)
             self.session = session
             session.onStateChange = { [weak self] in self?.refresh() }
+            session.onHealthChange = { [weak self] in self?.bridge?.publishDesktopSettings() }
+            session.onHeadphoneSuggestion = { [weak self] in self?.suggestHeadphonesIfNeeded() }
+            commands = MeetingCommandCoordinator(
+                isActive: { [weak session] in session?.state.isActive == true },
+                start: { [weak self, weak session] in
+                    guard let self, let session else { return false }
+                    guard await self.ensurePermissions() else { throw CancellationError() }
+                    _ = try self.microphone.selectedDeviceIDForCapture()
+                    await session.start()
+                    guard session.canCaptureImage else { return false }
+                    if self.overlay.captionsEnabled { self.overlay.show() }
+                    self.refresh()
+                    return true
+                },
+                stop: { [weak self, weak session] in
+                    self?.screenshotCapture.cancel()
+                    self?.catchUp.close()
+                    await session?.stop()
+                    self?.refresh()
+                },
+                didStart: { NSApp.hide(nil) }
+            )
             let bridge = NotesBridge(
                 store: store, preferences: preferences,
                 activeMeeting: { [weak session] id in session?.activeMeeting(id: id) },
-                ownsEditorWrites: { [weak session] id in session?.ownsEditorWrites(for: id) == true },
-                updateActiveMeeting: { [weak session] meeting in
-                    guard let session else { return meeting }
-                    return try session.applyEditorChanges(meeting)
-                }
+                mutateLiveMeeting: { [weak session] mutation in
+                    try session?.applyEditorMutation(mutation)
+                },
+                didDeleteMeeting: { [weak session] id in session?.cancelBackgroundWork(for: id) },
+                startMeeting: { [weak self] in try await self?.commands?.start() },
+                openLiveNotes: { [weak self] in self?.openLiveNotesFromEditor() },
+                desktopSettings: { [weak self] in self?.desktopSettings() ?? Self.emptyDesktopSettings },
+                saveCaptionSettings: { [weak self] settings in self?.applyCaptionSettings(settings) },
+                selectMicrophone: { [weak self] id in try self?.microphone.select(id) }
             )
+            self.bridge = bridge
             session.onMeetingChange = { [weak bridge] meeting in bridge?.publish(meeting) }
             notes = NotesWindowController(bridge: bridge)
+            overlay.onSettingsChange = { [weak self] in
+                self?.refresh()
+                self?.bridge?.publishDesktopSettings()
+            }
+            microphone.onChange = { [weak self] in self?.bridge?.publishDesktopSettings() }
+            session.onMeetingFinished = { [weak self] meeting in
+                guard let self, !self.termination.isPending else { return }
+                self.notes?.navigate(toMeeting: meeting.id)
+            }
+            screenshotCapture.onChange = { [weak self] in self?.refresh() }
+            session.resumePendingEnhancements()
             offerRecovery(store: store)
+            shortcuts.registerCore()
         } catch {
             // Without the engine there are no notes and without the folder there is
             // nowhere to put them. Say so plainly at launch rather than at Stop, when
@@ -157,31 +214,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        let listen = NSMenuItem(title: "Start listening", action: #selector(toggleListening), keyEquivalent: "r")
-        listen.keyEquivalentModifierMask = [.command, .shift]
+        let listen = NSMenuItem(title: "Start meeting", action: #selector(toggleListening), keyEquivalent: "")
         listen.target = self
         menu.addItem(listen)
         listenItem = listen
 
-        let captions = NSMenuItem(title: "Show captions over my meeting",
-                                  action: #selector(toggleOverlay), keyEquivalent: "c")
-        captions.keyEquivalentModifierMask = [.command, .shift]
+        let captions = NSMenuItem(title: "Captions",
+                                  action: #selector(toggleOverlay), keyEquivalent: "")
         captions.target = self
         menu.addItem(captions)
         captionsItem = captions
 
-        let catchUp = NSMenuItem(title: "I missed that…", action: #selector(showCatchUp), keyEquivalent: "j")
-        catchUp.keyEquivalentModifierMask = [.command, .shift]
+        let catchUp = NSMenuItem(title: "Catch up", action: #selector(showCatchUp), keyEquivalent: "")
         catchUp.target = self
         menu.addItem(catchUp)
         catchUpItem = catchUp
-        let screenshot = NSMenuItem(title: "Capture screenshot for notes…", action: #selector(takeScreenshot), keyEquivalent: "s")
-        screenshot.keyEquivalentModifierMask = [.command, .shift]
+        let screenshot = NSMenuItem(title: "Capture moment…", action: #selector(takeScreenshot), keyEquivalent: "")
         screenshot.target = self
         menu.addItem(screenshot)
         screenshotItem = screenshot
 
-        // The look, one level deeper: the common path is on, the choice is behind it.
+        let openNotes = NSMenuItem(title: "Open notes", action: #selector(openNotes), keyEquivalent: "n")
+        openNotes.keyEquivalentModifierMask = [.command]
+        openNotes.target = self
+        openNotes.image = Self.symbol("doc.text", "Open notes")
+        menu.addItem(openNotes)
+
+        menu.addItem(.separator())
+
+        let settings = NSMenuItem(title: "Settings & Help", action: nil, keyEquivalent: "")
+        let settingsMenu = NSMenu()
+
+        let preferencesItem = NSMenuItem(title: "Open Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        preferencesItem.keyEquivalentModifierMask = [.command]
+        preferencesItem.target = self
+        settingsMenu.addItem(preferencesItem)
+
+        // Styling stays available without competing with everyday meeting controls.
         let look = NSMenuItem(title: "Caption look", action: nil, keyEquivalent: "")
         look.image = Self.symbol("textformat.size", "Caption look")
         let lookMenu = NSMenu()
@@ -205,34 +274,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tryIt.image = Self.symbol("eye", "Try it on screen")
         lookMenu.addItem(tryIt)
         look.submenu = lookMenu
-        menu.addItem(look)
+        settingsMenu.addItem(look)
         self.lookMenu = lookMenu
 
-        menu.addItem(.separator())
+        let display = NSMenuItem(title: "Caption display", action: nil, keyEquivalent: "")
+        let displayMenu = NSMenu()
+        display.submenu = displayMenu
+        settingsMenu.addItem(display)
+        self.displayMenu = displayMenu
 
-        let openNotes = NSMenuItem(title: "Open notes", action: #selector(openNotes), keyEquivalent: "n")
-        openNotes.keyEquivalentModifierMask = [.command]
-        openNotes.target = self
-        openNotes.image = Self.symbol("doc.text", "Open notes")
-        menu.addItem(openNotes)
+        let shortcutItem = NSMenuItem(title: "Keyboard shortcuts", action: nil, keyEquivalent: "")
+        let shortcutMenu = NSMenu()
+        shortcutItem.submenu = shortcutMenu
+        settingsMenu.addItem(shortcutItem)
+        self.shortcutMenu = shortcutMenu
+
+        settingsMenu.addItem(.separator())
 
         // "Nothing leaves this Mac" is a claim. This is how a person checks it.
         let reveal = NSMenuItem(title: "Show where notes are kept", action: #selector(revealFolder), keyEquivalent: "")
         reveal.target = self
         reveal.image = Self.symbol("folder", "Show where notes are kept")
-        menu.addItem(reveal)
-
-        menu.addItem(.separator())
+        settingsMenu.addItem(reveal)
 
         let setupItem = NSMenuItem(title: "Set up Excerpt…", action: #selector(showSetup), keyEquivalent: "")
         setupItem.target = self
         setupItem.image = Self.symbol("sparkles", "Set up Excerpt")
-        menu.addItem(setupItem)
+        settingsMenu.addItem(setupItem)
 
         let gates = NSMenuItem(title: "Permissions and diagnostics…", action: #selector(showGateWindow), keyEquivalent: "")
         gates.target = self
         gates.image = Self.symbol("stethoscope", "Permissions and diagnostics")
-        menu.addItem(gates)
+        settingsMenu.addItem(gates)
+        settings.submenu = settingsMenu
+        menu.addItem(settings)
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Excerpt",
@@ -257,37 +332,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Actions
 
     @objc private func toggleListening() {
-        guard let session else { return }
+        toggleMeetingCommand()
+    }
+
+    private func toggleMeetingCommand() {
         Task {
-            if session.state.isActive {
-                guard !capturingScreenshot else { return }
-                catchUp.close()
-                await session.stop()
-                refresh()
-                // The meeting is the point, so it opens itself. Nothing is lost if the
-                // user closes it — the notes are already on disk.
-                if let saved = session.lastSaved {
-                    notes?.navigate(toMeeting: saved.id)
-                }
-            } else {
-                guard await ensurePermissions() else { return }
-                if !overlay.visible { overlay.show() }
-                await session.start()
-                refresh()
-                if session.canCaptureImage { notes?.navigate(toMeeting: session.meetingId) }
-                suggestHeadphonesIfNeeded()
-            }
+            do { try await commands?.toggle() }
+            catch is CancellationError { }
+            catch { present(title: "Meeting could not start", body: error.localizedDescription, style: .warning) }
         }
     }
 
     @objc private func showCatchUp() {
         guard let session, session.canCaptureImage else { return }
-        if catchUp.isVisible { catchUp.close(); overlay.show(); return }
+        if catchUp.isVisible {
+            catchUp.close()
+            if overlay.captionsEnabled { overlay.show() }
+            return
+        }
         overlay.hide()
         catchUp.show(events: session.catchUpEvents, now: session.elapsedMilliseconds,
                      source: { [weak session] in (session?.catchUpEvents ?? [], session?.elapsedMilliseconds ?? 0) },
-                     onReturn: { [weak self] in self?.overlay.show() },
+                     onReturn: { [weak self] in
+                         guard let self, self.overlay.captionsEnabled else { return }
+                         self.overlay.show()
+                     },
                      onImages: { [weak self] providers, origin in self?.addMeetingImages(providers, origin: origin) })
+    }
+
+    private func openLiveNotesFromEditor() {
+        guard let session, session.canCaptureImage else { return }
+        notes?.navigate(toMeeting: session.meetingId)
     }
 
     private func addMeetingImages(_ providers: [NSItemProvider], origin: String) {
@@ -328,28 +403,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func takeScreenshot() {
-        guard let session, session.canCaptureImage, !capturingScreenshot else { return }
-        capturingScreenshot = true
+        guard let session, session.canCaptureImage, !screenshotCapture.isCapturing else { return }
         let id = session.meetingId
         let restoreCaptions = overlay.visible
         overlay.hide()
         catchUp.close()
-        refresh()
-        Task {
-            defer {
-                capturingScreenshot = false
-                if restoreCaptions && session.canCaptureImage { overlay.show() }
-                refresh()
-            }
-            do {
-                if let capture = try await MeetingScreenshot.captureRegion() {
-                    let image = try session.addScreenshot(capture, for: id)
-                    captureReceipt.show(image)
+        screenshotCapture.start(
+            meetingID: id,
+            onCapture: { [weak self, weak session] meetingID, capture in
+                guard let self, let session else { return }
+                do {
+                    let image = try session.addScreenshot(capture, for: meetingID)
+                    self.captureReceipt.show(image)
+                } catch {
+                    self.present(title: "Screenshot wasn't added", body: error.localizedDescription, style: .warning)
                 }
-            } catch {
-                present(title: "Screenshot wasn't added", body: error.localizedDescription, style: .warning)
+            },
+            onFailure: { [weak self] error in
+                self?.present(title: "Screenshot wasn't added", body: error.localizedDescription, style: .warning)
+            },
+            onComplete: { [weak self, weak session] in
+                guard let self, let session, restoreCaptions,
+                      session.canCaptureImage, self.overlay.captionsEnabled else { return }
+                self.overlay.show()
             }
-        }
+        )
     }
 
     private func makeEditingMenu() {
@@ -420,7 +498,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleOverlay() {
-        overlay.toggle()
+        let enabled = !overlay.captionsEnabled
+        overlay.setCaptionsEnabled(enabled)
+        if enabled, session?.canCaptureImage == true { overlay.show() }
+        else { overlay.hide() }
         refresh()
     }
 
@@ -430,6 +511,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             notes?.show()
         }
+    }
+
+    @objc private func openSettings() {
+        notes?.show(route: "#/preferences")
     }
 
     @objc private func revealFolder() {
@@ -457,6 +542,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .seconds(6))
             guard let self, self.session?.state.isActive != true else { return }
             self.overlay.update(speaker: "", text: "")
+            self.overlay.hide()
         }
     }
 
@@ -492,6 +578,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func choosePosition(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let position = CaptionPosition(rawValue: raw) else { return }
         overlay.setPosition(position)
+    }
+
+    @objc private func chooseDisplay(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        overlay.setDisplay(id)
+    }
+
+    @objc private func moveCaptionsToCurrentDisplay() {
+        overlay.followPointer()
+    }
+
+    private static let emptyDesktopSettings = DesktopSettings(
+        captions: CaptionSettings(preset: .classic, size: .medium, position: .standard,
+            enabled: true, displayId: "", displays: [], displayMissing: true,
+            displayName: "No display"),
+        microphone: MicrophoneSettings(selectedDeviceId: "", devices: [], health: .missing,
+            message: "No microphone is connected."), shortcuts: [])
+
+    private func desktopSettings() -> DesktopSettings {
+        microphone.refresh()
+        return DesktopSettings(
+            captions: overlay.settings(),
+            microphone: microphone.snapshot(liveHealth: session?.microphoneHealth),
+            shortcuts: shortcuts.statuses())
+    }
+
+    private func applyCaptionSettings(_ settings: CaptionSettings) {
+        overlay.apply(settings)
+        if session?.canCaptureImage == true, settings.enabled { overlay.show() }
+        else if !settings.enabled { overlay.hide() }
+        refresh()
     }
 
     /// Records one unattended meeting and writes down what every part of it did.
@@ -585,25 +702,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// alongside it. There is no state here that can disagree with what is happening.
     private func refresh() {
         let wantsShortcuts = session?.canCaptureImage == true
-        if wantsShortcuts && !shortcutsRegistered {
-            shortcutsRegistered = true
-            if !shortcuts.register() { NSLog("Excerpt: a global shortcut is unavailable; use the menu.") }
-        } else if !wantsShortcuts && shortcutsRegistered {
-            shortcuts.unregister()
-            shortcutsRegistered = false
+        shortcuts.setMeetingActive(wantsShortcuts)
+        if !wantsShortcuts {
             catchUp.close()
+            if screenshotCapture.isCapturing { screenshotCapture.cancel() }
         }
-        screenshotItem?.isEnabled = session?.canCaptureImage == true && !capturingScreenshot
+        screenshotItem?.isEnabled = session?.canCaptureImage == true && !screenshotCapture.isCapturing
         catchUpItem?.isEnabled = session?.canCaptureImage == true
         let listening = session?.state.isActive ?? false
-        let captionsOn = overlay.visible
+        let captionsOn = overlay.captionsEnabled
 
         statusItem?.button?.image = Self.symbol(
             listening ? "captions.bubble.fill" : "captions.bubble", "Excerpt")
         statusLine?.title = session?.status ?? "Not listening"
-        listenItem?.title = listening ? "Stop listening" : "Start listening"
+        listenItem?.title = listening ? "End meeting" : "Start meeting"
         listenItem?.image = Self.symbol(listening ? "stop.circle" : "record.circle",
-                                        listening ? "Stop listening" : "Start listening")
+                                        listening ? "End meeting" : "Start meeting")
         captionsItem?.state = captionsOn ? .on : .off
     }
 
@@ -625,15 +739,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
-    /// Quitting mid-meeting must not lose the meeting. The journal already holds
-    /// every settled line, so the worst case is a recovery prompt next launch — but
-    /// stopping cleanly turns it into a saved meeting instead.
+    /// AppKit asks synchronously, but capture finalization and the required store write
+    /// are asynchronous. Return `.terminateLater`, let the main actor keep running,
+    /// then reply. Optional enhancement is deliberately not awaited.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let requiresCleanup = session?.state.isActive == true || session?.canRetryFailedSave == true
+        switch termination.request(
+            requiresCleanup: requiresCleanup,
+            cancelPendingUI: { [weak self] in
+                self?.screenshotCapture.cancel()
+                self?.catchUp.close()
+            },
+            cleanup: { [weak self] in
+                guard let self, let session = self.session else { return }
+                if session.state.isActive { await session.stop() }
+                if session.canRetryFailedSave { _ = try? session.retryFailedSave() }
+            },
+            reply: { allowed in NSApp.reply(toApplicationShouldTerminate: allowed) }) {
+        case .terminateNow: return .terminateNow
+        case .terminateLater: return .terminateLater
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         shortcuts.unregister()
-        guard let session, session.state.isActive else { return }
-        let finished = DispatchSemaphore(value: 0)
-        Task { await session.stop(); finished.signal() }
-        _ = finished.wait(timeout: .now() + 5)
+        screenshotCapture.cancel()
     }
 }
 
@@ -642,7 +772,7 @@ extension AppDelegate: NSMenuDelegate {
     /// menu can be showing something that is no longer true.
     func menuNeedsUpdate(_ menu: NSMenu) {
         refresh()
-        guard menu === statusItem?.menu || menu === lookMenu else { return }
+        guard menu === statusItem?.menu || menu === lookMenu || menu === displayMenu || menu === shortcutMenu else { return }
 
         for item in lookMenu?.items ?? [] {
             if let raw = item.representedObject as? String {
@@ -652,6 +782,33 @@ extension AppDelegate: NSMenuDelegate {
                 guard let raw = child.representedObject as? String else { continue }
                 child.state = (raw == overlay.size.rawValue || raw == overlay.position.rawValue) ? .on : .off
             }
+        }
+
+        displayMenu?.removeAllItems()
+        for display in overlay.displays {
+            let item = NSMenuItem(title: display.name, action: #selector(chooseDisplay(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = display.id
+            item.state = display.id == overlay.selectedDisplayID ? .on : .off
+            displayMenu?.addItem(item)
+        }
+        if overlay.displayMissing {
+            let missing = NSMenuItem(title: "Selected display is disconnected — using the main display", action: nil, keyEquivalent: "")
+            missing.isEnabled = false
+            displayMenu?.addItem(missing)
+        }
+        displayMenu?.addItem(.separator())
+        let move = NSMenuItem(title: "Move captions to this display", action: #selector(moveCaptionsToCurrentDisplay), keyEquivalent: "")
+        move.target = self
+        displayMenu?.addItem(move)
+
+        shortcutMenu?.removeAllItems()
+        for status in shortcuts.statuses() {
+            let suffix = status.registered ? status.shortcut
+                : status.relevant ? "Unavailable — use the menu" : "Available during a meeting"
+            let item = NSMenuItem(title: "\(status.label) — \(suffix)", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            shortcutMenu?.addItem(item)
         }
     }
 }

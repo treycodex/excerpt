@@ -72,7 +72,12 @@ final class OverlayWindow: NSWindow {
 final class OverlayController {
     var caption: CaptionLine?
     private(set) var visible = false
+    /// The user's durable choice. `visible` is only the current window state and is
+    /// cleared at the end of every meeting so Dock presence remains truthful.
+    private(set) var captionsEnabled: Bool
     private(set) var screenName = "—"
+    private(set) var selectedDisplayID: String
+    @ObservationIgnored var onSettingsChange: (() -> Void)?
 
     /// Recognition revisions remain off screen until the next presentation boundary.
     @ObservationIgnored private var presentation = SubtitlePresentation()
@@ -110,6 +115,8 @@ final class OverlayController {
         static let preset = "caption.preset"
         static let size = "caption.size"
         static let position = "caption.position"
+        static let enabled = "caption.enabled"
+        static let display = "caption.display-id"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -119,6 +126,14 @@ final class OverlayController {
         preset = defaults.string(forKey: Key.preset).flatMap(CaptionPreset.init) ?? .classic
         size = defaults.string(forKey: Key.size).flatMap(CaptionSize.init) ?? .medium
         position = defaults.string(forKey: Key.position).flatMap(CaptionPosition.init) ?? .standard
+        captionsEnabled = defaults.object(forKey: Key.enabled) == nil
+            ? true
+            : defaults.bool(forKey: Key.enabled)
+        selectedDisplayID = defaults.string(forKey: Key.display)
+            ?? NSScreen.main.map(Self.displayID) ?? NSScreen.screens.first.map(Self.displayID) ?? ""
+        if defaults.string(forKey: Key.display) == nil, !selectedDisplayID.isEmpty {
+            defaults.set(selectedDisplayID, forKey: Key.display)
+        }
     }
 
     private let defaults: UserDefaults
@@ -131,16 +146,82 @@ final class OverlayController {
     func setPreset(_ value: CaptionPreset) {
         preset = value
         defaults.set(value.rawValue, forKey: Key.preset)
+        onSettingsChange?()
     }
 
     func setSize(_ value: CaptionSize) {
         size = value
         defaults.set(value.rawValue, forKey: Key.size)
+        onSettingsChange?()
     }
 
     func setPosition(_ value: CaptionPosition) {
         position = value
         defaults.set(value.rawValue, forKey: Key.position)
+        onSettingsChange?()
+    }
+
+    func setCaptionsEnabled(_ enabled: Bool) {
+        captionsEnabled = enabled
+        defaults.set(enabled, forKey: Key.enabled)
+        onSettingsChange?()
+    }
+
+    static func displayID(_ screen: NSScreen) -> String {
+        if let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+            return number.stringValue
+        }
+        // The numeric display id is present on supported macOS releases. Keep a
+        // deterministic fallback for tests and unusual virtual displays.
+        return "screen:\(screen.localizedName):\(Int(screen.frame.minX)):\(Int(screen.frame.minY))"
+    }
+
+    var displays: [CaptionDisplay] {
+        NSScreen.screens.map { CaptionDisplay(id: Self.displayID($0), name: $0.localizedName) }
+    }
+
+    var displayMissing: Bool {
+        !selectedDisplayID.isEmpty && !NSScreen.screens.contains { Self.displayID($0) == selectedDisplayID }
+    }
+
+    func settings() -> CaptionSettings {
+        let connected = displays
+        let chosen = connected.first(where: { $0.id == selectedDisplayID })
+        return CaptionSettings(
+            preset: preset, size: size, position: position, enabled: captionsEnabled,
+            displayId: selectedDisplayID, displays: connected,
+            displayMissing: chosen == nil,
+            displayName: chosen?.name ?? (selectedDisplayID.isEmpty ? "No display" : "Disconnected display"))
+    }
+
+    func apply(_ settings: CaptionSettings) {
+        preset = settings.preset
+        size = settings.size
+        position = settings.position
+        captionsEnabled = settings.enabled
+        selectedDisplayID = settings.displayId
+        defaults.set(preset.rawValue, forKey: Key.preset)
+        defaults.set(size.rawValue, forKey: Key.size)
+        defaults.set(position.rawValue, forKey: Key.position)
+        defaults.set(captionsEnabled, forKey: Key.enabled)
+        defaults.set(selectedDisplayID, forKey: Key.display)
+        if visible {
+            if let target = targetScreen() {
+                window?.reposition(to: target)
+                screenName = target.localizedName
+            } else { hide() }
+        }
+        onSettingsChange?()
+    }
+
+    func setDisplay(_ id: String) {
+        selectedDisplayID = id
+        defaults.set(id, forKey: Key.display)
+        if visible, let target = targetScreen() {
+            window?.reposition(to: target)
+            screenName = target.localizedName
+        }
+        onSettingsChange?()
     }
 
     // MARK: - Window
@@ -176,13 +257,11 @@ final class OverlayController {
         if wasVisible { show() }
     }
 
-    /// The screen to show on, preferring the one the pointer is on — that is the one
-    /// the meeting is on. Returns nil only if the Mac reports no screens at all, which
-    /// happens with the lid shut and no display attached; showing nothing is correct then.
+    /// The configured display is stable across fullscreen and focus changes. If it is
+    /// disconnected we retain the preference but use the main display until it returns.
     private func targetScreen(preferring screen: NSScreen? = nil) -> NSScreen? {
         if let screen { return screen }
-        let pointer = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) }
+        return NSScreen.screens.first { Self.displayID($0) == selectedDisplayID }
             ?? NSScreen.main
             ?? NSScreen.screens.first
     }
@@ -215,10 +294,14 @@ final class OverlayController {
                 // through a Task would cost a frame or more before the overlay caught up
                 // with a display that just moved.
                 MainActor.assumeIsolated {
-                    guard let self, let window = self.window,
-                          let screen = self.targetScreen() else { return }
-                    window.reposition(to: screen)
-                    self.screenName = screen.localizedName
+                    guard let self else { return }
+                    if let window = self.window, let screen = self.targetScreen() {
+                        window.reposition(to: screen)
+                        self.screenName = screen.localizedName
+                    } else if self.visible {
+                        self.hide()
+                    }
+                    self.onSettingsChange?()
                 }
             }
         }
@@ -238,7 +321,10 @@ final class OverlayController {
 
     /// Move to the screen the pointer is on, so it follows the meeting.
     func followPointer() {
-        guard let screen = targetScreen() else { return }
+        let pointer = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) })
+            ?? NSScreen.main else { return }
+        setDisplay(Self.displayID(screen))
         window?.reposition(to: screen)
         screenName = screen.localizedName
     }

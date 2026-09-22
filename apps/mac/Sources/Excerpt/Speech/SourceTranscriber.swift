@@ -34,6 +34,20 @@ struct Segment: Sendable, Equatable {
     var text: String
 }
 
+/// The session consumes this small async surface rather than a concrete speech
+/// implementation. It keeps live hardware transcription in production while making
+/// lifecycle tests deterministic and isolated from Speech framework availability.
+protocol MeetingTranscribing: Sendable {
+    var kind: SourceKind { get }
+    var segments: AsyncStream<Segment> { get }
+    var live: AsyncStream<SourceTranscriber.LiveEdge> { get }
+    func statistics() async -> TranscriptStats
+    func start() async throws
+    func feed(_ buffer: AVAudioPCMBuffer, at: CMTime) async
+    func stop() async
+    func captureOffsetSeconds() async -> Double
+}
+
 /// One SpeechAnalyzer + SpeechTranscriber for a single audio source.
 ///
 /// Deliberately NOT porting the web build's six-second chunking: that works around
@@ -48,7 +62,7 @@ struct Segment: Sendable, Equatable {
 /// Reusing them is silent and total: every settled segment is yielded into a finished
 /// stream and dropped, so the meeting saves with an empty transcript and no notes,
 /// while capture, recognition and the caption all look healthy.
-actor SourceTranscriber {
+actor SourceTranscriber: MeetingTranscribing {
     let kind: SourceKind
 
     private var analyzer: SpeechAnalyzer?
@@ -67,6 +81,8 @@ actor SourceTranscriber {
     private var pending: [(start: Double, end: Double, text: String)] = []
     private var startedAt: Date?
     private var resultsTask: Task<Void, Never>?
+    /// Invalidates a start suspended in model/format discovery when Stop arrives.
+    private var lifecycleGeneration = 0
 
     /// Frames handed to the analyzer, counted in the ANALYZER's format.
     ///
@@ -148,13 +164,17 @@ actor SourceTranscriber {
     func statistics() -> TranscriptStats { stats }
 
     func start() async throws {
+        lifecycleGeneration += 1
+        let generation = lifecycleGeneration
         let transcriber = SpeechTranscriber(
             locale: Locale(identifier: "en-US"),
             preset: .timeIndexedProgressiveTranscription
         )
         self.transcriber = transcriber
 
-        analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
+        let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
+        guard lifecycleGeneration == generation else { throw CancellationError() }
+        analyzerFormat = format
 
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
         self.continuation = continuation
@@ -435,6 +455,7 @@ actor SourceTranscriber {
 
     /// Finalizes cleanly so trailing speech is not lost — gate 12's "no silent loss".
     func stop() async {
+        lifecycleGeneration += 1
         continuation?.finish()
         continuation = nil
 

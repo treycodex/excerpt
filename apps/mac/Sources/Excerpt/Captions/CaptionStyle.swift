@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Which look the caption wears. Three, and the plan is explicit that three is the
 /// number — a fourth would be a preference, not a choice.
-enum CaptionPreset: String, CaseIterable, Identifiable, Sendable {
+enum CaptionPreset: String, CaseIterable, Identifiable, Sendable, Codable {
     case classic, warm, contrast
 
     var id: String { rawValue }
@@ -46,7 +46,7 @@ enum CaptionPreset: String, CaseIterable, Identifiable, Sendable {
 
 /// How big. The token already answers "how big on this screen"; this is the nudge
 /// either side of it, which is the only part a person actually wants to change.
-enum CaptionSize: String, CaseIterable, Identifiable, Sendable {
+enum CaptionSize: String, CaseIterable, Identifiable, Sendable, Codable {
     case small, medium, large
 
     var id: String { rawValue }
@@ -70,7 +70,7 @@ enum CaptionSize: String, CaseIterable, Identifiable, Sendable {
 
 /// How high up the screen. Meeting apps put their own controls along the bottom
 /// edge, so "lower" has to stay clear of them rather than sit under them.
-enum CaptionPosition: String, CaseIterable, Identifiable, Sendable {
+enum CaptionPosition: String, CaseIterable, Identifiable, Sendable, Codable {
     case lower, standard, higher
 
     var id: String { rawValue }
@@ -114,7 +114,7 @@ struct CaptionStyle: Equatable {
     var fade: Double
 
     /// Chrome above the caption: mono, wide-tracked, dimmed. Values from `.who` in
-    /// apps/web/src/app.css — chrome lives there rather than in the token file.
+    /// apps/editor/src/app.css — chrome lives there rather than in the token file.
     static let speakerSize: CGFloat = 11
     static let speakerTracking: CGFloat = 11 * 0.28
     static let speakerColor = Color(.sRGB, red: 0.706, green: 0.706, blue: 0.706, opacity: 1)

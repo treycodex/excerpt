@@ -50,10 +50,16 @@ enum NotesProviderCoordinator {
     }
 
     static func summarize(_ meeting: Meeting, preferences: Preferences,
-                          request: NotesGenerationRequest) async throws -> NotesDocument {
-        let provider: any NotesProviding = preferences.notesProvider == "openai"
-            ? OpenAINotesProvider(apiKey: try OpenAIKeyStore.load())
-            : AppleNotesProvider()
+                          request: NotesGenerationRequest,
+                          provider injectedProvider: (any NotesProviding)? = nil) async throws -> NotesDocument {
+        let provider: any NotesProviding
+        if let injectedProvider {
+            provider = injectedProvider
+        } else if preferences.notesProvider == "openai" {
+            provider = OpenAINotesProvider(apiKey: try OpenAIKeyStore.load())
+        } else {
+            provider = AppleNotesProvider()
+        }
         // Review priorities reorder extracted items; they are not summary instructions.
         return try await provider.summarize(meeting, request: request)
     }

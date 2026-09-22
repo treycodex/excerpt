@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "build:engine": "pnpm --filter @excerpt/core build:engine",
+    "build:editor": "pnpm --filter @excerpt/editor build:notes",
+    "build:mac": "pnpm build:engine && pnpm build:editor && cd apps/mac && ./build.sh",
     "test": "turbo test",
     "typecheck": "turbo typecheck"
   },

@@ -1,0 +1,19 @@
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.42em;
+  font-family: var(--sans);
+  white-space: nowrap;
+  line-height: 1;
+}
+.wordmark .mark {
+  font-size: 1em;
+  font-weight: 600;
+  letter-spacing: -0.133em;
+  padding-right: 0.133em;
+}
+.wordmark .word {
+  font-size: 1.05em;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+}

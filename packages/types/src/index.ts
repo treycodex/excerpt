@@ -9,6 +9,7 @@ export type Assignee = 'you' | 'unassigned';
 
 /** Where transcription actually happened. Surfaced to the user, never hidden. */
 export type ProcessingMode = 'on-device' | 'cloud' | 'demo';
+export type MeetingFinishReason = 'stopped' | 'interrupted' | 'recovered';
 
 /**
  * The single interface every surface consumes. Captions take interim + final;
@@ -194,6 +195,61 @@ export interface Preferences {
   notesProvider?: 'apple' | 'openai';
 }
 
+export type CaptionPreset = 'classic' | 'warm' | 'contrast';
+export type CaptionSize = 'small' | 'medium' | 'large';
+export type CaptionPosition = 'lower' | 'standard' | 'higher';
+
+export interface CaptionDisplay {
+  id: string;
+  name: string;
+  connected: boolean;
+}
+
+/** Native-owned caption preferences. The editor only renders and submits these. */
+export interface CaptionSettings {
+  preset: CaptionPreset;
+  size: CaptionSize;
+  position: CaptionPosition;
+  enabled: boolean;
+  displayId: string;
+  displays: CaptionDisplay[];
+  displayMissing: boolean;
+  displayName: string;
+  capturable: true;
+}
+
+export type MicrophoneHealth =
+  | 'ready' | 'starting' | 'hearing' | 'silent' | 'stalled' | 'failed' | 'missing';
+
+export interface MicrophoneDevice {
+  id: string;
+  name: string;
+  connected: boolean;
+}
+
+export interface MicrophoneSettings {
+  selectedDeviceId: string;
+  devices: MicrophoneDevice[];
+  health: MicrophoneHealth;
+  message: string;
+}
+
+export type MeetingShortcutName = 'meeting' | 'captions' | 'catchUp' | 'capture';
+
+export interface MeetingShortcutStatus {
+  name: MeetingShortcutName;
+  label: string;
+  shortcut: string;
+  registered: boolean;
+  relevant: boolean;
+}
+
+export interface DesktopSettings {
+  captions: CaptionSettings;
+  microphone: MicrophoneSettings;
+  shortcuts: MeetingShortcutStatus[];
+}
+
 export interface Meeting {
   id: string;
   title: string;
@@ -210,7 +266,73 @@ export interface Meeting {
   suggestedNotes?: NotesDocument;
   /** Advances only when source transcript wording changes. */
   sourceRevision?: number;
+  /** Persisted schema for native-owned meeting files. Missing means legacy schema 0. */
+  schemaVersion?: number;
+  /** Native-owned revision for every durable change, including live capture updates. */
+  revision?: number;
+  /** Advances only when the editable document changes. */
+  documentRevision?: number;
+  /** Bounded durable idempotency keys for editor mutations. */
+  appliedOperationIds?: string[];
+  /** Native enhancement lifecycle; absent on legacy meetings. */
+  generationStatus?: NotesGenerationStatus;
+  /** Durable reason native capture ended; absent on legacy meetings. */
+  finishReason?: MeetingFinishReason;
+  /** Native capture failure associated with an interrupted finish. */
+  captureError?: string;
 }
+
+export interface NotesGenerationStatus {
+  state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled';
+  generationId: string;
+  sourceRevision: number;
+  /** Fingerprint of transcript and captured-moment captions supplied to the job. */
+  inputFingerprint?: string;
+  message?: string;
+}
+
+/**
+ * Explicit editor-owned changes. Native capture and storage retain ownership of all
+ * fields not named by one of these operations.
+ */
+export type MeetingChange =
+  | { type: 'create'; meeting: Meeting }
+  | { type: 'setTitle'; title: string }
+  | { type: 'setDocument'; document: NotesDocument | null; suggestedNotes: NotesDocument | null }
+  | { type: 'setReviewItems'; items: Item[] }
+  | {
+      type: 'correctTranscript';
+      events: TranscriptEvent[];
+      items: Item[];
+      document: NotesDocument | null;
+      suggestedNotes: NotesDocument | null;
+      images: MeetingImage[];
+      sourceRevision: number;
+    }
+  | { type: 'addImages'; images: MeetingImage[]; blocks: NoteBlock[] }
+  | { type: 'updateImage'; imageId: string; caption: string; needsReview?: boolean; blockText: string };
+
+export interface MeetingMutation {
+  operationId: string;
+  meetingId: string;
+  baseRevision: number;
+  baseDocumentRevision: number;
+  baseSourceRevision: number;
+  changes: MeetingChange[];
+}
+
+export interface MeetingMutationAcknowledgment {
+  operationId: string;
+  meetingId: string;
+  status: 'applied' | 'rebased' | 'duplicate' | 'conflict';
+  revision: number;
+  documentRevision: number;
+  sourceRevision: number;
+  meeting: Meeting;
+  message?: string;
+}
+
+export type ExportOutcome = 'saved' | 'cancelled';
 
 export type AdapterStatus =
   | { kind: 'idle' }

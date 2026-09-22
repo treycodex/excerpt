@@ -27,9 +27,21 @@ struct SourceStats: Sendable {
     var format: String = "—"
 }
 
+/// The session's capture boundary. Production uses `CaptureEngine`; lifecycle tests
+/// inject a deterministic source so they never need Screen Recording permission or
+/// a real display just to exercise start/stop/error ordering.
+protocol MeetingCapturing: AnyObject {
+    func statistics() -> [SourceKind: SourceStats]
+    func start(
+        onBuffer: @escaping (SourceKind, AVAudioPCMBuffer, CMTime) -> Void,
+        onStreamError: @escaping (String) -> Void
+    ) async throws
+    func stop() async
+}
+
 /// One SCStream, two audio outputs. System audio and microphone arrive separately,
 /// which is the whole basis for telling you from everyone else.
-final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
+final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, MeetingCapturing, @unchecked Sendable {
 
     private var stream: SCStream?
     private let queue = DispatchQueue(label: "com.excerpt.capture", qos: .userInitiated)
@@ -37,6 +49,17 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     private var stats: [SourceKind: SourceStats] = [:]
     private var onBuffer: ((SourceKind, AVAudioPCMBuffer, CMTime) -> Void)?
     private var onStreamError: ((String) -> Void)?
+    private let selectedMicrophoneID: () throws -> String
+
+    init(selectedMicrophoneID: @escaping () throws -> String = {
+        guard let id = AVCaptureDevice.default(for: .audio)?.uniqueID else {
+            throw MicrophoneSelectionError.unavailable
+        }
+        return id
+    }) {
+        self.selectedMicrophoneID = selectedMicrophoneID
+        super.init()
+    }
 
     /// Whether any capture resource is still held. Gate 13 must be judged on this,
     /// not on observing a running→stopped transition: after an interruption the
@@ -59,8 +82,9 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     ) async throws {
         self.onBuffer = onBuffer
         self.onStreamError = onStreamError
-        lock.lock(); stats = [.system: SourceStats(), .microphone: SourceStats()]; lock.unlock()
+        lock.withLock { stats = [.system: SourceStats(), .microphone: SourceStats()] }
 
+        let microphoneID = try selectedMicrophoneID()
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard let display = content.displays.first else {
             throw NSError(domain: "Excerpt", code: 1,
@@ -74,6 +98,7 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = true      // never transcribe our own sounds
         config.captureMicrophone = true                // separate microphone output
+        config.microphoneCaptureDeviceID = microphoneID
         config.sampleRate = 48_000
         config.channelCount = 1
         config.width = 2
@@ -83,9 +108,19 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue)
         try stream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: queue)
-        try await stream.startCapture()
-
         self.stream = stream
+        do {
+            try await stream.startCapture()
+        } catch {
+            if self.stream === stream { self.stream = nil }
+            throw error
+        }
+        // `stop()` can run while startCapture is suspended. Do not publish a late
+        // successful start after that meeting has already entered finishing.
+        guard self.stream === stream else {
+            try? await stream.stopCapture()
+            throw CancellationError()
+        }
         running = true
     }
 
@@ -103,15 +138,21 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     /// is already unhealthy.
     func stop() async {
         running = false
-        guard let stream else { return }
+        guard let stream else {
+            onBuffer = nil
+            onStreamError = nil
+            return
+        }
         self.stream = nil
-        do { try await stream.stopCapture() } catch { /* already stopped or dead */ }
         onBuffer = nil
+        onStreamError = nil
+        do { try await stream.stopCapture() } catch { /* already stopped or dead */ }
     }
 
     // MARK: - SCStreamOutput
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        guard self.stream === stream else { return }
         let kind: SourceKind
         switch type {
         case .audio: kind = .system
@@ -137,6 +178,8 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
+        guard self.stream === stream else { return }
+        self.stream = nil
         running = false
         lock.lock()
         for kind in SourceKind.allCases { stats[kind, default: SourceStats()].lastError = "\(error)" }

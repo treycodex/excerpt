@@ -16,10 +16,18 @@ enum MeetingScreenshot {
         let process = Process()
         process.executableURL = URL(filePath: "/usr/sbin/screencapture")
         process.arguments = ["-i", "-x", "-t", "png", url.path]
-        let status: Int32 = try await withCheckedThrowingContinuation { continuation in
-            process.terminationHandler = { task in continuation.resume(returning: task.terminationStatus) }
-            do { try process.run() } catch { continuation.resume(throwing: error) }
+        let status: Int32 = try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                process.terminationHandler = { task in continuation.resume(returning: task.terminationStatus) }
+                do { try process.run() } catch { continuation.resume(throwing: error) }
+            }
+        } onCancel: {
+            // Ending or quitting a meeting dismisses the system region picker. The
+            // session-id check at the caller is a second boundary against late output.
+            if process.isRunning { process.terminate() }
         }
+        try Task.checkCancellation()
         // Escape is an ordinary cancellation; it never inserts an empty image.
         guard FileManager.default.fileExists(atPath: url.path) else {
             if status == 0 || status == 1 { return nil }

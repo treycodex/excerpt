@@ -14,9 +14,10 @@ final class NotesBridge: NSObject {
     /// Names the JavaScript side calls. Matching an unknown one is an error the
     /// webview should see, not a silent undefined.
     private enum Method: String {
-        case listMeetings, loadMeeting, saveMeeting, deleteMeeting
+        case startMeeting, openLiveNotes, listMeetings, loadMeeting, mutateMeeting, deleteMeeting
         case loadPreferences, savePreferences, exportMarkdown, exportHTML, summarizeNotes
         case getNotesProviderStatus, configureOpenAIKey, removeOpenAIKey
+        case loadDesktopSettings, saveCaptionSettings, selectMicrophone
     }
 
     private enum Failure: Error, LocalizedError {
@@ -34,26 +35,58 @@ final class NotesBridge: NSObject {
     private let store: MeetingStore
     private let preferences: PreferencesStore
     private let activeMeeting: (String?) -> Meeting?
-    private let ownsEditorWrites: (String) -> Bool
-    private let updateActiveMeeting: (Meeting) throws -> Meeting
+    private let mutateLiveMeeting: (MeetingMutation) throws -> MeetingMutationAcknowledgment?
+    private let didDeleteMeeting: (String) -> Void
+    private let startMeetingAction: () async throws -> Void
+    private let openLiveNotesAction: () -> Void
+    private let desktopSettings: () -> DesktopSettings
+    private let saveCaptionSettingsAction: (CaptionSettings) throws -> Void
+    private let selectMicrophoneAction: (String) throws -> Void
+    private let exporter: any NotesExporting
     private let log = Logger(subsystem: "com.excerpt.app", category: "bridge")
     var onMeetingChange: ((String) -> Void)?
 
     init(store: MeetingStore, preferences: PreferencesStore,
          activeMeeting: @escaping (String?) -> Meeting? = { _ in nil },
-         ownsEditorWrites: @escaping (String) -> Bool = { _ in false },
-         updateActiveMeeting: @escaping (Meeting) throws -> Meeting = { meeting in meeting }) {
+         mutateLiveMeeting: @escaping (MeetingMutation) throws -> MeetingMutationAcknowledgment? = { _ in nil },
+         didDeleteMeeting: @escaping (String) -> Void = { _ in },
+         startMeeting: @escaping () async throws -> Void = {},
+         openLiveNotes: @escaping () -> Void = {},
+         desktopSettings: @escaping () -> DesktopSettings = {
+             DesktopSettings(
+                captions: CaptionSettings(preset: .classic, size: .medium, position: .standard,
+                    enabled: true, displayId: "", displays: [], displayMissing: true,
+                    displayName: "No display"),
+                microphone: MicrophoneSettings(selectedDeviceId: "", devices: [], health: .missing,
+                    message: "No microphone is connected."), shortcuts: [])
+         },
+         saveCaptionSettings: @escaping (CaptionSettings) throws -> Void = { _ in },
+         selectMicrophone: @escaping (String) throws -> Void = { _ in },
+         exporter: (any NotesExporting)? = nil) {
         self.store = store
         self.preferences = preferences
         self.activeMeeting = activeMeeting
-        self.ownsEditorWrites = ownsEditorWrites
-        self.updateActiveMeeting = updateActiveMeeting
+        self.mutateLiveMeeting = mutateLiveMeeting
+        self.didDeleteMeeting = didDeleteMeeting
+        self.startMeetingAction = startMeeting
+        self.openLiveNotesAction = openLiveNotes
+        self.desktopSettings = desktopSettings
+        self.saveCaptionSettingsAction = saveCaptionSettings
+        self.selectMicrophoneAction = selectMicrophone
+        self.exporter = exporter ?? NativeNotesExporter()
     }
 
     func publish(_ meeting: Meeting) {
         guard let encoded = try? json(meeting) else { return }
         onMeetingChange?(encoded)
     }
+
+    func publishDesktopSettings() {
+        guard let encoded = try? json(desktopSettings()) else { return }
+        onDesktopSettingsChange?(encoded)
+    }
+
+    var onDesktopSettingsChange: ((String) -> Void)?
 
     /// The JavaScript side of the seam. Installed at document start so the React app
     /// can find `__excerptBridge` before its first render — `packages/core` checks for
@@ -70,9 +103,14 @@ final class NotesBridge: NSObject {
         try { return JSON.parse(reply); } catch { return undefined; }
       };
       globalThis.__excerptBridge = {
+        startMeeting:     ()          => send('startMeeting', []),
+        openLiveNotes:    ()          => send('openLiveNotes', []),
+        loadDesktopSettings: ()       => send('loadDesktopSettings', []),
+        saveCaptionSettings: (value)  => send('saveCaptionSettings', [JSON.stringify(value)]),
+        selectMicrophone: (deviceId)  => send('selectMicrophone', [deviceId]),
         listMeetings:    ()          => send('listMeetings', []),
         loadMeeting:     (id)        => send('loadMeeting', [id]),
-        saveMeeting:     (meeting)   => send('saveMeeting', [JSON.stringify(meeting)]),
+        mutateMeeting:   (mutation)  => send('mutateMeeting', [JSON.stringify(mutation)]),
         deleteMeeting:   (id)        => send('deleteMeeting', [id]),
         loadPreferences: ()          => send('loadPreferences', []),
         savePreferences: (prefs)     => send('savePreferences', [JSON.stringify(prefs)]),
@@ -87,6 +125,11 @@ final class NotesBridge: NSObject {
         try {
           window.dispatchEvent(new CustomEvent('excerpt:meeting', { detail: JSON.parse(json) }));
         } catch (_) { /* a malformed native update is ignored; the saved copy remains */ }
+      };
+      globalThis.__excerptReceiveDesktopSettings = (json) => {
+        try {
+          window.dispatchEvent(new CustomEvent('excerpt:desktop-settings', { detail: JSON.parse(json) }));
+        } catch (_) { /* native remains authoritative if an update is malformed */ }
       };
       globalThis.__excerptNative = true;
       // Marked on the root element, at document start, so the first paint already
@@ -118,7 +161,7 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
                 return (try await json(NotesProviderCoordinator.summarize(
                     meeting, preferences: preferences.load(), request: request)), nil)
             }
-            return (try handle(method, arguments), nil)
+            return (try await handle(method, arguments), nil)
         } catch {
             log.error("bridge \(name) failed: \(error.localizedDescription)")
             return (nil, NotesBridge.readable(error))
@@ -141,8 +184,33 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
 
     /// Values cross as JSON strings, decoded by the webview. One bridging surface
     /// rather than a dictionary shape that can quietly disagree with the TypeScript type.
-    private func handle(_ method: Method, _ arguments: [Any]) throws -> Any? {
+    private func handle(_ method: Method, _ arguments: [Any]) async throws -> Any? {
         switch method {
+        case .startMeeting:
+            try await performStartMeeting()
+            return nil
+        case .openLiveNotes:
+            performOpenLiveNotes()
+            return nil
+        case .loadDesktopSettings:
+            return try json(desktopSettings())
+        case .saveCaptionSettings:
+            guard let body = arguments.first as? String,
+                  let settings = try? decode(CaptionSettings.self, from: body) else {
+                throw Failure.badArguments("saveCaptionSettings")
+            }
+            try saveCaptionSettingsAction(settings)
+            let snapshot = desktopSettings()
+            publishDesktopSettings()
+            return try json(snapshot)
+        case .selectMicrophone:
+            guard let id = arguments.first as? String else {
+                throw Failure.badArguments("selectMicrophone")
+            }
+            try selectMicrophoneAction(id)
+            let snapshot = desktopSettings()
+            publishDesktopSettings()
+            return try json(snapshot)
         case .summarizeNotes:
             throw Failure.badArguments("summarizeNotes")
         case .getNotesProviderStatus:
@@ -168,24 +236,16 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
             if let active = activeMeeting(id) { return try json(active) }
             return (try? store.load(id: id)).flatMap { try? json($0) }
 
-        case .saveMeeting:
+        case .mutateMeeting:
             guard let body = arguments.first as? String,
-                  let meeting = try? decode(Meeting.self, from: body) else {
-                throw Failure.badArguments("saveMeeting")
+                  let mutation = try? decode(MeetingMutation.self, from: body) else {
+                throw Failure.badArguments("mutateMeeting")
             }
-            if ownsEditorWrites(meeting.id) {
-                return try json(updateActiveMeeting(meeting))
-            }
-            try store.save(meeting)
-            publish(meeting)
-            return try json(meeting)
+            return try json(applyMutation(mutation))
 
         case .deleteMeeting:
             guard let id = arguments.first as? String else { throw Failure.badArguments("deleteMeeting") }
-            if activeMeeting(id) != nil {
-                throw Failure.badArguments("deleteMeeting: a live meeting cannot be deleted")
-            }
-            try store.delete(id: id)
+            try deleteMeeting(id)
             return nil
 
         case .loadPreferences:
@@ -207,20 +267,35 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
             }
             // A real save panel, not a browser download: a file:// webview's download
             // goes nowhere the user can find, which reads as the export having failed.
-            save(markdown: markdown, suggesting: filename, html: method == .exportHTML)
-            return nil
+            return try json(await export(
+                contents: markdown, suggesting: filename, html: method == .exportHTML))
         }
     }
 
-    private func save(markdown: String, suggesting filename: String, html: Bool) {
-        let panel = NSSavePanel()
-        let suffix = html ? ".html" : ".md"
-        panel.nameFieldStringValue = filename.hasSuffix(suffix) ? filename : "\(filename)\(suffix)"
-        panel.canCreateDirectories = true
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            try? markdown.write(to: url, atomically: true, encoding: .utf8)
+    @discardableResult
+    func applyMutation(_ mutation: MeetingMutation) throws -> MeetingMutationAcknowledgment {
+        let acknowledgment: MeetingMutationAcknowledgment
+        if let live = try mutateLiveMeeting(mutation) { acknowledgment = live }
+        else { acknowledgment = try store.apply(mutation) }
+        if acknowledgment.status != .conflict { publish(acknowledgment.meeting) }
+        return acknowledgment
+    }
+
+    /// Explicit operations exposed to the bundled editor. Keeping them here makes
+    /// the UI bridge testable without a browser or an alternative capture path.
+    func performStartMeeting() async throws { try await startMeetingAction() }
+    func performOpenLiveNotes() { openLiveNotesAction() }
+
+    func deleteMeeting(_ id: String) throws {
+        if activeMeeting(id) != nil {
+            throw Failure.badArguments("deleteMeeting: a live meeting cannot be deleted")
         }
+        try store.delete(id: id)
+        didDeleteMeeting(id)
+    }
+
+    func export(contents: String, suggesting filename: String, html: Bool) async throws -> ExportOutcome {
+        try await exporter.export(contents: contents, suggesting: filename, html: html)
     }
 
     /// Credentials are entered in a native secure field. The notes webview receives
@@ -245,6 +320,27 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
 
     private func decode<T: Decodable>(_ type: T.Type, from string: String) throws -> T {
         try JSONDecoder.excerpt.decode(type, from: Data(string.utf8))
+    }
+}
+
+@MainActor
+protocol NotesExporting {
+    func export(contents: String, suggesting filename: String, html: Bool) async throws -> ExportOutcome
+}
+
+@MainActor
+final class NativeNotesExporter: NotesExporting {
+    func export(contents: String, suggesting filename: String, html: Bool) async throws -> ExportOutcome {
+        let panel = NSSavePanel()
+        let suffix = html ? ".html" : ".md"
+        panel.nameFieldStringValue = filename.hasSuffix(suffix) ? filename : "\(filename)\(suffix)"
+        panel.canCreateDirectories = true
+        let response = await withCheckedContinuation { continuation in
+            panel.begin { continuation.resume(returning: $0) }
+        }
+        guard response == .OK, let url = panel.url else { return .cancelled }
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        return .saved
     }
 }
 

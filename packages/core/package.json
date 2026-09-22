@@ -8,8 +8,7 @@
   },
   "dependencies": {
     "@excerpt/types": "workspace:*",
-    "chrono-node": "^2.10.1",
-    "idb-keyval": "^6.3.0"
+    "chrono-node": "^2.10.1"
   },
   "scripts": {
     "test": "vitest run",

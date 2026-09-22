@@ -37,7 +37,7 @@ struct MeetingStoreTests {
 
         let original = meeting()
         try store.save(original)
-        #expect(try store.load(id: original.id) == original)
+        #expect(try store.load(id: original.id) == original.revisioned())
         #expect(store.list().map(\.id) == [original.id])
 
         try store.delete(id: original.id)
@@ -76,7 +76,7 @@ struct MeetingStoreTests {
             title: "Send the deck", evidence: [evidence], assignee: .you, salience: 1, completed: true)])
         original.notes = NotesDocument(method: "on-device", keyPoints: [NoteBullet(id: "p", text: "My edited note", evidence: [evidence], userEdited: true)], topics: [])
         try store.save(original)
-        #expect(try store.load(id: original.id) == original)
+        #expect(try store.load(id: original.id) == original.revisioned())
     }
 
     @Test func `screenshots recover even before the first transcript event`() throws {
@@ -98,7 +98,7 @@ struct MeetingStoreTests {
         store.discardJournal(id: "m-1")
         #expect(store.recoverable().isEmpty)
         #expect(store.recoverImages(id: "m-1").isEmpty)
-        #expect(try store.load(id: "m-1") == original)
+        #expect(try store.load(id: "m-1") == original.revisioned())
     }
 
     @Test func `writing makes a live draft recoverable before speech`() throws {
@@ -115,7 +115,7 @@ struct MeetingStoreTests {
         try store.checkpointDraft(draft)
 
         #expect(store.recoverable() == ["m-writing"])
-        #expect(store.recoverDraft(id: "m-writing") == draft)
+        #expect(store.recoverDraft(id: "m-writing") == draft.revisioned())
         store.discardJournal(id: "m-writing")
         #expect(store.recoverable().isEmpty)
     }
@@ -209,54 +209,6 @@ struct MeetingClockTests {
         let clock = MeetingClock()
         #expect(clock.origin == nil)
         #expect(clock.offsetSeconds(forSourceStartingAt: time(100)) == 0)
-    }
-}
-
-@MainActor
-struct LiveDraftMergeTests {
-    @Test func `a stale editor write keeps newer speech and screenshots`() {
-        let image = MeetingImage(id: "native", dataUrl: "data:image/png;base64,aGVsbG8=",
-            capturedAt: "2026-09-10T15:20:30Z", at: 30000, caption: "")
-        let imageBlock = NoteBlock(id: "image-native", kind: "image", text: "", evidence: [],
-                                   at: 30000, imageId: "native")
-        let speech = TranscriptEvent(id: "new-speech", sessionId: "m", role: .remote,
-            speakerLabel: "SPEAKER", text: "Move the control above the fold.", isFinal: true,
-            tArrived: 32000, tStart: 31, tEnd: 34)
-        let current = Meeting(id: "m", title: "Review", startedAt: "2026-09-10T15:20:00Z",
-            processing: .onDevice, events: [speech], items: [],
-            notes: NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [imageBlock]),
-            images: [image], draftRevision: 4)
-        let writing = NoteBlock(id: "mine", kind: "paragraph", text: "Compare both variants",
-                                evidence: [], userEdited: true)
-        let stale = Meeting(id: "m", title: "Navigation critique", startedAt: current.startedAt,
-            processing: .onDevice, events: [], items: [],
-            notes: NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [writing]),
-            images: [], draftRevision: 3)
-
-        let merged = LiveDraftMerge.editor(current: current, incoming: stale)
-
-        #expect(merged.title == "Navigation critique")
-        #expect(merged.events == [speech])
-        #expect(merged.images == [image])
-        #expect(merged.notes?.blocks?.map(\.id) == ["mine", "image-native"])
-        #expect(merged.draftRevision == 5)
-    }
-
-    @Test func `a current editor revision may deliberately remove an image block`() {
-        let image = MeetingImage(id: "native", dataUrl: "data:image/png;base64,aGVsbG8=",
-            capturedAt: "2026-09-10T15:20:30Z", at: 30000, caption: "")
-        let current = Meeting(id: "m", title: "Review", startedAt: "2026-09-10T15:20:00Z",
-            processing: .onDevice, events: [], items: [],
-            notes: NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [
-                NoteBlock(id: "image-native", kind: "image", text: "", evidence: [], imageId: "native")
-            ]), images: [image], draftRevision: 4)
-        var deletion = current
-        deletion.notes?.blocks = []
-
-        let merged = LiveDraftMerge.editor(current: current, incoming: deletion)
-
-        #expect(merged.notes?.blocks?.isEmpty == true)
-        #expect(merged.images == [image])
     }
 }
 
