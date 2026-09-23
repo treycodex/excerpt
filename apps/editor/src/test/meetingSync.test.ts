@@ -124,6 +124,20 @@ describe('native editor revision synchronization', () => {
     expect(anchored.meeting.notes?.blocks?.[1]?.at).toBe(300_000);
   });
 
+  it('does not read unchanged image bytes when only document wording changes', () => {
+    let reads = 0;
+    const image = {
+      id: 'large', capturedAt: '2026-09-22T01:10:00Z', at: 600_000, caption: 'Saved image',
+      get dataUrl() { reads++; return 'data:image/png;base64,c3ludGhldGlj'; },
+    };
+    const before: Meeting = { ...base, images: [image] };
+    const after: Meeting = { ...before, notes: { ...empty, blocks: [
+      { id: 'writing', kind: 'paragraph', text: 'A corrected sentence', evidence: [], userEdited: true },
+    ] } };
+    expect(meetingMutation(before, after)?.changes.map((change) => change.type)).toEqual(['setDocument']);
+    expect(reads).toBe(0);
+  });
+
   it('propagates native deletion failures so the library can retain the entry', async () => {
     const host = createFakeNativeHost({ meetings: [base] });
     host.deleteMeeting = async () => { throw new Error('Synthetic durable delete failure'); };

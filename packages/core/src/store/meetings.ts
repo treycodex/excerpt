@@ -1,4 +1,4 @@
-import type { Meeting, MeetingMutation, MeetingMutationAcknowledgment } from '@excerpt/types';
+import type { Meeting, MeetingLibraryEntry, MeetingSearchResult, MeetingMutation, MeetingMutationAcknowledgment } from '@excerpt/types';
 import { bridge } from './bridge';
 import { meetingMutation } from './meeting-sync';
 
@@ -26,8 +26,9 @@ export async function saveMeeting(meeting: Meeting): Promise<Meeting | undefined
 export async function loadMeeting(id: string): Promise<Meeting | undefined> { return host().loadMeeting(id); }
 export async function deleteMeeting(id: string): Promise<void> { await host().deleteMeeting(id); }
 export async function mutateMeeting(mutation: MeetingMutation): Promise<MeetingMutationAcknowledgment> { return host().mutateMeeting(mutation); }
-export async function listMeetings(): Promise<Meeting[]> { return host().listMeetings(); }
-export async function readMeetingLibrary(): Promise<{ meetings: Meeting[]; available: boolean }> {
+export async function listMeetings(): Promise<MeetingLibraryEntry[]> { return host().listMeetings(); }
+export async function searchMeetingLibrary(query: string): Promise<MeetingSearchResult[]> { return host().searchMeetings(query); }
+export async function readMeetingLibrary(): Promise<{ meetings: MeetingLibraryEntry[]; available: boolean }> {
   try { return { meetings: await host().listMeetings(), available: true }; }
   catch { return { meetings: [], available: false }; }
 }

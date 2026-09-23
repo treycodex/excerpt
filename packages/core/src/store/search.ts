@@ -1,14 +1,13 @@
-import type { Meeting } from '@excerpt/types';
+import type { Meeting, MeetingLibraryEntry } from '@excerpt/types';
 
 /**
  * Finding a meeting again, without remembering what it was called.
  *
  * Search matched titles only, and a title is almost never something a person
  * chose: capture names meetings `Meeting · <date>`, so title search was largely
- * search over a date string. Everything worth searching — the transcript, the
- * written notes, the captions on captured images — was already in memory, because
- * `readMeetingLibrary` returns whole `Meeting` records. The cost was never the
- * data. It was that nothing looked at it.
+ * search over a date string. Production search now runs on the native side so the
+ * library no longer transfers images or every transcript into the webview. This
+ * pure implementation remains useful for synthetic hosts and parity checks.
  */
 export type MeetingMatchKind = 'title' | 'note' | 'moment' | 'transcript';
 
@@ -56,7 +55,7 @@ function windowed(text: string, at: number, length: number): MeetingMatch {
 function noteTexts(meeting: Meeting): string[] {
   const notes = meeting.notes;
   if (!notes) return [];
-  if (notes.blocks?.length) return notes.blocks.map((b) => b.text);
+  if (notes.blocks?.length) return notes.blocks.filter((b) => b.kind !== 'image').map((b) => b.text);
   return [...notes.keyPoints.map((b) => b.text), ...notes.topics.flatMap((t) => t.bullets.map((b) => b.text))];
 }
 
@@ -128,4 +127,18 @@ export function meetingNoteCount(meeting: Meeting): number {
     ? notes.blocks.filter((b) => b.kind === 'image' || b.text.trim()).length
     : noteTexts(meeting).filter((t) => t.trim()).length;
   return written || meeting.items.filter((i) => !i.dismissed).length;
+}
+
+/** Mirror the small native library projection in synthetic editor tests. */
+export function meetingLibraryEntry(meeting: Meeting): MeetingLibraryEntry {
+  const live = meeting.items.filter((item) => !item.dismissed);
+  return {
+    id: meeting.id, title: meeting.title, startedAt: meeting.startedAt,
+    ...(meeting.endedAt === undefined ? {} : { endedAt: meeting.endedAt }),
+    processing: meeting.processing,
+    ...(meeting.draftRevision === undefined ? {} : { draftRevision: meeting.draftRevision }),
+    noteCount: meetingNoteCount(meeting),
+    decidedCount: live.filter((item) => item.category === 'decision' && item.state === 'decided').length,
+    mineCount: live.filter((item) => item.assignee === 'you').length,
+  };
 }

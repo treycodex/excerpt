@@ -118,6 +118,29 @@ export interface NotesDocument {
   generation?: NotesGeneration;
 }
 
+/** The library's small native projection; image bytes and transcript text stay on disk. */
+export interface MeetingLibraryEntry {
+  id: string;
+  title: string;
+  startedAt: string;
+  endedAt?: string;
+  processing: ProcessingMode;
+  draftRevision?: number;
+  noteCount: number;
+  decidedCount: number;
+  mineCount: number;
+}
+
+export interface MeetingSearchResult {
+  meeting: MeetingLibraryEntry;
+  kind: 'title' | 'note' | 'moment' | 'transcript';
+  snippet: string;
+  /** UTF-16 offsets into snippet, for JavaScript's slice(). */
+  offset: number;
+  length: number;
+  eventId?: string;
+}
+
 export interface NotesGeneration {
   provider: 'apple' | 'openai';
   model: string;

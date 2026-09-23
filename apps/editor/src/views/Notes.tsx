@@ -217,9 +217,14 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   const editDocument = (notes: Document) => {
     const captions = new Map((notes.blocks ?? []).filter((block) => block.imageId)
       .map((block) => [block.imageId!, block.text]));
+    const currentImages = latestMeeting.current.images;
+    const updatedImages = currentImages?.map((image) => {
+      const caption = captions.get(image.id);
+      return caption !== undefined && caption !== image.caption ? { ...image, caption } : image;
+    });
     const next = { ...latestMeeting.current, notes,
-      ...(latestMeeting.current.images ? { images: latestMeeting.current.images.map((image) => captions.has(image.id)
-        ? { ...image, caption: captions.get(image.id)! } : image) } : {}) };
+      ...(currentImages ? { images: updatedImages!.some((image, index) => image !== currentImages[index])
+        ? updatedImages! : currentImages } : {}) };
     delete next.suggestedNotes;
     persist(next);
   };

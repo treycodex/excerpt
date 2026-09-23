@@ -2,7 +2,9 @@ import type {
   Meeting, MeetingChange, MeetingMutation, MeetingMutationAcknowledgment,
 } from '@excerpt/types';
 
-const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+// Most editor transitions reuse unchanged arrays and images. Avoid serializing
+// megabytes of data URLs just to discover they are the same objects.
+const equal = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
 const revision = (meeting: Meeting) => meeting.revision ?? meeting.draftRevision ?? 0;
 const documentRevision = (meeting: Meeting) => meeting.documentRevision ?? meeting.draftRevision ?? 0;
 const sourceRevision = (meeting: Meeting) => meeting.sourceRevision ?? 0;

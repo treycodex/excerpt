@@ -1,8 +1,8 @@
-# Desktop implementation handoff — Phase 6 implemented, UI acceptance pending
+# Desktop implementation handoff — Phase 7 in progress
 
-Updated September 23, 2026. Branch: `note-and-transcript-quality`. The Phase 6
-second pass and its post-review fixes are included in this checkpoint, on top of
-`0d36b71` (Phase 5 and the first Phase 6 pass). Preserve any later local work,
+Updated September 23, 2026. Branch: `note-and-transcript-quality`. Phase 6 and its
+post-review fixes are pushed in `9115b32`. Phase 7's measured first pass is
+uncommitted on top of that checkpoint. Preserve this work, later local changes,
 checkpoint history, synthetic fixtures, and unrelated files.
 Do not read or alter production meeting data, signing settings, or permissions.
 
@@ -10,7 +10,7 @@ Do not read or alter production meeting data, signing settings, or permissions.
 
 Phases 0–5 are complete at their automated gates. Phase 6 is `implemented /
 acceptance pending`: its automated gate passes, but the real Mac app UI was not
-exercised. Full
+exercised. Phase 7 is `in progress`, not through its storage/performance gate. Full
 Xcode is available at `/Applications/Xcode.app/Contents/Developer`. The previously
 blocked Phase 4 Swift gate passed here: **167 tests in 24 suites**. Its existing
 JavaScript, typecheck, resource, token, and desktop-boundary checks were already
@@ -18,10 +18,10 @@ recorded in the pushed checkpoint. Real microphone, focus, fullscreen, multiple
 display, sharing, long-session, accessibility, and signed-package acceptance
 remain Phase 8 work; no automated result is presented as hardware acceptance.
 
-The copy-ready continuation prompts are `DESKTOP-PHASE-6-PROMPT.md` and
-`DESKTOP-PHASE-6-CLAUDE-PROMPT.md`. Read one with
-the plan and `DESKTOP-REVIEW.md`, then inspect `git status` and the full diff,
-including untracked files. Do not reset, stash, or reconstruct the migration.
+The Phase 6 prompts are historical assignments. Continue Phase 7 from
+`DESKTOP-PHASE-7-MEASUREMENTS.md` and the plan's Phase 7 gate; inspect `git status`
+and the full diff, including untracked files. Do not reset, stash, or reconstruct
+the migration.
 
 ## Phase 6 behavior and exact next step
 
@@ -57,16 +57,42 @@ including untracked files. Do not reset, stash, or reconstruct the migration.
 - **Not performed (Phase 8):** the real WKWebView app UI, VoiceOver/Full Keyboard
   Access, real keyboard text entry in the notes editor, native save panels, and
   hardware capture. The synthetic check ran in Chromium only.
-- **Next:** Phase 7 — measure a synthetic 90-minute meeting with 30 screenshots
-  and a 100-meeting library before changing storage. Add the Phase 6 real-app
-  UI/accessibility checks above to the Phase 8 acceptance list.
+- **Next:** Continue Phase 7's measured storage work below. Carry the Phase 6
+  real-app UI/accessibility checks above into Phase 8 acceptance.
+
+## Phase 7 first pass and exact next step
+
+- An opt-in Swift benchmark uses an isolated temporary store, a synthetic
+  90-minute meeting with 30 valid 2560×1440 PNGs, and 99 additional meetings.
+  On this M2 MacBook Air, the heavy JSON was 29.6 MB and the old full-library
+  bridge response 30.5 MB. The new native library projection returns 19 KB;
+  broad search returns only snippets, 33 KB for 100 matches. See
+  `DESKTOP-PHASE-7-MEASUREMENTS.md` for method, timings, memory, caveats, and
+  the reproducible command.
+- `NotesBridge.listMeetings` now sends only IDs, titles, dates, processing and
+  counts. Native search covers titles, written notes, image captions, and final
+  transcript speech without sending the full library into WKWebView. Editor
+  search is asynchronous, deferred and debounced; failed searches are distinct
+  from zero matches. Renaming a row still loads that one full meeting before
+  saving, so its images remain intact.
+- Document-wording edits retain unchanged image object identities, and typed
+  mutation comparison skips serializing unchanged image data URLs.
+- **Still unresolved:** native listing/search decode full image-heavy JSON on
+  every call (about 43 ms in this fixture), a title edit still rewrites the
+  29.6 MB file, and ordinary mutation acknowledgments still send full meetings.
+  End-to-end typing/caption latency, repeated-search memory, real-app warm
+  library display, and image-heavy capture/export have not been measured.
+  Next, measure those paths and test bounded native indexing/save coalescing
+  before deciding whether versioned image assets are necessary. Never report
+  an edit as saved before its durable write or rewrite the user's library at
+  launch.
 
 ## Working tree
 
-The reviewed Phase 6 source, tests, and planning docs are part of this
-checkpoint. Generated engine/editor resources were rebuilt from this source and
-remain ignored outputs. Check `git status` before continuing; later edits belong
-to their author.
+The Phase 7 projection, bridge, editor search, comparison fast path, regressions,
+measurements, and planning updates are uncommitted on `9115b32`. Generated
+engine/editor resources were rebuilt from this source and remain ignored outputs.
+Check `git status` before continuing; later edits belong to their author.
 
 ## Phase 5 behavior
 
@@ -120,6 +146,14 @@ to their author.
   passed. Boundary audit: no browser capture, PiP, IndexedDB, or retired
   routes. Matches are two comments, legacy `processing: 'demo'` display, and
   React DOM's `disablePictureInPicture` attribute name.
+- After the Phase 7 first pass (September 23, 2026): `pnpm exec turbo test
+  --force` **216 core + 39 editor passed**; `pnpm typecheck`, engine/editor
+  resource builds, clean editor build, caption-token sync, `git diff --check`,
+  and the desktop-boundary audit passed. Full `swift test` passed **175 tests in
+  27 suites**; the opt-in Phase 7 measurement was also run separately and passed.
+  Native tests verify the small library/search bridge payload and full-image
+  reopen; editor tests verify search, failures, rename preservation, and that
+  unchanged data URLs are not serialized for document-only mutation comparison.
 
 The native lifecycle test ends a synthetic meeting with two images, then checks the
 durable document before optional enhancement finishes. Shared tests cover text-only,

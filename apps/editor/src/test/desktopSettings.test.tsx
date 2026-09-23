@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, create } from 'react-test-renderer';
 import type { ReactTestRenderer } from 'react-test-renderer';
 import type { DesktopSettings, Meeting } from '@excerpt/types';
-import { bridge } from '@excerpt/core';
+import { bridge, meetingLibraryEntry } from '@excerpt/core';
 import { DesktopPreferences } from '../views/DesktopPreferences';
 import { Library } from '../views/Library';
 import { Notes } from '../views/Notes';
@@ -129,7 +129,7 @@ describe('library native actions', () => {
     await act(async () => { renderer = create(<Library onOpen={() => {}} onStart={host.startMeeting} onOpenLiveNotes={host.openLiveNotes} />); });
     expect(text()).toContain('meeting storage could not be read');
     expect(text()).not.toContain('Nothing yet');
-    host.listMeetings = async () => [...host.meetings.values()];
+    host.listMeetings = async () => [...host.meetings.values()].map(meetingLibraryEntry);
     host.meetings.set('rename-fixture', { id: 'rename-fixture', title: 'Original', startedAt: '2026-09-01T09:00:00Z', processing: 'on-device', events: [], items: [] });
     await act(async () => { renderer.unmount(); renderer = create(<Library onOpen={() => {}} onStart={host.startMeeting} onOpenLiveNotes={host.openLiveNotes} />); });
     await act(async () => { renderer.root.findAllByType('button').find((node) => node.children.includes('Rename'))!.props.onClick(); });
@@ -138,6 +138,23 @@ describe('library native actions', () => {
     await act(async () => { renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }); });
     expect(text()).toContain('Rename write refused');
     expect(renderer.root.findByProps({ 'aria-label': 'Meeting title' }).props.value).toBe('New title');
+  });
+
+  it('renames from a lightweight row without losing the saved full image', async () => {
+    const dataUrl = 'data:image/png;base64,c3ludGhldGlj';
+    const meeting: Meeting = {
+      id: 'heavy-rename', title: 'Before', startedAt: '2026-09-01T09:00:00Z',
+      processing: 'on-device', events: [], items: [],
+      images: [{ id: 'shot', dataUrl, capturedAt: '2026-09-01T09:01:00Z', at: 60_000, caption: 'Slide' }],
+    };
+    const host = createFakeNativeHost({ meetings: [meeting] }); restore = installFakeNativeHost(host);
+    await act(async () => { renderer = create(<Library onOpen={() => {}} onStart={host.startMeeting} onOpenLiveNotes={host.openLiveNotes} />); });
+    const rename = renderer.root.findAllByType('button').find((node) => node.props['aria-label'] === 'Rename “Before”')!;
+    await act(async () => { rename.props.onClick(); });
+    await act(async () => { renderer.root.findByProps({ 'aria-label': 'Meeting title' }).props.onChange({ target: { value: 'After' } }); });
+    await act(async () => { renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }); });
+    expect(host.meetings.get(meeting.id)?.title).toBe('After');
+    expect(host.meetings.get(meeting.id)?.images?.[0]?.dataUrl).toBe(dataUrl);
   });
 });
 

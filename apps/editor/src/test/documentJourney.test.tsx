@@ -269,3 +269,30 @@ describe('storage failures never strand the reader', () => {
     expect(text()).toContain('Your saved meetings were left unchanged');
   });
 });
+
+describe('the lightweight library', () => {
+  it('searches persisted transcript text through native without listing image bytes', async () => {
+    const host = createFakeNativeHost({ meetings: [fixture()] });
+    restore = installFakeNativeHost(host);
+    const listed = await host.listMeetings();
+    expect(JSON.stringify(listed)).not.toContain(png);
+    expect(JSON.stringify(listed)).not.toContain('Someone should update the pricing page.');
+
+    await act(async () => { renderer = create(<Library onOpen={() => {}} onStart={async () => {}} onOpenLiveNotes={async () => {}} />); });
+    await act(async () => {
+      renderer.root.findByProps({ 'aria-label': 'Search meetings' }).props.onChange({ target: { value: 'pricing page' } });
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 150)); });
+    expect(host.calls).toContain('searchMeetings:pricing page');
+    expect(text()).toContain('said in the meeting');
+    expect(text()).toContain('pricing page');
+
+    host.searchMeetings = async () => { throw new Error('Search offline'); };
+    await act(async () => {
+      renderer.root.findByProps({ 'aria-label': 'Search meetings' }).props.onChange({ target: { value: 'launch' } });
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 150)); });
+    expect(text()).toContain('Search could not be completed.');
+    expect(text()).not.toContain('Nothing found in any title');
+  });
+});

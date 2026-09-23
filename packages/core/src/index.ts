@@ -6,10 +6,10 @@ export type { SourceHealth, SourceSignals } from './capture/health';
 export { extractItems, classify, extractDecisions, toSentences, relateItems } from './extract';
 export type { Sentence, ItemRelation, RelationKind } from './extract';
 export {
-  saveMeeting, loadMeeting, listMeetings, readMeetingLibrary, deleteMeeting, mutateMeeting,
+  saveMeeting, loadMeeting, listMeetings, readMeetingLibrary, searchMeetingLibrary, deleteMeeting, mutateMeeting,
   NativeEditorHostError,
 } from './store/meetings';
-export { searchMeetings, meetingNoteCount } from './store/search';
+export { searchMeetings, meetingNoteCount, meetingLibraryEntry } from './store/search';
 export type { MeetingMatch, MeetingMatchKind } from './store/search';
 export { bridge, hasBridge, isNativeHost } from './store/bridge';
 export type { ExcerptBridge } from './store/bridge';

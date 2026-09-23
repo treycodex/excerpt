@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { readMeetingLibrary, deleteMeeting, saveMeeting } from '@excerpt/core';
+import { readMeetingLibrary, deleteMeeting, loadMeeting, saveMeeting } from '@excerpt/core';
 import { NotesWorkspace } from './NotesWorkspace';
-import type { Meeting } from '@excerpt/types';
+import type { MeetingLibraryEntry } from '@excerpt/types';
+
+const EMPTY_LIBRARY: MeetingLibraryEntry[] = [];
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -11,7 +13,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
   onStart: () => Promise<void>;
   onOpenLiveNotes: () => Promise<void>;
 }) {
-  const [meetings, setMeetings] = useState<Meeting[] | null>(null);
+  const [meetings, setMeetings] = useState<MeetingLibraryEntry[] | null>(null);
   const [storageAvailable, setStorageAvailable] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
   useEffect(refresh, []);
 
   return (
-    <NotesWorkspace library={meetings ?? []} libraryAvailable={storageAvailable}><div className="notes notebook-library">
+    <NotesWorkspace library={meetings ?? EMPTY_LIBRARY} libraryAvailable={storageAvailable}><div className="notes notebook-library">
       <header className="masthead">
         <div className="eyebrow">Excerpt</div>
         <h1>Your meetings</h1>
@@ -57,16 +59,15 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
       )}
 
       {meetings?.map((m) => {
-        const live = m.items.filter((i) => !i.dismissed);
-        const decided = live.filter((i) => i.state === 'decided' && i.category === 'decision').length;
-        const mine = live.filter((i) => i.assignee === 'you').length;
         return (
           <article className="meeting-row" key={m.id}>
             {renaming === m.id ? (
               <form className="rename" onSubmit={(e) => {
                 e.preventDefault();
-                const next = { ...m, title: title.trim() || m.title };
-                void saveMeeting(next).then(() => { setRenaming(null); setCommandError(''); refresh(); })
+                void loadMeeting(m.id).then((current) => {
+                  if (!current) throw new Error('This meeting is no longer saved on this Mac.');
+                  return saveMeeting({ ...current, title: title.trim() || m.title });
+                }).then(() => { setRenaming(null); setCommandError(''); refresh(); })
                   .catch((error) => setCommandError(error instanceof Error ? error.message : 'Could not rename this meeting. Your title is still here.'));
               }}>
                 <input aria-label="Meeting title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus
@@ -76,7 +77,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
             ) : <button className="open" onClick={() => onOpen(m.id)}>
               <span className="mtitle">{m.title} {m.processing === 'demo' && <small>Legacy</small>}</span>
               <span className="mmeta">
-                {when(m.startedAt)} · {decided} decided · {mine} assigned to you
+                {when(m.startedAt)} · {m.decidedCount} decided · {m.mineCount} assigned to you
               </span>
             </button>}
             {pendingDelete === m.id ? (

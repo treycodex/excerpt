@@ -1,4 +1,4 @@
-import { meetingImageContext } from '@excerpt/core';
+import { meetingImageContext, meetingLibraryEntry, searchMeetings } from '@excerpt/core';
 import type { ExcerptBridge } from '@excerpt/core';
 import type { CaptionSettings, DesktopSettings, Meeting, MeetingMutation, MeetingMutationAcknowledgment, Preferences } from '@excerpt/types';
 
@@ -75,7 +75,12 @@ export function createFakeNativeHost(input: { meetings?: Meeting[]; preferences?
       desktopSettings = { ...desktopSettings, microphone: { ...desktopSettings.microphone, selectedDeviceId: deviceId } };
       return clone(desktopSettings);
     },
-    async listMeetings() { calls.push('listMeetings'); return [...meetings.values()].map(clone); },
+    async listMeetings() { calls.push('listMeetings'); return [...meetings.values()].map(meetingLibraryEntry).map(clone); },
+    async searchMeetings(query) {
+      calls.push(`searchMeetings:${query}`);
+      return searchMeetings([...meetings.values()], query).map(({ meeting, ...match }) =>
+        clone({ ...match, meeting: meetingLibraryEntry(meeting) }));
+    },
     async loadMeeting(id) { calls.push(`loadMeeting:${id}`); return meetings.has(id) ? clone(meetings.get(id)!) : undefined; },
     async mutateMeeting(mutation) {
       calls.push(`mutateMeeting:${mutation.meetingId}`);

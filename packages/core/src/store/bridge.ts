@@ -1,5 +1,5 @@
 import type {
-  CaptionSettings, DesktopSettings, ExportOutcome, Meeting, MeetingMutation, MeetingMutationAcknowledgment,
+  CaptionSettings, DesktopSettings, ExportOutcome, Meeting, MeetingLibraryEntry, MeetingSearchResult, MeetingMutation, MeetingMutationAcknowledgment,
   NotesDocument, NotesGenerationRequest, NotesProviderStatus, Preferences,
 } from '@excerpt/types';
 
@@ -25,7 +25,9 @@ export interface ExcerptBridge {
   saveCaptionSettings(settings: Partial<Pick<CaptionSettings, 'preset' | 'size' | 'position' | 'enabled' | 'displayId'>>): Promise<DesktopSettings>;
   /** Selects a stable native capture-device identifier. */
   selectMicrophone(deviceId: string): Promise<DesktopSettings>;
-  listMeetings(): Promise<Meeting[]>;
+  listMeetings(): Promise<MeetingLibraryEntry[]>;
+  /** Native searches persisted text without sending a whole library into the webview. */
+  searchMeetings(query: string): Promise<MeetingSearchResult[]>;
   loadMeeting(id: string): Promise<Meeting | undefined>;
   /** Resolves only after native storage durably acknowledges the typed operation. */
   mutateMeeting(mutation: MeetingMutation): Promise<MeetingMutationAcknowledgment>;

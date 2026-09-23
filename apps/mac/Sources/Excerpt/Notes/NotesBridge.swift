@@ -14,7 +14,7 @@ final class NotesBridge: NSObject {
     /// Names the JavaScript side calls. Matching an unknown one is an error the
     /// webview should see, not a silent undefined.
     private enum Method: String {
-        case startMeeting, openLiveNotes, getLiveMeetingTime, retryAutomaticNotes, listMeetings, loadMeeting, mutateMeeting, deleteMeeting
+        case startMeeting, openLiveNotes, getLiveMeetingTime, retryAutomaticNotes, listMeetings, searchMeetings, loadMeeting, mutateMeeting, deleteMeeting
         case loadPreferences, savePreferences, exportMarkdown, exportHTML, summarizeNotes
         case getNotesProviderStatus, configureOpenAIKey, removeOpenAIKey
         case loadDesktopSettings, saveCaptionSettings, selectMicrophone
@@ -119,6 +119,7 @@ final class NotesBridge: NSObject {
         saveCaptionSettings: (value)  => send('saveCaptionSettings', [JSON.stringify(value)]),
         selectMicrophone: (deviceId)  => send('selectMicrophone', [deviceId]),
         listMeetings:    ()          => send('listMeetings', []),
+        searchMeetings:  (query)     => send('searchMeetings', [query]),
         loadMeeting:     (id)        => send('loadMeeting', [id]),
         mutateMeeting:   (mutation)  => send('mutateMeeting', [JSON.stringify(mutation)]),
         deleteMeeting:   (id)        => send('deleteMeeting', [id]),
@@ -246,12 +247,11 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
             try OpenAIKeyStore.remove()
             return nil
         case .listMeetings:
-            var meetings = store.list()
-            if let active = activeMeeting(nil) {
-                meetings.removeAll { $0.id == active.id }
-                meetings.insert(active, at: 0)
-            }
-            return try json(meetings)
+            return try json(orderedMeetings().map(MeetingLibraryEntry.init))
+
+        case .searchMeetings:
+            guard let query = arguments.first as? String else { throw Failure.badArguments("searchMeetings") }
+            return try json(MeetingLibrarySearch.search(orderedMeetings(), query: query))
 
         case .loadMeeting:
             guard let id = arguments.first as? String else { throw Failure.badArguments("loadMeeting") }
@@ -292,6 +292,15 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
             return try json(await export(
                 contents: markdown, suggesting: filename, html: method == .exportHTML))
         }
+    }
+
+    private func orderedMeetings() -> [Meeting] {
+        var meetings = store.list()
+        if let active = activeMeeting(nil) {
+            meetings.removeAll { $0.id == active.id }
+            meetings.insert(active, at: 0)
+        }
+        return meetings
     }
 
     @discardableResult
