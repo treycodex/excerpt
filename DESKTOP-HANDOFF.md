@@ -1,14 +1,16 @@
-# Desktop implementation handoff — Phase 6 in progress
+# Desktop implementation handoff — Phase 6 implemented, UI acceptance pending
 
-Updated September 23, 2026. Branch: `note-and-transcript-quality`. The checked-out
-base is pushed commit `42c5dbe` (completed Phase 4 implementation). Phase 5 and
-the first Phase 6 changes are intentionally uncommitted in this worktree. Preserve
-them, checkpoint history, synthetic fixtures, and unrelated files.
+Updated September 23, 2026. Branch: `note-and-transcript-quality`. The Phase 6
+second pass and its post-review fixes are included in this checkpoint, on top of
+`0d36b71` (Phase 5 and the first Phase 6 pass). Preserve any later local work,
+checkpoint history, synthetic fixtures, and unrelated files.
 Do not read or alter production meeting data, signing settings, or permissions.
 
 ## Status and continuation
 
-Phases 0–5 are complete at their automated gates; Phase 6 is in progress. Full
+Phases 0–5 are complete at their automated gates. Phase 6 is `implemented /
+acceptance pending`: its automated gate passes, but the real Mac app UI was not
+exercised. Full
 Xcode is available at `/Applications/Xcode.app/Contents/Developer`. The previously
 blocked Phase 4 Swift gate passed here: **167 tests in 24 suites**. Its existing
 JavaScript, typecheck, resource, token, and desktop-boundary checks were already
@@ -16,28 +18,55 @@ recorded in the pushed checkpoint. Real microphone, focus, fullscreen, multiple
 display, sharing, long-session, accessibility, and signed-package acceptance
 remain Phase 8 work; no automated result is presented as hardware acceptance.
 
-The copy-ready continuation prompt is `DESKTOP-PHASE-6-PROMPT.md`. Read it with
+The copy-ready continuation prompts are `DESKTOP-PHASE-6-PROMPT.md` and
+`DESKTOP-PHASE-6-CLAUDE-PROMPT.md`. Read one with
 the plan and `DESKTOP-REVIEW.md`, then inspect `git status` and the full diff,
 including untracked files. Do not reset, stash, or reconstruct the migration.
 
-## Phase 6 checkpoint and exact next step
+## Phase 6 behavior and exact next step
 
-- `apps/editor/src/views/Notes.tsx` and `notes.css`: the document is primary;
-  transcript and detailed review are reversible secondary views. Export and
-  rewrite actions are grouped; export cancellation is stated accurately; an
-  accepted rewrite has guarded one-step undo. Source correction and existing
-  review controls remain reachable.
-- `Preferences.tsx`: extraction order and keywords are under Advanced; the
-  provider choice now explains automatic post-meeting enhancement and cloud
-  transcript/caption transfer. `Library.tsx` distinguishes unavailable storage
-  and keeps a refused rename visible for retry. Editor component tests cover
-  navigation, undo, storage failure, and refused rename.
-- **Next implementation:** give next steps one `Meeting.items` identity across
-  document and detailed review, then shape the default document into a concise
-  supported summary, chronological moments, and short next steps. Follow with
-  source-panel focus/return, keyboard/accessibility, and complete Phase 6 gate
-  checks. Keep Phase 6 `in progress` until those pass. Real hardware, long-session,
-  sharing, and signed-package checks remain Phase 8.
+- **Document shape** (`apps/editor/src/views/Notes.tsx`, `notes.css`): title and
+  save/generation state, then **Summary** (at most three lines from the document's
+  own key points, using the reader's current block wording; unsupported or deleted
+  points are skipped), **Next steps**, and the chronological editable **Notes**.
+  Empty parts are hidden. The old recap and its duplicate image thumbnails were
+  removed, so each image renders once with its saved caption, in document order.
+  Pure helpers: `documentSummary` / `nextSteps` in `packages/core/src/notes/overview.ts`.
+  Markdown/HTML exports include the same Summary; HTML marks completed items `Done`.
+  Post-review regression coverage ensures a key point deduplicated against a
+  topic bullet with a different ID follows that visible block's edits and
+  deletion, including in exports.
+- **One next-step identity:** next steps are the meeting's own action/deadline
+  `Meeting.items`, rendered by id. Completing, assigning, and rewording use the
+  same `update` → typed `setReviewItems` mutation as detailed review. There is no
+  document copy and no schema change. Owners appear only when an item already has
+  `assignee: 'you'`.
+- **Reversible side trips:** the source panel, moment viewer, transcript, and
+  detailed review record the reader's scroll position and focused control. Panels
+  take focus and close with Escape; closing or going back restores both, including
+  after a transcript correction. Corrections open inline under the corrected line
+  and hand focus back to that line's Correct button.
+- **Journey fixes:** an unreadable meeting shows a retryable "could not be opened"
+  instead of "Reading…" forever, distinct from "No such meeting". The sidebar
+  reports unreadable storage even when the Library supplies an empty failed read.
+  Library rename/delete have per-meeting labels, delete
+  confirmation focuses Keep, and search stays usable at the 720 px minimum width.
+- **Accessibility:** muted text colours now compute to ≥4.5:1 on both paper
+  tones. Save state stays visible at narrow widths. Reduced motion disables
+  notebook transitions and smooth scrolling.
+- **Not performed (Phase 8):** the real WKWebView app UI, VoiceOver/Full Keyboard
+  Access, real keyboard text entry in the notes editor, native save panels, and
+  hardware capture. The synthetic check ran in Chromium only.
+- **Next:** Phase 7 — measure a synthetic 90-minute meeting with 30 screenshots
+  and a 100-meeting library before changing storage. Add the Phase 6 real-app
+  UI/accessibility checks above to the Phase 8 acceptance list.
+
+## Working tree
+
+The reviewed Phase 6 source, tests, and planning docs are part of this
+checkpoint. Generated engine/editor resources were rebuilt from this source and
+remain ignored outputs. Check `git status` before continuing; later edits belong
+to their author.
 
 ## Phase 5 behavior
 
@@ -79,8 +108,18 @@ including untracked files. Do not reset, stash, or reconstruct the migration.
 - After the first Phase 6 UI edits, the full suite passed again: **210 core +
   26 editor tests**, core/types/editor typechecks, **170 Swift tests in 24
   suites**, clean editor build and native resource rebuild, caption-token sync,
-  desktop-boundary audit, and `git diff --check`. The complete Phase 6 product
-  gate and real-app UI acceptance remain open.
+  desktop-boundary audit, and `git diff --check`.
+- After the second Phase 6 pass and post-review fixes (September 23, 2026):
+  `pnpm exec turbo test --force` **216 core + 36 editor passed**;
+  `pnpm typecheck` passed;
+  `pnpm build:engine`, `pnpm build:editor`, and the clean editor build passed;
+  caption tokens in sync; `CLANG_MODULE_CACHE_PATH=/private/tmp/excerpt-phase6-clang
+  swift test --package-path apps/mac --disable-sandbox --cache-path
+  /private/tmp/excerpt-phase6-swift-cache` **173 tests in 25 suites passed**
+  (four conditional speech/model evaluations skipped); `git diff --check`
+  passed. Boundary audit: no browser capture, PiP, IndexedDB, or retired
+  routes. Matches are two comments, legacy `processing: 'demo'` display, and
+  React DOM's `disablePictureInPicture` attribute name.
 
 The native lifecycle test ends a synthetic meeting with two images, then checks the
 durable document before optional enhancement finishes. Shared tests cover text-only,

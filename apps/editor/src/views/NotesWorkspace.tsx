@@ -63,11 +63,23 @@ function Snippet({ match }: { match: MeetingMatch }) {
   );
 }
 
-export function NotesWorkspace({ children, currentId, library }: { children: ReactNode; currentId?: string; library?: Meeting[] }) {
+export function NotesWorkspace({ children, currentId, library, libraryAvailable = true }: {
+  children: ReactNode; currentId?: string; library?: Meeting[]; libraryAvailable?: boolean;
+}) {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [readAvailable, setReadAvailable] = useState(true);
   const [query, setQuery] = useState('');
-  useEffect(() => { if (library) return; void readMeetingLibrary().then((result) => setMeetings(result.meetings)); }, [currentId, library]);
+  useEffect(() => {
+    if (library) return;
+    let current = true;
+    void readMeetingLibrary().then((result) => {
+      if (!current) return;
+      setMeetings(result.meetings); setReadAvailable(result.available);
+    });
+    return () => { current = false; };
+  }, [currentId, library]);
   const listed = library ?? meetings;
+  const available = library ? libraryAvailable : readAvailable;
   // Deferred so typing stays responsive while the search reads every transcript.
   const active = useDeferredValue(query).trim();
   const matches = useMemo(() => (active ? searchMeetings(listed, active) : []), [listed, active]);
@@ -76,7 +88,7 @@ export function NotesWorkspace({ children, currentId, library }: { children: Rea
   return <div className="notebook">
     <aside className="notebook-sidebar" aria-label="Meeting library">
       <a className="notebook-brand" href="#/meetings"><Wordmark /></a>
-      <label className="notebook-search"><span className="sr-only">Search meetings</span><input type="search" placeholder="Search meetings…" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
+      <label className="notebook-search"><span className="sr-only">Search meetings</span><input type="search" aria-label="Search meetings" placeholder="Search meetings…" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
       {/* The badge showed the unfiltered total beside a filtered list, so a search
           matching one meeting sat under a count of forty. */}
       <a className={`notebook-all${!currentId ? ' selected' : ''}`} href="#/meetings">
@@ -94,7 +106,7 @@ export function NotesWorkspace({ children, currentId, library }: { children: Rea
             {match && match.kind !== 'title' && <Snippet match={match} />}
           </a>
         );
-      })}{filtered.length === 0 && <p>{active
+      })}{!available && <p role="status">Meetings could not be read from this Mac’s storage.</p>}{available && filtered.length === 0 && <p>{active
         ? 'Nothing found in any title, note, transcript or caption.'
         : 'Your meetings will appear here.'}</p>}</div>
       <div className="notebook-sidebar-footer"><a href="#/preferences">Preferences ↗</a><span>Stored on this device</span></div>

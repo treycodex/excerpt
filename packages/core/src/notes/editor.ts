@@ -1,8 +1,11 @@
-import type { Meeting, MeetingImage, NoteBlock, NotesDocument, Evidence } from '@excerpt/types';
+import type { Meeting, MeetingImage, NoteBlock, NoteBullet, NotesDocument, Evidence } from '@excerpt/types';
 import { buildNotesDocument, refreshMeetingNotes } from './summary';
 import { withoutDeletedBlocks } from './generation';
 
 export const evidenceTime = (e: Evidence) => e.tStart !== undefined ? e.tStart * 1000 : e.tArrived;
+/** The identity used when a key point is already represented by a topic bullet. */
+export const noteDedupeKey = (bullet: Pick<NoteBullet, 'text' | 'evidence'>) =>
+  `${bullet.text.toLowerCase().trim()}|${bullet.evidence.flatMap((source) => source.eventIds).join(',')}`;
 const timeOf = (evidence: Evidence[]) => evidence.length ? Math.min(...evidence.map(evidenceTime)) : undefined;
 export const transcriptEventTime = (event: Meeting['events'][number]) => event.tStart !== undefined ? event.tStart * 1000 : event.tArrived;
 export const meetingImageTime = (image: MeetingImage) => image.anchorAt ?? image.at;
@@ -53,7 +56,7 @@ export function editableDocument(meeting: Meeting): NotesDocument {
         ...(timeOf(first.evidence) !== undefined ? { at: timeOf(first.evidence)! } : {}) });
     }
     for (const bullet of bullets) {
-      const key = `${bullet.text.toLowerCase().trim()}|${bullet.evidence.flatMap((source) => source.eventIds).join(',')}`;
+      const key = noteDedupeKey(bullet);
       if (seen.has(key)) continue;
       seen.add(key);
       const at = timeOf(bullet.evidence);
@@ -62,7 +65,7 @@ export function editableDocument(meeting: Meeting): NotesDocument {
   }
   // Keep important points omitted by a model's topic list, without repeating them.
   for (const bullet of notes.keyPoints) {
-    const key = `${bullet.text.toLowerCase().trim()}|${bullet.evidence.flatMap((source) => source.eventIds).join(',')}`;
+    const key = noteDedupeKey(bullet);
     if (seen.has(key)) continue;
     seen.add(key);
     const at = timeOf(bullet.evidence);

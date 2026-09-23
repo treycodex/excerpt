@@ -19,6 +19,8 @@ export {
 export { toMarkdown, toHTML } from './export/markdown';
 export { buildNotesDocument, preserveNoteEdits, refreshMeetingNotes, noteTitle, shapeNotice, suggestMeetingTitle } from './notes/summary';
 export { composeVisualNotes } from './notes/visual';
+export { documentSummary, nextSteps, SUMMARY_LIMIT } from './notes/overview';
+export type { SummaryLine } from './notes/overview';
 export {
   DEFAULT_PREFERENCES, applyPreferences, deriveBoosts, matchedBoosts, scoreItem,
   orderCategories,

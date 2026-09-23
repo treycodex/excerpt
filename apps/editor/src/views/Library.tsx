@@ -34,7 +34,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
   useEffect(refresh, []);
 
   return (
-    <NotesWorkspace library={meetings ?? []}><div className="notes notebook-library">
+    <NotesWorkspace library={meetings ?? []} libraryAvailable={storageAvailable}><div className="notes notebook-library">
       <header className="masthead">
         <div className="eyebrow">Excerpt</div>
         <h1>Your meetings</h1>
@@ -69,7 +69,8 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
                 void saveMeeting(next).then(() => { setRenaming(null); setCommandError(''); refresh(); })
                   .catch((error) => setCommandError(error instanceof Error ? error.message : 'Could not rename this meeting. Your title is still here.'));
               }}>
-                <input aria-label="Meeting title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+                <input aria-label="Meeting title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus
+                  onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setRenaming(null); } }} />
                 <button type="submit">Save</button><button type="button" onClick={() => setRenaming(null)}>Cancel</button>
               </form>
             ) : <button className="open" onClick={() => onOpen(m.id)}>
@@ -79,7 +80,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
               </span>
             </button>}
             {pendingDelete === m.id ? (
-              <span className="delete-confirm"><button onClick={() => setPendingDelete(null)}>Keep</button><button className="danger" onClick={async () => {
+              <span className="delete-confirm" role="group" aria-label={`Delete “${m.title}”?`}><button autoFocus onClick={() => setPendingDelete(null)}>Keep</button><button className="danger" aria-label={`Delete “${m.title}” now`} onClick={async () => {
                 try {
                   await deleteMeeting(m.id); setDeleteError(''); setPendingDelete(null); refresh();
                 } catch (error) {
@@ -87,7 +88,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
                 }
               }}>Delete now</button></span>
             ) : (
-              <span className="row-actions"><button onClick={() => { setRenaming(m.id); setTitle(m.title); }}>Rename</button><button className="danger" onClick={() => setPendingDelete(m.id)}>Delete</button></span>
+              <span className="row-actions"><button aria-label={`Rename “${m.title}”`} onClick={() => { setRenaming(m.id); setTitle(m.title); }}>Rename</button><button className="danger" aria-label={`Delete “${m.title}”…`} onClick={() => setPendingDelete(m.id)}>Delete</button></span>
             )}
           </article>
         );

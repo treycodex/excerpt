@@ -18,6 +18,10 @@ export function App() {
   const [route, go] = useRoute();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [missing, setMissing] = useState(false);
+  // Distinct from a missing meeting: storage refused the read, so nothing is known
+  // about whether the meeting exists. Neither state may leave "Reading…" forever.
+  const [unavailable, setUnavailable] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const [prefs, setPrefs] = useState<Prefs | null>(null);
 
   useEffect(() => { void loadPreferences().then(setPrefs).catch(() => setPrefs(null)); }, []);
@@ -31,9 +35,16 @@ export function App() {
   }, []);
   useEffect(() => {
     if (route.name !== 'meeting' || meeting?.id === route.id) return;
-    setMissing(false); setMeeting(null);
-    void loadMeeting(route.id).then((value) => { setMeeting(value ?? null); setMissing(!value); });
-  }, [route, meeting?.id]);
+    let current = true;
+    setMissing(false); setUnavailable(''); setMeeting(null);
+    void loadMeeting(route.id).then((value) => {
+      if (!current) return;
+      setMeeting(value ?? null); setMissing(!value);
+    }).catch((error: unknown) => {
+      if (current) setUnavailable(error instanceof Error && error.message ? error.message : 'Meeting storage could not be read.');
+    });
+    return () => { current = false; };
+  }, [route, meeting?.id, attempt]);
 
   if (!isNativeHost()) return <DesktopHostError />;
   const host = bridge()!;
@@ -44,8 +55,10 @@ export function App() {
     body = <Library onOpen={(id) => go(`/m/${id}`)} onStart={start} onOpenLiveNotes={openLiveNotes} />;
   } else if (route.name === 'preferences') {
     body = <NotesWorkspace><Preferences /></NotesWorkspace>;
+  } else if (unavailable) {
+    body = <NotesWorkspace><div className="notes"><header className="masthead"><div className="eyebrow">Excerpt</div><h1>This meeting could not be opened</h1><p className="rubric" role="alert">{unavailable} The meeting was not changed.</p><p><button onClick={() => setAttempt((n) => n + 1)}>Try again</button> <a href="#/meetings">Your meetings</a></p></header></div></NotesWorkspace>;
   } else if (missing) {
-    body = <div className="notes"><header className="masthead"><div className="eyebrow">Excerpt</div><h1>No such meeting</h1><p className="rubric">This meeting is no longer available on this Mac. <a href="#/meetings">Your meetings</a></p></header></div>;
+    body = <NotesWorkspace><div className="notes"><header className="masthead"><div className="eyebrow">Excerpt</div><h1>No such meeting</h1><p className="rubric">This meeting is no longer saved on this Mac. It may have been deleted. <a href="#/meetings">Your meetings</a></p></header></div></NotesWorkspace>;
   } else if (!meeting || meeting.id !== route.id) {
     body = <div className="notes"><p className="rubric">Reading…</p></div>;
   } else {

@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { NotesWorkspace, OPEN_AT_KEY } from './NotesWorkspace';
 import { NotesDocument } from './NotesDocument';
 import { readMeetingImage } from '../meetingImages';
-import { acceptsAcknowledgment, applyPreferences, bridge, relateItems, compareNotesDocuments, meetingMutation, mutateMeeting, notesMetadataDifference, matchedBoosts, mergeGeneratedNotes, notesCapability, orderCategories, preserveGeneratedConflict, reconcileMeetingUpdate, toMarkdown, toTurns, refreshMeetingNotes, preserveNoteEdits, noteTitle, editableDocument, insertMeetingImage, meetingImagePassage, meetingImageContext, meetingImageTime, previewTranscriptCorrection, safeImageUrl, toHTML, transcriptEventTime } from '@excerpt/core';
+import { acceptsAcknowledgment, applyPreferences, bridge, relateItems, compareNotesDocuments, meetingMutation, mutateMeeting, notesMetadataDifference, matchedBoosts, mergeGeneratedNotes, notesCapability, orderCategories, preserveGeneratedConflict, reconcileMeetingUpdate, toMarkdown, toTurns, refreshMeetingNotes, preserveNoteEdits, noteTitle, editableDocument, insertMeetingImage, meetingImagePassage, meetingImageContext, meetingImageTime, previewTranscriptCorrection, safeImageUrl, toHTML, transcriptEventTime, documentSummary, nextSteps } from '@excerpt/core';
 import { Frame, Strip } from '@excerpt/ui';
 import type { StripMark } from '@excerpt/ui';
-import type { ItemRelation } from '@excerpt/core';
+import type { ItemRelation, SummaryLine } from '@excerpt/core';
 import type { Category, Evidence, Item, Meeting, MeetingImage, NoteBlock, NotesDocument as Document, NotesGenerationRequest, NotesProviderStatus, Preferences as Prefs } from '@excerpt/types';
 
 type Style = NotesGenerationRequest['style'];
@@ -29,6 +29,23 @@ const stamp = (source: { tStart?: number; tArrived: number }) =>
   source.tStart !== undefined
     ? clock(source.tStart * 1000)
     : `~${clock(source.tArrived)}`;
+
+/**
+ * Where the reader was before a side trip to a source, a moment, the transcript or
+ * detailed review. Browser globals are read defensively: the component tests run
+ * without a DOM, and a missing one must never break the navigation itself.
+ */
+interface ReturnPoint { y: number; focus: HTMLElement | null; key?: string }
+const here = (): ReturnPoint => {
+  const focus = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  // Controls re-rendered by the view switch carry a stable name to find them again.
+  const key = focus?.dataset.returnId;
+  return { y: typeof window.scrollY === 'number' ? window.scrollY : 0, focus, ...(key ? { key } : {}) };
+};
+const nextFrame = (run: () => void) => {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run); else run();
+};
+const NEXT_STEP_LIMIT = 6;
 
 /** A finished request waiting for consent, and what it would actually change. */
 interface Candidate {
@@ -105,6 +122,12 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [wordingUndo, setWordingUndo] = useState<{ before: Document; after: Document; sourceRevision: number } | null>(null);
   const rows = useRef<Record<string, HTMLDivElement | null>>({});
+  const correctButtons = useRef<Record<string, HTMLButtonElement | null>>({});
+  const aside = useRef<HTMLElement | null>(null);
+  const returnPoints = useRef<ReturnPoint[]>([]);
+  const pendingReturn = useRef<ReturnPoint | null>(null);
+  const [returnRequest, setReturnRequest] = useState(0);
+  const [transcriptMessage, setTranscriptMessage] = useState('');
   const cards = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
@@ -184,6 +207,13 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   };
 
   const noteDocument = useMemo(() => editableDocument(meeting), [meeting]);
+  const summary = useMemo(() => documentSummary(noteDocument), [noteDocument]);
+  const steps = useMemo(() => nextSteps(meeting.items), [meeting.items]);
+  /** Close the inline editor and return focus to the line's own Correct button. */
+  const closeCorrection = (eventId: string) => {
+    setCorrection(null);
+    nextFrame(() => correctButtons.current[eventId]?.focus());
+  };
   const editDocument = (notes: Document) => {
     const captions = new Map((notes.blocks ?? []).filter((block) => block.imageId)
       .map((block) => [block.imageId!, block.text]));
@@ -283,10 +313,15 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
     try { sessionStorage.setItem('excerpt:return-to', meeting.id); } catch { /* the back button still works */ }
   };
 
+  /**
+   * The one write path for an item, used by both the document's next steps and
+   * detailed review. It edits the record by id, so the two can never disagree.
+   */
   const update = (id: string, patch: ItemPatch) => {
+    const current = latestMeeting.current;
     const next = {
-      ...meeting,
-      items: meeting.items.map((i): Item => {
+      ...current,
+      items: current.items.map((i): Item => {
         if (i.id !== id) return i;
         const updated = { ...i, title: noteTitle(i), ...patch, userEdited: true } as Item & { due?: string | undefined };
         if ('due' in patch && !patch.due) delete updated.due;
@@ -307,9 +342,6 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   });
   const live = prefs ? applyPreferences(visible, prefs) : visible;
   const duration = Math.max(1, ...meeting.events.map(transcriptEventTime), ...(meeting.images ?? []).filter((i) => i.timeKnown !== false).map(meetingImageTime), meeting.endedAt ? new Date(meeting.endedAt).getTime() - new Date(meeting.startedAt).getTime() : 0);
-  const decided = live.filter((i) => i.state === 'decided' && i.category === 'decision');
-  const mine = live.filter((i) => i.assignee === 'you');
-  const review = live.filter((i) => i.category === 'action' && i.assignee === 'unassigned');
   // Suggestions, derived rather than stored: nothing is written until the reader
   // answers, so a rejected link cannot come back as stale data.
   const relations = useMemo(() => relateItems(live), [live]);
@@ -346,14 +378,56 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   }))];
 
   const scrollBehavior = () =>
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' as const : 'smooth' as const;
+    typeof window.matchMedia === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 'smooth' as const : 'auto' as const;
+
+  /** Remember the reader's place in the document before leaving it. */
+  const leave = () => { returnPoints.current.push(here()); };
+  /** Come back to exactly that place: scroll position and the control they used. */
+  const comeBack = () => {
+    const point = returnPoints.current.pop();
+    if (!point) return;
+    pendingReturn.current = point;
+    setReturnRequest((n) => n + 1);
+  };
+  useLayoutEffect(() => {
+    const point = pendingReturn.current;
+    if (!point) return;
+    pendingReturn.current = null;
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: point.y, behavior: 'auto' });
+    // A correction can replace the block that was focused; the title is the
+    // nearest stable place in the document rather than the top of the window.
+    const named = point.key && typeof document !== 'undefined'
+      ? document.querySelector<HTMLElement>(`[data-return-id="${point.key}"]`) : null;
+    const target = point.focus?.isConnected ? point.focus : named
+      ?? (typeof document !== 'undefined' ? document.querySelector<HTMLElement>('.document-title') : null);
+    target?.focus({ preventScroll: true });
+  }, [returnRequest]);
+  const showView = (next: 'notes' | 'transcript' | 'review') => {
+    if (next === tab) return;
+    if (tab === 'notes') leave();
+    setTab(next);
+    if (next === 'notes') comeBack();
+  };
+  const asideOpen = sourceNote !== null || selectedMoment !== null;
+  /** Open the source or moment panel; only the first opening records a return point. */
+  const openAside = () => {
+    // From another view, the point recorded on leaving the document already says
+    // where to return; a panel opened over an open panel reuses the first one's.
+    if (tab !== 'notes') { setTab('notes'); if (asideOpen) returnPoints.current.pop(); return; }
+    if (!asideOpen) leave();
+  };
+  const closeAside = () => {
+    setSourceNote(null); setSelectedMoment(null);
+    comeBack();
+  };
 
   /** One gesture: select an item, move the playhead, frame its passage. */
   const selectItem = (id: string) => {
     const item = meeting.items.find((i) => i.id === id);
     const ev = item?.evidence[0];
     if (!ev) return;
-    setTab('review');
+    showView('review');
     setSelectedMoment(null);
     setActiveItem(id);
     setPosition(ev.tArrived);
@@ -364,7 +438,8 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   const openMoment = (id: string) => {
     const image = meeting.images?.find((candidate) => candidate.id === id);
     if (!image) return;
-    setTab('notes');
+    openAside();
+    setSourceNote(null);
     setActiveItem(null);
     setSelectedMoment(id);
     setExpandedMoment(false);
@@ -463,17 +538,16 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
 
   const openTranscript = (eventId: string) => {
     setFocusedEvent(eventId);
-    setTab('transcript');
+    showView('transcript');
   };
 
   /** Show every passage a note cites, without leaving the document to do it. */
   const openSource = (note: { text: string; evidence: Evidence[] }) => {
+    openAside();
     setSourceNote(note);
     setSelectedMoment(null);
-    setTab('notes');
   };
   const openBlockSource = (block: NoteBlock) => openSource(block);
-  const openItemSource = (item: Item) => openSource({ text: noteTitle(item), evidence: item.evidence });
 
   const sourcePassages = useMemo(() => (sourceNote?.evidence ?? [])
     .map((evidence) => ({ evidence, around: evidenceContext(meeting, evidence) })), [sourceNote, meeting]);
@@ -500,14 +574,18 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
     if (tab === 'review' && activeItem) cards.current[activeItem]?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
   }, [tab, activeItem]);
 
+  // An opened panel takes focus, so a keyboard reader lands in what they asked for;
+  // closing it hands focus back to the control that opened it (see comeBack).
   useEffect(() => {
-    if (tab === 'notes' && selectedMoment) document.getElementById('selected-moment')?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
-  }, [tab, selectedMoment]);
+    if (tab !== 'notes' || !asideOpen || !aside.current) return;
+    aside.current.focus({ preventScroll: true });
+    aside.current.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+  }, [tab, sourceNote, selectedMoment]);
 
   /** Scrubbing the rail lands on the nearest thing actually said. */
   const scrub = (ms: number) => {
     if (!meeting.events.length) return;
-    setTab('transcript');
+    showView('transcript');
     setSelectedMoment(null);
     setPosition(ms);
     const nearest = meeting.events.reduce((best, e) =>
@@ -626,18 +704,18 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
         <p className="notebook-description">{noteDocument.notice
           ? 'What was recorded, with the important parts ready to revisit.'
           : 'Your conversation, with the important parts ready to revisit.'}</p>
-        <div className="note-counts" aria-label="Meeting note counts"><span><b>{decided.length}</b> decisions</span><span><b>{mine.length}</b> assigned to you</span><span><b>{review.length}</b> to assign</span></div>
         {copyFailed && <p role="status" className="rubric">Could not copy to the clipboard. Use Export to save your notes.</p>}
         <nav className="notebook-view-actions" aria-label="Meeting details">{tab === 'notes'
-          ? <><button onClick={() => setTab('transcript')}>View transcript</button><button onClick={() => setTab('review')}>Review extracted items{live.some((i) => !i.confirmed || i.needsReview) ? ` · ${live.filter((i) => !i.confirmed || i.needsReview).length}` : ''}</button></>
-          : <><button onClick={() => setTab('notes')}>← Back to notes</button><span>{tab === 'review' ? 'Detailed review' : 'Transcript'}</span></>}</nav>
+          ? <><button data-return-id="view-transcript" onClick={() => showView('transcript')}>View transcript</button><button data-return-id="view-review" onClick={() => showView('review')}>Review extracted items{live.some((i) => !i.confirmed || i.needsReview) ? ` · ${live.filter((i) => !i.confirmed || i.needsReview).length}` : ''}</button></>
+          : <><button onClick={() => showView('notes')}>← Back to notes</button><span>{tab === 'review' ? 'Detailed review' : 'Transcript'}</span></>}</nav>
         <details className="notebook-timeline"><summary>Explore meeting timeline</summary><Strip duration={duration} position={position} marks={marks} onScrub={scrub} onSelect={selectMark} {...(selectedMoment ? { selectedId: `image:${selectedMoment}` } : activeItem ? { selectedId: `item:${activeItem}` } : {})} /><p className="rubric">{meeting.events.some((e) => e.tStart !== undefined) ? 'Lines are notes; diamonds are captured moments. Select either to revisit its source.' : 'Lines are notes; diamonds are captured moments. Transcript timings are approximate.'}</p></details>
       </header>
       <div hidden={tab !== 'notes'}>
-      <Recap items={live} images={meeting.images ?? []} onItem={openItemSource} onMoment={openMoment} />
-      {sourceNote && <SourcePanel note={sourceNote} passages={sourcePassages}
-        onOpen={openTranscript} onClose={() => setSourceNote(null)} />}
-      {moment && <MomentViewer key={moment.id} image={moment} caption={momentBlock?.text ?? moment.caption} passage={momentPassage} expanded={expandedMoment} duration={duration} onCaption={captionMoment} onTime={anchorMoment} onExpand={() => setExpandedMoment((value) => !value)} onClose={() => setSelectedMoment(null)} onSource={openTranscript} />}
+      {!isLiveDraft && <Overview summary={summary} steps={steps} onSource={openSource} onUpdate={update} />}
+      {sourceNote && <SourcePanel panelRef={(el) => { aside.current = el; }} note={sourceNote} passages={sourcePassages}
+        onOpen={openTranscript} onClose={closeAside} />}
+      {moment && <MomentViewer key={moment.id} panelRef={(el) => { aside.current = el; }} image={moment} caption={momentBlock?.text ?? moment.caption} passage={momentPassage} expanded={expandedMoment} duration={duration} onCaption={captionMoment} onTime={anchorMoment} onExpand={() => setExpandedMoment((value) => !value)} onClose={closeAside} onSource={openTranscript} />}
+      {!isLiveDraft && (summary.length > 0 || steps.length > 0) && <h2 className="overview-label document-label">Notes</h2>}
       <div className="document-toolbar">
         {/* What produced this wording, then what the buttons beside it can actually
             do here — before they are pressed, not in the message afterwards. */}
@@ -764,12 +842,12 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
             left nothing saying where the reader had come from, so checking a note
             cost them their place. The panel itself is still open behind this. */}
         {sourceNote && (
-          <button className="return-to-note" onClick={() => setTab('notes')}>
+          <button className="return-to-note" onClick={() => showView('notes')}>
             ← Back to the note you were checking
             <span>“{sourceNote.text.length > 60 ? `${sourceNote.text.slice(0, 60)}…` : sourceNote.text}”</span>
           </button>
         )}
-        {correction && correctionPreview && <div className="correction-preview" role="region" aria-label="Review transcript correction"><h2>Correct this passage</h2><textarea aria-label="Corrected transcript" value={correction.text} onChange={(e) => setCorrection({ ...correction, text: e.target.value })} /><p>The original transcript is preserved. Review the affected notes below before applying.</p>{correctionPreview.changes.map((change, index) => <div className="correction-change" key={index}><del>{change.before}</del><p>{change.after}</p></div>)}{!correctionPreview.changes.length && <p>No generated notes are affected.</p>}<button disabled={!correction.text.trim() || correctionPreview.meeting === meeting} onClick={() => { persist(correctionPreview.meeting); setCandidate(null); setGenerationError(null); setGenerationMessage('Correction saved. Any generated wording that used it is marked for review; regenerating refreshes it.'); setCorrection(null); }}>Apply correction and update notes</button><button onClick={() => setCorrection(null)}>Cancel</button></div>}
+        {transcriptMessage && <p className="rubric" role="status">{transcriptMessage}</p>}
         {meeting.events.length === 0 && <p className="rubric">No transcript was captured for this meeting.</p>}
         {toTurns(meeting.events).map((turn) => (
           <article className={`turn${turn.role === 'you' ? ' mine' : ''}`} key={turn.id}>
@@ -785,8 +863,21 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
                   className={`line-row${focusedEvent === e.id ? ' focused' : ''}`}
                 >
                   {e.text}
-                  <button className="correct-transcript" onClick={() => setCorrection({ eventId: e.id, text: e.text })}>Correct</button>
+                  <button className="correct-transcript" ref={(el) => { correctButtons.current[e.id] = el; }}
+                    aria-expanded={correction?.eventId === e.id}
+                    onClick={() => { setTranscriptMessage(''); setCorrection({ eventId: e.id, text: e.text }); }}>Correct</button>
                   {e.originalText !== undefined && <span className="correction-original">Original: {e.originalText} · {e.corrections?.length ?? 1} correction(s)</span>}
+                  {correction?.eventId === e.id && correctionPreview && <CorrectionEditor
+                    text={correction.text} changes={correctionPreview.changes}
+                    canApply={!!correction.text.trim() && correctionPreview.meeting !== meeting}
+                    onText={(text) => setCorrection({ ...correction, text })}
+                    onApply={() => {
+                      persist(correctionPreview.meeting); setCandidate(null); setGenerationError(null);
+                      setGenerationMessage('Correction saved. Any generated wording that used it is marked for review; regenerating refreshes it.');
+                      setTranscriptMessage('Correction saved. Notes that used this passage were updated or marked for review.');
+                      closeCorrection(e.id);
+                    }}
+                    onCancel={() => closeCorrection(e.id)} />}
                 </p>
               ))}
             </div>
@@ -798,7 +889,8 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   );
 }
 
-function MomentViewer({ image, caption, passage, expanded, duration, onCaption, onTime, onExpand, onClose, onSource }: {
+function MomentViewer({ image, caption, passage, expanded, duration, onCaption, onTime, onExpand, onClose, onSource, panelRef }: {
+  panelRef: (element: HTMLElement | null) => void;
   image: MeetingImage; caption: string; passage: Meeting['events']; expanded: boolean; duration: number;
   onCaption: (text: string) => void; onTime: (at: number) => void;
   onExpand: () => void; onClose: () => void; onSource: (id: string) => void;
@@ -806,7 +898,8 @@ function MomentViewer({ image, caption, passage, expanded, duration, onCaption, 
   const [timeInput, setTimeInput] = useState(image.timeKnown === false ? '' : clock(meetingImageTime(image)));
   const [timeError, setTimeError] = useState('');
   const origin = image.origin === 'excerpt' ? 'Excerpt capture' : image.origin === 'drop' ? 'Dropped image' : image.origin === 'paste' ? 'Pasted image' : image.origin === 'import' ? 'Imported image' : 'Captured image';
-  return <aside id="selected-moment" className="moment-viewer" aria-label={image.timeKnown === false ? 'Captured moment with unknown meeting time' : `Captured moment at ${clock(meetingImageTime(image))}`}>
+  return <aside id="selected-moment" className="moment-viewer" ref={panelRef} tabIndex={-1}
+    onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onClose(); } }} aria-label={image.timeKnown === false ? 'Captured moment with unknown meeting time' : `Captured moment at ${clock(meetingImageTime(image))}`}>
     <header><div><span>Captured moment</span><strong>{image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image))}</strong></div><button aria-label="Close captured moment" onClick={onClose}>×</button></header>
     <div className="moment-layout">
       <div>{safeImageUrl(image.dataUrl) ? <img src={image.dataUrl} alt={caption || 'Meeting image'} /> : <p>Image unavailable.</p>}<label>Caption<input value={caption} onChange={(event) => onCaption(event.target.value)} placeholder="What should you remember about this?" /></label><small>{origin} · {new Date(image.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small>
@@ -825,81 +918,105 @@ function MomentViewer({ image, caption, passage, expanded, duration, onCaption, 
 }
 
 /**
- * What the meeting settled, before the meeting itself.
+ * The top of a finished meeting: a few supported lines, then what happens next.
  *
- * The document is chronological, so the outcome had to be reassembled by reading
- * the whole conversation back — and the structured version of it lived in a
- * different tab, which is not where somebody opening their notes is looking.
- *
- * Deliberately read-only, and deliberately not part of the document. A block kind
- * would need an arm in every exporter, would be editable prose the regeneration
- * merge has to protect, and would put a generated summary inside a document its
- * reader owns. This reflects the items; it never becomes them.
+ * Neither part is a block in the document. The summary reflects the document's
+ * own key points (their current wording) and every line keeps its source; the
+ * next steps are the meeting's items themselves, edited through the same path as
+ * detailed review, so there is one copy of each commitment. Empty parts are left
+ * out entirely rather than shown as empty headings.
  */
-function Recap({ items, images, onItem, onMoment }: {
-  items: Item[];
-  images: MeetingImage[];
-  onItem: (item: Item) => void;
-  onMoment: (id: string) => void;
+function Overview({ summary, steps, onSource, onUpdate }: {
+  summary: SummaryLine[];
+  steps: Item[];
+  onSource: (note: { text: string; evidence: Evidence[] }) => void;
+  onUpdate: (id: string, patch: ItemPatch) => void;
 }) {
-  const live = items.filter((i) => !i.dismissed);
-  const decisions = live.filter((i) => i.category === 'decision' && i.state === 'decided');
-  // Shown, and shown as unsettled. Styling a proposal like a decision is the one
-  // mistake this whole extractor is built to avoid, and a recap is the likeliest
-  // place to make it.
-  const proposals = live.filter((i) => i.category === 'decision' && i.state === 'proposed');
-  const commitments = live.filter((i) => i.category === 'action' && i.assignee === 'you');
-  const unassigned = live.filter((i) => i.category === 'action' && i.assignee !== 'you');
-  const questions = live.filter((i) => i.category === 'question');
-  const dates = live.filter((i) => i.category === 'deadline');
+  const [showAll, setShowAll] = useState(false);
+  if (!summary.length && !steps.length) return null;
+  const shown = showAll ? steps : steps.slice(0, NEXT_STEP_LIMIT);
+  return <div className="overview">
+    {summary.length > 0 && <section className="overview-section" aria-labelledby="overview-summary">
+      <h2 id="overview-summary" className="overview-label">Summary</h2>
+      <ul className="summary-lines">{summary.map((line) => <li key={line.id}>
+        <span>{line.text}</span>{' '}
+        <button className="block-citation" onClick={() => onSource(line)}
+          aria-label={`Show the source for: ${line.text}`}>Source <span aria-hidden="true">↗</span></button>
+      </li>)}</ul>
+    </section>}
+    {steps.length > 0 && <section className="overview-section" aria-labelledby="overview-next-steps">
+      <h2 id="overview-next-steps" className="overview-label">Next steps</h2>
+      <ul className="next-steps">{shown.map((item) => <NextStep key={item.id} item={item} onUpdate={onUpdate} onSource={onSource} />)}</ul>
+      {steps.length > shown.length && <button className="overview-more" onClick={() => setShowAll(true)}>Show all {steps.length} next steps</button>}
+    </section>}
+  </div>;
+}
 
-  const sections: { title: string; note?: string; items: Item[] }[] = [
-    { title: 'Decided', items: decisions },
-    { title: 'Yours to do', items: commitments },
-    { title: 'Not assigned', note: 'Said to somebody. Two streams cannot tell whom.', items: unassigned },
-    { title: 'Left open', items: questions },
-    { title: 'Dates', items: dates },
-    { title: 'Raised, not settled', note: 'Floated in conversation. Nothing here was agreed.', items: proposals },
-  ].filter((section) => section.items.length > 0);
-
-  if (!sections.length && !images.length) return null;
-
-  return <section className="recap" aria-label="What this meeting settled">
-    <h2>Before you read it back</h2>
-    <div className="recap-grid">
-      {sections.map((section) => (
-        <div key={section.title} className="recap-section">
-          <h3>{section.title} <span>{section.items.length}</span></h3>
-          {section.note && <p className="recap-note">{section.note}</p>}
-          <ul>
-            {section.items.map((item) => (
-              <li key={item.id}>
-                <button onClick={() => onItem(item)}>
-                  {noteTitle(item)}
-                  {item.due && <em> · due {item.due}</em>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-      {images.length > 0 && (
-        <div className="recap-section">
-          <h3>Captured <span>{images.length}</span></h3>
-          <ul className="recap-moments">
-            {images.map((image) => (
-              <li key={image.id}>
-                <button onClick={() => onMoment(image.id)}>
-                  {safeImageUrl(image.dataUrl) && <img src={image.dataUrl} alt="" />}
-                  <span>{image.caption || (image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image)))}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+/**
+ * One next step. The owner is shown only when the item already carries one;
+ * nothing here assigns anybody from who spoke nearby.
+ */
+function NextStep({ item, onUpdate, onSource }: {
+  item: Item;
+  onUpdate: (id: string, patch: ItemPatch) => void;
+  onSource: (note: { text: string; evidence: Evidence[] }) => void;
+}) {
+  const title = noteTitle(item);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const editButton = useRef<HTMLButtonElement | null>(null);
+  const finish = (save: boolean) => {
+    const text = draft.replace(/\s+/g, ' ').trim();
+    if (save && text && text !== title) onUpdate(item.id, { title: text });
+    setEditing(false);
+    nextFrame(() => editButton.current?.focus());
+  };
+  return <li className={`next-step${item.completed ? ' done' : ''}`}>
+    {item.category === 'action'
+      ? <input type="checkbox" className="action-check" aria-label={`Done: ${title}`} checked={!!item.completed}
+        onChange={(event) => onUpdate(item.id, { completed: event.target.checked })} />
+      : <span className="next-step-marker" aria-hidden="true">◷</span>}
+    <div className="next-step-body">
+      {editing
+        ? <form className="next-step-edit" onSubmit={(event) => { event.preventDefault(); finish(true); }}>
+          <input aria-label="Next step wording" value={draft} autoFocus onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); finish(false); } }} />
+          <button type="submit">Save</button>
+          <button type="button" onClick={() => finish(false)}>Cancel</button>
+        </form>
+        : <span className="next-step-text">{title}</span>}
+      <span className="next-step-meta">
+        {item.due && <span>{item.category === 'deadline' ? 'Date' : 'Due'} {item.due}</span>}
+        {item.category === 'action' && item.assignee === 'you' && <span>Yours</span>}
+        {item.needsReview && <span className="next-step-review">Source changed · check it</span>}
+        {!editing && <span className="next-step-actions">
+          <button ref={editButton} onClick={() => { setDraft(title); setEditing(true); }} aria-label={`Edit wording: ${title}`}>Edit</button>
+          {item.category === 'action' && <button onClick={() => onUpdate(item.id, { assignee: item.assignee === 'you' ? 'unassigned' : 'you' })}
+            aria-label={`${item.assignee === 'you' ? 'Unassign' : 'Assign to me'}: ${title}`}>{item.assignee === 'you' ? 'Unassign' : 'Assign to me'}</button>}
+          {item.evidence.length > 0 && <button onClick={() => onSource({ text: title, evidence: item.evidence })}
+            aria-label={`Show the source for: ${title}`}>Source</button>}
+        </span>}
+      </span>
     </div>
-  </section>;
+  </li>;
+}
+
+/** Correct one transcript line in place, beside the words being corrected. */
+function CorrectionEditor({ text, changes, canApply, onText, onApply, onCancel }: {
+  text: string; changes: { before: string; after: string }[]; canApply: boolean;
+  onText: (text: string) => void; onApply: () => void; onCancel: () => void;
+}) {
+  return <span className="correction-preview" role="group" aria-label="Correct this passage">
+    <textarea aria-label="Corrected transcript" value={text} autoFocus onChange={(event) => onText(event.target.value)}
+      onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onCancel(); } }} />
+    <span className="correction-note">The original transcript is preserved. Review the affected notes before applying.</span>
+    {changes.map((change, index) => <span className="correction-change" key={index}><del>{change.before}</del><span>{change.after}</span></span>)}
+    {!changes.length && <span className="correction-note">No generated notes are affected.</span>}
+    <span className="correction-actions">
+      <button disabled={!canApply} onClick={onApply}>Apply correction and update notes</button>
+      <button onClick={onCancel}>Cancel</button>
+    </span>
+  </span>;
 }
 
 /**
@@ -910,13 +1027,15 @@ function Recap({ items, images, onItem, onMoment }: {
  * it came from — so checking a note cost you your place in the document, and a
  * note built on several passages could only ever show one of them.
  */
-function SourcePanel({ note, passages, onOpen, onClose }: {
+function SourcePanel({ note, passages, onOpen, onClose, panelRef }: {
+  panelRef: (element: HTMLElement | null) => void;
   note: { text: string; evidence: Evidence[] };
   passages: { evidence: Evidence; around: Meeting['events'] }[];
   onOpen: (eventId: string) => void;
   onClose: () => void;
 }) {
-  return <aside className="source-panel" aria-label="Source passages for this note">
+  return <aside className="source-panel" aria-label="Source passages for this note" ref={panelRef} tabIndex={-1}
+    onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onClose(); } }}>
     <header>
       <div><span>Source{passages.length === 1 ? '' : 's'}</span><strong>{passages.length} passage{passages.length === 1 ? '' : 's'}</strong></div>
       <button aria-label="Close source passages" onClick={onClose}>×</button>

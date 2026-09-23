@@ -6,9 +6,9 @@ a new checkout or reconstruct earlier phases. First read
 `DESKTOP-IMPLEMENTATION-PLAN.md` (Phase 6 and its execution ledger),
 `DESKTOP-REVIEW.md` (especially “After the meeting”), and
 `DESKTOP-HANDOFF.md`. Then inspect `git status`, `git log -1`, and the full diff,
-including untracked files. The pushed base is `42c5dbe`; Phase 5 and the first
-Phase 6 pass are intentionally uncommitted. Preserve all existing work. Do not
-reset, stash, commit, or push unless the user asks.
+including untracked files. The pushed checkpoint is `0d36b71`, containing
+Phase 5 and the first Phase 6 pass. It was clean at handoff; preserve any later
+work you find. Do not reset, stash, commit, or push unless the user asks.
 
 Phases 0–5 have passed their automated gates. Full Xcode is available. The first
 Phase 6 pass made the notes document primary; moved transcript and detailed review

@@ -400,8 +400,6 @@
 .masthead-actions { margin: 0 0 10px; }
 .save-state { font: var(--label); color: var(--faint); }
 .save-state.failed { color: var(--bad); }
-.note-counts { display: flex; flex-wrap: wrap; gap: 10px 24px; padding: 10px 0; margin-bottom: 10px; border-block: 1px solid var(--line); font: var(--label); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
-.note-counts b { color: var(--ink); font-weight: 400; }
 
 .notes h2 {
   font: var(--label); letter-spacing: 0.22em; text-transform: uppercase;
