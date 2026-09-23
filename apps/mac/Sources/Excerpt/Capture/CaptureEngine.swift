@@ -46,12 +46,13 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, MeetingCa
     private var stream: SCStream?
     private let queue = DispatchQueue(label: "com.excerpt.capture", qos: .userInitiated)
     private let lock = NSLock()
+    private var captureGeneration = UUID()
     private var stats: [SourceKind: SourceStats] = [:]
     private var onBuffer: ((SourceKind, AVAudioPCMBuffer, CMTime) -> Void)?
     private var onStreamError: ((String) -> Void)?
-    private let selectedMicrophoneID: () throws -> String
+    private let selectedMicrophoneID: @MainActor @Sendable () throws -> String
 
-    init(selectedMicrophoneID: @escaping () throws -> String = {
+    init(selectedMicrophoneID: @escaping @MainActor @Sendable () throws -> String = {
         guard let id = AVCaptureDevice.default(for: .audio)?.uniqueID else {
             throw MicrophoneSelectionError.unavailable
         }
@@ -80,12 +81,19 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, MeetingCa
         onBuffer: @escaping (SourceKind, AVAudioPCMBuffer, CMTime) -> Void,
         onStreamError: @escaping (String) -> Void
     ) async throws {
+        let generation = UUID()
         self.onBuffer = onBuffer
         self.onStreamError = onStreamError
-        lock.withLock { stats = [.system: SourceStats(), .microphone: SourceStats()] }
+        lock.withLock {
+            captureGeneration = generation
+            stats = [.system: SourceStats(), .microphone: SourceStats()]
+        }
 
-        let microphoneID = try selectedMicrophoneID()
+        let microphoneID = try await selectedMicrophoneID()
+        try Task.checkCancellation()
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        try Task.checkCancellation()
+        guard lock.withLock({ captureGeneration == generation }) else { throw CancellationError() }
         guard let display = content.displays.first else {
             throw NSError(domain: "Excerpt", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "No display available to attach the stream to"])
@@ -94,21 +102,17 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, MeetingCa
         // We want audio, not pictures. A tiny video region is still required because
         // SCStream is a screen-capture API; keeping it minimal keeps the cost near zero.
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
-        let config = SCStreamConfiguration()
-        config.capturesAudio = true
-        config.excludesCurrentProcessAudio = true      // never transcribe our own sounds
-        config.captureMicrophone = true                // separate microphone output
-        config.microphoneCaptureDeviceID = microphoneID
-        config.sampleRate = 48_000
-        config.channelCount = 1
-        config.width = 2
-        config.height = 2
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+        let config = Self.configuration(microphoneID: microphoneID)
 
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue)
         try stream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: queue)
-        self.stream = stream
+        let accepted = lock.withLock {
+            guard captureGeneration == generation else { return false }
+            self.stream = stream
+            return true
+        }
+        guard accepted else { throw CancellationError() }
         do {
             try await stream.startCapture()
         } catch {
@@ -124,6 +128,21 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, MeetingCa
         running = true
     }
 
+    static func configuration(microphoneID: String) -> SCStreamConfiguration {
+        let config = SCStreamConfiguration()
+        config.capturesAudio = true
+        config.excludesCurrentProcessAudio = true      // never transcribe our own sounds
+        config.captureMicrophone = true                // separate microphone output
+        config.microphoneCaptureDeviceID = microphoneID
+        config.sampleRate = 48_000
+        config.channelCount = 1
+        config.width = 2
+        config.height = 2
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+
+        return config
+    }
+
     /// Simulates an interruption: the stream dies without going through stop().
     /// Gate 12 asks whether transcript captured so far survives that.
     func simulateInterruption() async {
@@ -137,6 +156,7 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, MeetingCa
     /// Gate 13: always ends capture and releases every resource, even if the stream
     /// is already unhealthy.
     func stop() async {
+        lock.withLock { captureGeneration = UUID() }
         running = false
         guard let stream else {
             onBuffer = nil

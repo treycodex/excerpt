@@ -699,3 +699,12 @@
   .writing-toolbar button { padding-inline:6px; }
   .writing-hint { max-width:42ch; }
 }
+
+.desktop-settings { display: grid; gap: 1.4rem; margin: 2rem 0; }
+.desktop-settings fieldset { display: grid; gap: 1rem; border: 1px solid var(--line); padding: 1.25rem; min-width: 0; }
+.desktop-settings legend { padding: 0 .4rem; font-weight: 600; }
+.desktop-settings label { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.desktop-settings select { font: inherit; color: inherit; background: var(--ground); border: 1px solid var(--line); border-radius: 4px; padding: .4rem .6rem; max-width: 100%; }
+.desktop-settings p { margin: 0; }
+.desktop-settings summary { cursor: pointer; }
+.desktop-settings li { margin: .6rem 0; }

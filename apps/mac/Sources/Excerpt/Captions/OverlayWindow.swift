@@ -119,10 +119,16 @@ final class OverlayController {
         static let display = "caption.display-id"
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard,
+         availableDisplays: @escaping @MainActor () -> [CaptionDisplay] = {
+             NSScreen.screens.map { CaptionDisplay(id: OverlayController.displayID($0), name: $0.localizedName) }
+         },
+         mainDisplayID: @escaping @MainActor () -> String? = { NSScreen.main.map { OverlayController.displayID($0) } }) {
         // A look is a preference, not data: if it fails to load we show the default
         // rather than complaining about it.
         self.defaults = defaults
+        self.availableDisplays = availableDisplays
+        self.mainDisplayID = mainDisplayID
         preset = defaults.string(forKey: Key.preset).flatMap(CaptionPreset.init) ?? .classic
         size = defaults.string(forKey: Key.size).flatMap(CaptionSize.init) ?? .medium
         position = defaults.string(forKey: Key.position).flatMap(CaptionPosition.init) ?? .standard
@@ -130,13 +136,35 @@ final class OverlayController {
             ? true
             : defaults.bool(forKey: Key.enabled)
         selectedDisplayID = defaults.string(forKey: Key.display)
-            ?? NSScreen.main.map(Self.displayID) ?? NSScreen.screens.first.map(Self.displayID) ?? ""
+            ?? mainDisplayID() ?? availableDisplays().first?.id ?? ""
         if defaults.string(forKey: Key.display) == nil, !selectedDisplayID.isEmpty {
             defaults.set(selectedDisplayID, forKey: Key.display)
+        }
+        screenObserver = ScreenObserver(forName: NSApplication.didChangeScreenParametersNotification) { [weak self] _ in
+            MainActor.assumeIsolated { self?.displaysDidChange() }
         }
     }
 
     private let defaults: UserDefaults
+    @ObservationIgnored private let availableDisplays: @MainActor () -> [CaptionDisplay]
+    @ObservationIgnored private let mainDisplayID: @MainActor () -> String?
+
+    var resolvedDisplayID: String? {
+        let connected = displays
+        if connected.contains(where: { $0.id == selectedDisplayID }) { return selectedDisplayID }
+        if let main = mainDisplayID(), connected.contains(where: { $0.id == main }) { return main }
+        return connected.first?.id
+    }
+
+    func displaysDidChange() {
+        if visible {
+            if let target = targetScreen() {
+                window?.reposition(to: target)
+                screenName = target.localizedName
+            } else { hide() }
+        }
+        onSettingsChange?()
+    }
 
     // MARK: - Appearance
 
@@ -177,11 +205,11 @@ final class OverlayController {
     }
 
     var displays: [CaptionDisplay] {
-        NSScreen.screens.map { CaptionDisplay(id: Self.displayID($0), name: $0.localizedName) }
+        availableDisplays().filter(\.connected)
     }
 
     var displayMissing: Bool {
-        !selectedDisplayID.isEmpty && !NSScreen.screens.contains { Self.displayID($0) == selectedDisplayID }
+        !selectedDisplayID.isEmpty && !displays.contains { $0.id == selectedDisplayID }
     }
 
     func settings() -> CaptionSettings {
@@ -261,7 +289,7 @@ final class OverlayController {
     /// disconnected we retain the preference but use the main display until it returns.
     private func targetScreen(preferring screen: NSScreen? = nil) -> NSScreen? {
         if let screen { return screen }
-        return NSScreen.screens.first { Self.displayID($0) == selectedDisplayID }
+        return NSScreen.screens.first { Self.displayID($0) == resolvedDisplayID }
             ?? NSScreen.main
             ?? NSScreen.screens.first
     }
@@ -284,27 +312,6 @@ final class OverlayController {
         // Resume the presentation clock, discarding speech that expired while hidden.
         startPresentationClock()
 
-        // Gate 11: follow display changes rather than being stranded on a screen
-        // that no longer exists.
-        if screenObserver == nil {
-            screenObserver = ScreenObserver(
-                forName: NSApplication.didChangeScreenParametersNotification
-            ) { [weak self] _ in
-                // The queue is .main, so this already runs on the main thread. Hopping
-                // through a Task would cost a frame or more before the overlay caught up
-                // with a display that just moved.
-                MainActor.assumeIsolated {
-                    guard let self else { return }
-                    if let window = self.window, let screen = self.targetScreen() {
-                        window.reposition(to: screen)
-                        self.screenName = screen.localizedName
-                    } else if self.visible {
-                        self.hide()
-                    }
-                    self.onSettingsChange?()
-                }
-            }
-        }
     }
 
     func hide() {

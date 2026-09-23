@@ -12,7 +12,8 @@
   },
   "scripts": {
     "test": "vitest run",
-    "build:engine": "node tools/build-engine.mjs"
+    "build:engine": "node tools/build-engine.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "vitest": "^2.1.8",

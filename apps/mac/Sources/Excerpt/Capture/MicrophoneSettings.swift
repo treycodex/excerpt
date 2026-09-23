@@ -17,6 +17,7 @@ struct MicrophoneSettings: Codable, Equatable, Sendable {
     var devices: [MicrophoneDevice]
     var health: MicrophoneHealth
     var message: String
+    var selectionLocked = false
 }
 
 protocol MicrophoneDiscovering: Sendable {
@@ -26,7 +27,8 @@ protocol MicrophoneDiscovering: Sendable {
 
 struct NativeMicrophoneDiscovery: MicrophoneDiscovering {
     func devices() -> [MicrophoneDevice] {
-        AVCaptureDevice.devices(for: .audio)
+        AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external],
+            mediaType: .audio, position: .unspecified).devices
             .map { MicrophoneDevice(id: $0.uniqueID, name: $0.localizedName) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
@@ -36,10 +38,13 @@ struct NativeMicrophoneDiscovery: MicrophoneDiscovering {
 
 enum MicrophoneSelectionError: LocalizedError {
     case unavailable
+    case inUse
     case missing(String)
 
     var errorDescription: String? {
         switch self {
+        case .inUse:
+            "End the meeting or stop the input check before changing microphones."
         case .unavailable:
             "No microphone is connected. Connect one or choose another input in Excerpt Settings."
         case .missing(let name):
@@ -64,6 +69,10 @@ final class MicrophoneController {
     private(set) var devices: [MicrophoneDevice] = []
     private(set) var selectedDeviceID: String
     private(set) var selectedDeviceName: String
+    var selectionLocked = false {
+        didSet { if oldValue != selectionLocked { onChange?() } }
+    }
+    @ObservationIgnored private var deviceObserver: MicrophoneDeviceObserver?
     @ObservationIgnored var onChange: (() -> Void)?
 
     init(defaults: UserDefaults = .standard,
@@ -78,6 +87,7 @@ final class MicrophoneController {
         selectedDeviceName = defaults.string(forKey: Key.selectedName)
             ?? available.first(where: { $0.id == initial })?.name
             ?? "Selected microphone"
+        deviceObserver = MicrophoneDeviceObserver { [weak self] in self?.refresh() }
         if persisted == nil, !initial.isEmpty {
             defaults.set(initial, forKey: Key.selected)
             defaults.set(selectedDeviceName, forKey: Key.selectedName)
@@ -88,10 +98,17 @@ final class MicrophoneController {
         let next = discovery.devices()
         guard next != devices else { return }
         devices = next
+        if selectedDeviceID.isEmpty, let initial = next.first(where: { $0.id == discovery.defaultDeviceID() }) ?? next.first {
+            selectedDeviceID = initial.id
+            selectedDeviceName = initial.name
+            defaults.set(initial.id, forKey: Key.selected)
+            defaults.set(initial.name, forKey: Key.selectedName)
+        }
         onChange?()
     }
 
     func select(_ id: String) throws {
+        guard !selectionLocked else { throw MicrophoneSelectionError.inUse }
         refresh()
         guard let device = devices.first(where: { $0.id == id }) else {
             throw MicrophoneSelectionError.missing(selectedDeviceName)
@@ -119,7 +136,7 @@ final class MicrophoneController {
                 selectedDeviceId: selectedDeviceID, devices: devices, health: .missing,
                 message: devices.isEmpty
                     ? "No microphone is connected."
-                    : "\(selectedDeviceName) is disconnected. Reconnect it or choose another input.")
+                    : "\(selectedDeviceName) is disconnected. Reconnect it or choose another input.", selectionLocked: selectionLocked)
         }
 
         let health: MicrophoneHealth
@@ -133,6 +150,19 @@ final class MicrophoneController {
         case nil: health = .ready; message = "Connected and ready."
         }
         return MicrophoneSettings(
-            selectedDeviceId: selectedDeviceID, devices: devices, health: health, message: message)
+            selectedDeviceId: selectedDeviceID, devices: devices, health: health, message: message, selectionLocked: selectionLocked)
     }
+}
+
+/// Notifications update all open settings surfaces even while no meeting is running.
+private final class MicrophoneDeviceObserver {
+    private var tokens: [NSObjectProtocol] = []
+    init(onChange: @escaping @MainActor @Sendable () -> Void) {
+        tokens = [AVCaptureDevice.wasConnectedNotification, AVCaptureDevice.wasDisconnectedNotification].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { onChange() }
+            }
+        }
+    }
+    deinit { tokens.forEach(NotificationCenter.default.removeObserver) }
 }

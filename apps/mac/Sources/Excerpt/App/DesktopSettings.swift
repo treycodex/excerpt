@@ -37,3 +37,28 @@ struct DesktopSettings: Codable, Equatable, Sendable {
     var microphone: MicrophoneSettings
     var shortcuts: [MeetingShortcutStatus]
 }
+
+struct CaptionSettingsPatch: Codable, Sendable {
+    var preset: CaptionPreset?
+    var size: CaptionSize?
+    var position: CaptionPosition?
+    var enabled: Bool?
+    var displayId: String?
+
+    func applying(to current: CaptionSettings) -> CaptionSettings {
+        var result = current
+        if let preset { result.preset = preset }
+        if let size { result.size = size }
+        if let position { result.position = position }
+        if let enabled { result.enabled = enabled }
+        if let displayId { result.displayId = displayId }
+        return result
+    }
+}
+
+enum MeetingCommandError: LocalizedError {
+    case unavailable(String)
+    var errorDescription: String? {
+        switch self { case .unavailable(let message): message }
+    }
+}

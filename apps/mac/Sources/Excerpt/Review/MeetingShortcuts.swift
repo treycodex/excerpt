@@ -1,3 +1,4 @@
+import AppKit
 import Carbon
 import Foundation
 
@@ -6,6 +7,11 @@ import Foundation
 /// plus an AppKit menu action.
 @MainActor
 final class MeetingShortcuts {
+    /// Carbon owns the keystroke. Menu actions remain clickable fallbacks only.
+    static func menuItem(title: String, action: Selector) -> NSMenuItem {
+        NSMenuItem(title: title, action: action, keyEquivalent: "")
+    }
+
     private struct Definition {
         var name: MeetingShortcutName
         var id: UInt32
@@ -68,6 +74,7 @@ final class MeetingShortcuts {
         for definition in Self.definitions { unregister(definition.name) }
         if let handler { RemoveEventHandler(handler) }
         handler = nil
+        meetingActive = false
         onStatusChange?()
     }
 
@@ -90,8 +97,8 @@ final class MeetingShortcuts {
             guard let event, let context else { return OSStatus(eventNotHandledErr) }
             var id = EventHotKeyID()
             let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
-            guard status == noErr,
-                  let definition = MeetingShortcuts.definitions.first(where: { $0.id == id.id }) else { return status }
+            guard status == noErr, id.signature == 0x45584350,
+                  let definition = MeetingShortcuts.definitions.first(where: { $0.id == id.id }) else { return OSStatus(eventNotHandledErr) }
             let owner = Unmanaged<MeetingShortcuts>.fromOpaque(context).takeUnretainedValue()
             MainActor.assumeIsolated { owner.perform(definition.name) }
             return noErr
@@ -109,6 +116,7 @@ final class MeetingShortcuts {
         if let registerOverride {
             success = registerOverride(name)
         } else {
+            guard handler != nil else { onStatusChange?(); return }
             var reference: EventHotKeyRef?
             let status = RegisterEventHotKey(
                 definition.key, UInt32(cmdKey | shiftKey),

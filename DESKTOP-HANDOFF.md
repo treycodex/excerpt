@@ -1,189 +1,142 @@
-# Phase 4 in-progress transfer handoff
+# Phase 4 implementation — full native acceptance pending
 
-> **Checkpoint status (September 22, 2026):** Phases 0–3 are complete. Phase 4
-> has been started but is not complete and must not be marked complete from this
-> checkpoint. The repository is being committed and pushed so it can be cloned on a
-> new device. Preserve this exact history; do not reconstruct the earlier uncommitted
-> workspace move.
+Updated September 23, 2026 for the destination Mac checkpoint.
 
-## Ready-to-paste prompt
+Phases 0–3 remain complete. Phase 4 implementation and regression tests have been
+extended from checkpoint `7da27151e64a651b628b0d3147b8c7a4b8e46fa6`, on branch
+`note-and-transcript-quality`. **Do not mark Phase 4 complete yet.** The complete
+Swift gate is blocked by this Mac's toolchain. The user explicitly asked to continue
+without Xcode while they update macOS and install it. Phase 5 has not started.
 
-Continue the desktop-only Excerpt implementation in `/Users/trey/Build Games/excerpt`.
+## Continuation prompt
 
-Read first, in order:
+Continue Excerpt in `/Users/aidan/Documents/ChatGPT/excerpt`, branch
+`note-and-transcript-quality`. Read `DESKTOP-IMPLEMENTATION-PLAN.md`,
+`DESKTOP-REVIEW.md`, then this file. Preserve the checkpoint history and any subsequent local work. Do not reset, reconstruct the workspace move, or access production
+meeting data. Finish the **Phase 4 verification gate only** before any Phase 5 work.
 
-1. `DESKTOP-IMPLEMENTATION-PLAN.md` — authoritative scope, phase order, contracts, gates, and execution ledger.
-2. `DESKTOP-REVIEW.md` — defect evidence and product rationale.
-3. `DESKTOP-HANDOFF.md` — completed Phase 0–3 state, checks, risks, and this Phase 4 starting point.
-4. Any repository instructions, then `git status` and all diffs.
+The destination device currently uses Command Line Tools at
+`/Library/Developer/CommandLineTools` (Swift 6.3.3). `swift test` cannot compile the
+existing `NotesSummarizer.swift`: the toolchain lacks the
+`FoundationModelsMacros.GenerableMacro` / `GuideMacro` compiler plugin. Full Xcode
+is not installed. Do not work around this by deleting generation code, changing
+production behavior, or claiming a focused test run is the full app gate.
 
-Phases 0–3 are complete. Phase 4 is partially implemented in the current commit.
-Continue and finish **Phase 4 only: simplify setup and everyday meeting controls**.
-Preserve all existing work, synthetic fixtures, native data compatibility, generated
-resources, and unrelated user files. Do not reset, stash, reconstruct, or read/delete
-production meeting data. Do not start Phase 5.
+After the user finishes the OS/Xcode setup, use the full Xcode toolchain and rerun:
 
-First review the partial Phase 4 diff and its tests. Do not assume it is final merely
-because it compiles. The current checkpoint added:
+```sh
+pnpm exec turbo test --force
+pnpm typecheck
+pnpm build:engine
+pnpm build:editor
+pnpm --filter @excerpt/editor build
+node apps/mac/tools/sync-caption-tokens.mjs --check
+CLANG_MODULE_CACHE_PATH=/private/tmp/excerpt-phase4-clang swift test --package-path apps/mac --disable-sandbox --cache-path /private/tmp/excerpt-phase4-swift-cache
+git diff --check
+```
 
-- typed `DesktopSettings`, caption, microphone, display, and shortcut contracts in
-  TypeScript and Swift;
-- native microphone discovery/selection persistence using stable device IDs and
-  ScreenCaptureKit `microphoneCaptureDeviceID` wiring;
-- native caption display persistence with fallback to the main display when the
-  chosen display is disconnected;
-- native-to-editor settings events and bridge calls;
-- an initial `MeetingCommandCoordinator` shared by library/menu/global shortcut;
-- global Start/End and captions shortcuts, contextual Catch up/Capture shortcuts,
-  menu-visible registration availability, and removal of duplicate menu equivalents;
-- a quieter primary menu, with looks, displays, setup, folders, diagnostics, and
-  shortcut status under Settings & Help;
-- Start no longer explicitly opens live notes and hides Excerpt after a successful
-  coordinated start; explicit Open live notes and completion-open behavior remain.
+Resolve any full native compilation/test failures, rerun the desktop boundary audit,
+and record actual Swift counts before marking the Phase 4 gate complete. The new
+bridge, setup, and microphone-disconnection lifecycle tests have **not** run through
+the complete app target on this device. The installed toolchain also lacks the
+`Testing` module, as confirmed by the focused test attempt. Real permissions/audio, focus, fullscreen,
+displays, sharing, and signed packaging remain Phase 8 checks. Do not alter signing
+identity or use ad-hoc signing.
 
-Known incomplete work that must be finished before the Phase 4 gate:
+## What changed in this continuation
 
-1. Add the shared `MicrophoneController` to setup and implement the short native input
-   selection/health check after permissions/model readiness. Keep Cinema as default;
-   make look selection optional rather than setup's first required choice.
-2. Render and mutate caption, display, microphone, and shortcut-conflict state in the
-   bundled editor Preferences using only the new bridge. Subscribe to
-   `excerpt:desktop-settings`; do not add local storage.
-3. Add production-boundary native/editor tests for settings parity and relaunch,
-   selected/missing microphones, one coordinated Start with no forced notes,
-   explicit Open live notes, shortcut conflicts/contextual registration/no double
-   fire, display movement/fallback, and legacy `processing: "demo"` compatibility.
-4. Replace deprecated `AVCaptureDevice.devices(for:)` with the supported discovery
-   session API, and review main-actor/sendability behavior around the microphone
-   selection closure.
-5. Review the initial command/focus policy and shortcut/menu implementations for race
-   and UI edge cases. Verify the editor-originated start receives a useful error when
-   permissions or the selected microphone block capture.
-6. Rebuild engine/editor/native resources from source and run the complete Phase 4
-   gate before updating the ledger to complete. Manual real-device/display/fullscreen/
-   sharing/signed-package acceptance remains Phase 8.
+- Setup now introduces the outcome with Cinema as the default, then permissions,
+  speech readiness, and an optional 15-second native input check. It uses the shared
+  microphone controller and the actual capture boundary, shows separate microphone
+  and meeting-audio meters, discards buffers, and never creates a meeting. Back,
+  Continue, window close, Start, and Quit release the check. Caption styling remains
+  optional in Settings & Help and editor Settings.
+- `DesktopPreferences.tsx` renders native caption enabled/look/size/position/display,
+  selected microphone and health, missing-device/display notices, selection locks,
+  and shortcut conflicts. It subscribes to `excerpt:desktop-settings`, preserves
+  authoritative state after failed saves, and ignores stale acknowledgments/loads
+  after a newer native event. No browser settings store was added.
+- Caption writes now decode a `CaptionSettingsPatch`, matching TypeScript's partial
+  editable-field payload. The checkpoint incorrectly decoded the full native
+  snapshot, including metadata TypeScript did not send. Independent menu changes
+  are retained when the editor changes another field.
+- Microphone discovery uses `AVCaptureDevice.DiscoverySession` with `.microphone`
+  and `.external`. Device notifications refresh open surfaces. A saved disconnected
+  input does not silently fall back. Selection is locked while capture uses it;
+  selected-device loss interrupts/saves the partial meeting with an actionable
+  message. The capture selection closure is explicitly main-actor/sendable.
+- The command coordinator coalesces concurrent starts and supports End while Start
+  is pending. Cancelled starts do not invoke the focus callback. The library shows
+  native permission/device/start errors instead of leaving an unhandled rejection.
+  Start does not open notes; explicit Open live notes and automatic completion-open
+  remain intact. Input-check and pending-start cleanup also participate in Quit.
+- Display discovery is injectable for tests and observed even before the overlay
+  first opens. It preserves the chosen display through disconnect/reconnect and
+  resolves to an available display while disconnected.
+- Global shortcuts report handler/registration failure, ignore foreign hotkey
+  signatures, and unregister contextual actions. Their actual menu factory supplies
+  empty key equivalents, retaining clickable fallbacks without duplicate keystrokes.
+- Root typechecking now runs separate core and types tasks as well as the editor.
+  React test-renderer dependencies were added for production component tests; the
+  lockfile was updated. `.pnpm-store/` is ignored as local dependency output.
 
-Make native state the single authority for caption settings. The menu, setup, and bundled editor must read and write the same persisted preset, size, position, enabled preference, and selected display. Do not restore WebView local-storage settings or create a second editor-owned caption authority. Keep the three existing looks only. Changes must update every active native surface and persist across relaunch.
+## Verification on this device
 
-Add microphone selection and health through the typed native/editor bridge. Enumerate supported native inputs using stable device identifiers, persist the selected choice, honor it during capture, and report a missing/disconnected selection clearly rather than silently changing attribution. Keep system audio plus selected microphone. Do not add browser device APIs, browser capture, calendar integrations, or a diagnostic workflow as the normal path.
+- Forced Turbo tests: **199 core + 22 editor passed**. Seven new editor component
+  tests cover native settings, events, stale replies, save/load errors, input locks,
+  conflicts, library actions/errors, and legacy `processing: "demo"` display.
+- `pnpm typecheck`: **passed**, including core, types, and editor (three tasks).
+- Engine build, editor-to-native-resource build, and clean editor production build:
+  **passed**. Generated outputs remain ignored and were regenerated from source.
+- Caption-token synchronization: **passed**.
+- Production source and generated notes bundle audit: **no matches** for browser
+  capture, IndexedDB, PiP, or retired record/session/demo route patterns. Test fixture
+  files were excluded; legacy persisted enum decoding remains supported.
+- Full Swift test gate: **blocked before tests** by missing Foundation Models macros.
+  No previous device's 156-test result is claimed as current verification.
+- Focused native controller module: **build-only command passed** against the actual production sources (30.62 seconds).
+  Its test run then stopped at `no such module 'Testing'`: this Command Line Tools
+  installation also lacks Swift Testing. **No Swift tests executed on this device.**
+- All Swift source and test files passed `swiftc -frontend -parse` (syntax only).
+- `git diff --check`: passed during verification; rerun after any edits.
 
-Use one native coordinator for Start meeting across library, menu, and shortcuts. Starting must show captions according to the persisted enabled preference but return focus to the meeting; it must not force the live editor open. `Open live notes` remains explicit. Notes open automatically only when the meeting completes. Keep everyday controls limited to Start/End, captions, Capture moment, Catch up, and Open notes; move setup, folders, and diagnostics behind secondary settings/help paths.
+A supplemental command, `python3 apps/mac/tools/test-phase4-controllers.py --build-only`, creates
+an isolated temporary Swift package with symlinks to unchanged production controller
+sources. Omitting `--build-only` also runs `Phase4DesktopSettingsTests.swift` when
+Swift Testing is available. It does not stub Foundation Models,
+run the app, open device capture, or touch meeting storage. It is deliberately not a
+substitute for full `swift test`. `Phase4BridgeSettingsTests.swift`, the setup tests,
+and the added lifecycle interruption test remain in the normal full app suite.
 
-Register advertised Start/End and caption shortcuts globally. Register Catch up/Capture only when relevant. Make shortcut-registration conflicts visible while retaining menu fallbacks, and prevent a shortcut/menu equivalent from firing twice. Add a simple display selector or “move captions to this display” action; handle disconnected displays and fullscreen transitions predictably without tracking every pointer movement. Keep the current capturable-overlay behavior honest and do not claim sharing exclusion without real supported-path testing.
+The focused native build retains the existing `SourceTranscriber` warning about
+capturing `AVAudioPCMBuffer` in a sendable closure on this newer SDK. It was not
+silenced or treated as a test result.
 
-Retain the Phase 3 desktop boundary: only library, meeting, and settings routes remain; production requires the native host; the fake host is explicit test/development-only; browser persistence/capture/demo/marketing implementations must not return. Preserve legacy persisted meeting decoding, including `processing: "demo"`, without creating new demo meetings.
+The environment's available pnpm is 11.19.0, Node is 24.19.0. The repository's existing
+`packageManager: pnpm@12.3.4` declaration was preserved. Installation and builds used
+the existing lockfile plus the two explicitly added React test dependencies.
 
-Add production-boundary coverage for native caption settings parity/persistence, selected/missing microphone behavior, Start from library crossing the native coordinator without forcing notes open, explicit Open live notes, global shortcut registration/conflicts and no double fire, caption display movement/fallback, and legacy meeting compatibility. Use native seams/fakes rather than real permissions or devices for automated tests. Do not claim real audio, screen sharing, fullscreen, multi-display, or signed-package acceptance from tests; those remain Phase 8.
+## Worktree and next phase
 
-Update root/editor/native scripts and documentation only where Phase 4 behavior changes. Rebuild generated engine/editor resources from source; never hand-edit bundles or `CaptionTokens.generated.swift`. Run appropriate Phase 4 checks: forced Turbo tests, full typecheck, engine build, editor-to-native-resource build, caption-token sync, Swift tests using task-specific `/private/tmp` caches, desktop forbidden-string audit, and `git diff --check`. Do not use ad-hoc signing or alter the signing identity.
+This checkpoint builds on transferred commit `7da27151e64a651b628b0d3147b8c7a4b8e46fa6`
+on `note-and-transcript-quality`. Use `git log -1` and `git status` to identify the
+current revision and any subsequent local work. The checkpoint changes cover
+README, native setup, capture/settings/coordinator/bridge/shortcuts/display handling, editor
+Preferences and library feedback, shared contracts, tests/scripts, package manifests,
+lockfile, this handoff, and the execution ledger. New source/test files are:
 
-After Phase 4, update the execution ledger in `DESKTOP-IMPLEMENTATION-PLAN.md` and this handoff with changed behavior/files, actual test counts/results, unresolved risks, blocked external checks, the exact Phase 5 next step, and the complete current worktree state. Stop before Phase 5.
+- `apps/editor/src/views/DesktopPreferences.tsx`
+- `apps/editor/src/test/desktopSettings.test.tsx`
+- `apps/mac/Sources/Excerpt/Setup/InputCheck.swift`
+- `apps/mac/Tests/ExcerptTests/Phase4DesktopSettingsTests.swift`
+- `apps/mac/Tests/ExcerptTests/Phase4BridgeSettingsTests.swift`
+- `apps/mac/tools/test-phase4-controllers.py`
+- `packages/types/tsconfig.json`
 
-## Completed through Phase 3
+No production meetings, migration history, permissions, signing configuration, or
+external hosting were read or modified. No app was launched against production storage.
 
-Base revision remains `ac7ef19`; all work is intentionally uncommitted. Phases 0–3
-are complete. No production meeting data, browser databases, permissions, signing
-settings, external hosting, or unrelated work was read, deleted, reset, or changed.
-
-Phase 3 moved the retained React editor from `apps/web` to `apps/editor` and renamed
-it to `@excerpt/editor`. The Mac app still bundles it at `apps/mac/Resources/notes`.
-Only `#/meetings`, `#/m/:id`, and `#/preferences` are reachable; retired browser,
-demo, marketing, onboarding, and capture hashes rewrite to the library. The wordmark
-opens the library. Production requires the native bridge and visibly reports a missing
-desktop host rather than touching browser persistence.
-
-The bridge now has typed `startMeeting` and `openLiveNotes` operations. Library primary
-controls invoke them; native handlers share the `AppDelegate` session coordinator rather
-than constructing a second capture lifecycle. The fake native host remains under
-`apps/editor/src/test` and is never imported by production code.
-
-Removed: browser live capture/device enumeration/PiP/demo adapters and tests; browser
-routes/views/styles; IndexedDB fallback and `idb-keyval`; standalone Vercel config;
-marketing/demo media and product-shot/video tooling; demo seed/media script; and obsolete
-browser-facing documentation. Preserved pure source health, caption/shared algorithms,
-synthetic persisted fixtures, typed revision synchronization, the editable document,
-library/settings, image handling, and legacy `processing: "demo"` decoding. Legacy values
-are displayed as “Legacy,” not a product demo.
-
-Root commands now include `build:engine`, `build:editor`, and `build:mac`. The native
-build script regenerates engine and editor resources on every invocation, preventing an
-existing resource directory from passing as fresh source output. `README.md` and
-`apps/mac/DISTRIBUTION.md` describe the desktop-only product.
-
-## Final Phase 3 checks
-
-- `pnpm exec turbo test --force`: 199 core and 15 editor tests passed.
-- `pnpm typecheck`: passed.
-- `pnpm build:engine`, `pnpm build:editor`, and `pnpm --filter @excerpt/editor build`: passed; both the native notes resource and clean editor bundle were regenerated.
-- `node apps/mac/tools/sync-caption-tokens.mjs --check`: passed.
-- Source/generated-bundle forbidden-string audit found no browser capture, PiP,
-  IndexedDB, or retired route implementation (route-test fixture strings excluded).
-- `CLANG_MODULE_CACHE_PATH=/private/tmp/excerpt-phase3-clang swift test --disable-sandbox --cache-path /private/tmp/excerpt-phase3-swift-cache`: 156 tests in 22 suites passed; four conditional speech/model evaluations skipped.
-- `git diff --check`: passed.
-
-Swift emits the pre-existing `SetupModel.installSpeechModel` actor-isolation warning.
-The real signed app/package and hardware acceptance were not run: the configured stable
-signing identity is unavailable, and ad-hoc signing remains intentionally disallowed.
-Those are Phase 8 constraints, not Phase 3 evidence.
-
-## Exact Phase 4 next step
-
-Clone/fetch the pushed `note-and-transcript-quality` branch, then read
-`DESKTOP-IMPLEMENTATION-PLAN.md`, `DESKTOP-REVIEW.md`, and this handoff. Review the
-partial Phase 4 diff before editing. Start by wiring the existing shared native
-microphone/settings controllers into setup and editor Preferences, then add the missing
-Phase 4 production-boundary tests listed below. Preserve Phases 0–3 and do not begin
-Phase 5.
-
-## Current worktree state
-
-The transfer commit contains all intentional Phase 0–3 work and the partial Phase 4
-checkpoint together. The `apps/web` removal and `apps/editor` addition may be displayed
-as renames by Git clients; that is expected. Generated native engine/editor resources
-are the last Phase 3 rebuild and must be regenerated after Phase 4 source work is
-finished. Do not reset to `ac7ef19`, stash away the checkpoint, or reconstruct the
-workspace move.
-
-## September 22 Phase 4 partial checkpoint
-
-This checkpoint intentionally stops mid-Phase 4 so the work can move to another
-device. It is buildable, but the Phase 4 gate is not complete.
-
-Files introduced for the partial Phase 4 work:
-
-- `apps/mac/Sources/Excerpt/App/DesktopSettings.swift`
-- `apps/mac/Sources/Excerpt/Capture/MicrophoneSettings.swift`
-- `apps/mac/Sources/Excerpt/Meeting/MeetingCommandCoordinator.swift`
-
-Existing files additionally changed for the partial work include the typed contracts,
-native/editor bridge, notes-window event delivery, capture microphone configuration,
-overlay settings/display behavior, shortcut registration, meeting health publication,
-and AppDelegate menu/coordinator wiring. The editor fake host implements the new calls,
-but the production Preferences view does not yet consume them.
-
-Transfer-only verification performed after stopping implementation:
-
-- `pnpm typecheck`: passed.
-- `CLANG_MODULE_CACHE_PATH=/private/tmp/excerpt-phase4-handoff-clang swift test
-  --disable-sandbox --cache-path /private/tmp/excerpt-phase4-handoff-swift-cache`:
-  156 tests in 22 suites passed; four conditional speech/model evaluations skipped.
-- `git diff --check`: passed before the documentation update and must be rerun by the
-  continuing developer.
-
-Warnings/risks:
-
-- The pre-existing `SetupModel.installSpeechModel` actor-isolation warning remains.
-- `NativeMicrophoneDiscovery` currently emits a deprecation warning for
-  `AVCaptureDevice.devices(for:)`; replace it with `AVCaptureDevice.DiscoverySession`.
-- No Phase 4-specific native or editor tests have been added yet.
-- Setup and editor Preferences are not wired to the new settings model yet.
-- Engine/editor generated resources were not rebuilt after this partial Phase 4 work.
-- Turbo tests, forbidden-string audit, caption-token sync, and full Phase 4 build gate
-  were not run for this partial checkpoint.
-- Real audio, focus, fullscreen, multiple displays, sharing behavior, and signed package
-  acceptance remain unverified Phase 8 work.
-
-The Git branch at transfer is `note-and-transcript-quality`, with `origin` pointing to
-`https://github.com/treycodex/excerpt.git`. Use the pushed checkpoint commit as the
-source of truth on the new device. Do not return to baseline `ac7ef19` or recreate the
-old uncommitted workspace move.
+**Immediate next step:** finish the full Phase 4 gate after macOS/Xcode installation.
+**Only after that gate passes:** Phase 5 starts with generation lifecycle/input
+freshness and automatic visual-note composition, preserving manual writing, image
+placement, and deletions. That work is outside this continuation.

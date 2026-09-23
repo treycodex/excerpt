@@ -40,7 +40,7 @@ final class NotesBridge: NSObject {
     private let startMeetingAction: () async throws -> Void
     private let openLiveNotesAction: () -> Void
     private let desktopSettings: () -> DesktopSettings
-    private let saveCaptionSettingsAction: (CaptionSettings) throws -> Void
+    private let saveCaptionSettingsAction: (CaptionSettingsPatch) throws -> Void
     private let selectMicrophoneAction: (String) throws -> Void
     private let exporter: any NotesExporting
     private let log = Logger(subsystem: "com.excerpt.app", category: "bridge")
@@ -60,7 +60,7 @@ final class NotesBridge: NSObject {
                 microphone: MicrophoneSettings(selectedDeviceId: "", devices: [], health: .missing,
                     message: "No microphone is connected."), shortcuts: [])
          },
-         saveCaptionSettings: @escaping (CaptionSettings) throws -> Void = { _ in },
+         saveCaptionSettings: @escaping (CaptionSettingsPatch) throws -> Void = { _ in },
          selectMicrophone: @escaping (String) throws -> Void = { _ in },
          exporter: (any NotesExporting)? = nil) {
         self.store = store
@@ -161,7 +161,7 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
                 return (try await json(NotesProviderCoordinator.summarize(
                     meeting, preferences: preferences.load(), request: request)), nil)
             }
-            return (try await handle(method, arguments), nil)
+            return (try await dispatch(name, arguments: arguments), nil)
         } catch {
             log.error("bridge \(name) failed: \(error.localizedDescription)")
             return (nil, NotesBridge.readable(error))
@@ -184,6 +184,11 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
 
     /// Values cross as JSON strings, decoded by the webview. One bridging surface
     /// rather than a dictionary shape that can quietly disagree with the TypeScript type.
+    func dispatch(_ name: String, arguments: [Any] = []) async throws -> Any? {
+        guard let method = Method(rawValue: name) else { throw Failure.unknownMethod(name) }
+        return try await handle(method, arguments)
+    }
+
     private func handle(_ method: Method, _ arguments: [Any]) async throws -> Any? {
         switch method {
         case .startMeeting:
@@ -196,7 +201,7 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
             return try json(desktopSettings())
         case .saveCaptionSettings:
             guard let body = arguments.first as? String,
-                  let settings = try? decode(CaptionSettings.self, from: body) else {
+                  let settings = try? decode(CaptionSettingsPatch.self, from: body) else {
                 throw Failure.badArguments("saveCaptionSettings")
             }
             try saveCaptionSettingsAction(settings)

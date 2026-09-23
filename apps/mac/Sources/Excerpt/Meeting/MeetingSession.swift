@@ -466,6 +466,11 @@ final class MeetingSession {
 
     /// An interruption stops capture. It must not look like a clean stop, and it must
     /// not lose the transcript — everything settled so far is already journalled.
+    func selectedMicrophoneDisconnected(_ name: String) {
+        guard let token = lifecycleToken else { return }
+        reportCaptureLoss("The selected microphone, \(name), disconnected. Reconnect it or choose another input in Settings, then start a new meeting.", token: token)
+    }
+
     private func reportCaptureLoss(_ message: String, token: UUID) {
         guard lifecycleToken == token, isPreparingOrListening else { return }
         log.error("capture lost: \(message)")

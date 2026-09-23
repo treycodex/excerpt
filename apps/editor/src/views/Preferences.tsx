@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { DesktopPreferences } from './DesktopPreferences';
 import { DEFAULT_PREFERENCES, bridge, deriveBoosts, loadMeeting, loadPreferences, savePreferences } from '@excerpt/core';
 import type { Category, Preferences as Prefs } from '@excerpt/types';
 
@@ -101,12 +102,14 @@ export function Preferences() {
       <header className="masthead">
         <div className="eyebrow">Excerpt</div>
         {returnTo && <a className="preferences-return" href={`#/m/${returnTo}`}>← Back to your notes</a>}
-        <h1>What matters to you</h1>
+        <h1>Settings</h1>
         <p className="rubric">
           Stored on this device. Preferences change the order of your notes, never what
           appears in them — a decision you forgot to prioritise is still a decision.
         </p>
       </header>
+
+      <DesktopPreferences />
 
       <section className="notes-provider-settings">
         <h2>Note enhancement</h2>

@@ -228,6 +228,7 @@ export interface MicrophoneDevice {
 }
 
 export interface MicrophoneSettings {
+  selectionLocked: boolean;
   selectedDeviceId: string;
   devices: MicrophoneDevice[];
   health: MicrophoneHealth;

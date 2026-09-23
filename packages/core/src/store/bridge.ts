@@ -23,7 +23,7 @@ export interface ExcerptBridge {
   /** Reads native-owned caption, microphone, display, and shortcut state. */
   loadDesktopSettings(): Promise<DesktopSettings>;
   /** Replaces only native caption preferences; browser storage is never involved. */
-  saveCaptionSettings(settings: Pick<CaptionSettings, 'preset' | 'size' | 'position' | 'enabled' | 'displayId'>): Promise<DesktopSettings>;
+  saveCaptionSettings(settings: Partial<Pick<CaptionSettings, 'preset' | 'size' | 'position' | 'enabled' | 'displayId'>>): Promise<DesktopSettings>;
   /** Selects a stable native capture-device identifier. */
   selectMicrophone(deviceId: string): Promise<DesktopSettings>;
   listMeetings(): Promise<Meeting[]>;

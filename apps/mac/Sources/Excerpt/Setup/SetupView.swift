@@ -13,11 +13,12 @@ private enum Palette {
     static let bad = Color(red: 0.98, green: 0.40, blue: 0.32)
 }
 
-/// The guided setup. Four steps, in the order a person experiences the product:
+/// The guided setup. Five steps, in the order a person experiences the product:
 /// see it, let it listen, get ready, done.
 struct SetupView: View {
     @Bindable var model: SetupModel
     var onFinish: () -> Void
+    @State private var inputError: String?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -31,6 +32,7 @@ struct SetupView: View {
                         case .preview: preview
                         case .permissions: permissions
                         case .model: speechModel
+                        case .input: inputCheck
                         case .ready: ready
                         }
                     }
@@ -124,36 +126,11 @@ struct SetupView: View {
             heading(
                 "WELCOME TO EXCERPT",
                 "Remember the screen, and the conversation.",
-                "Capture the report or creative on screen, keep the discussion beside it, and read editable notes afterwards. Subtitles follow the conversation while you watch the work — choose how they look to get started."
+                "Capture the report or creative on screen, keep the discussion beside it, and read editable notes afterwards. Cinema captions follow the conversation while you watch the work. You can adjust their look later in Settings."
             )
 
             subtitlePreview
-            HStack(spacing: 10) {
-                ForEach(CaptionPreset.allCases) { preset in
-                    Button { model.overlay.setPreset(preset) } label: {
-                        HStack(spacing: 6) {
-                            Text(preset.title).font(.system(size: 12, weight: .medium))
-                            if model.overlay.preset == preset { Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)) }
-                        }
-                        .foregroundStyle(model.overlay.preset == preset ? Palette.ember : Palette.dim)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(model.overlay.preset == preset ? Palette.raise : Color.clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(model.overlay.preset == preset ? Palette.ember.opacity(0.5) : Palette.line, lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(model.overlay.preset == preset ? .isSelected : [])
-                    .help(preset.explanation)
-                }
-            }
 
-            Button("Preview on my screen") { showPreview() }
-                .buttonStyle(SecondaryButton())
-
-            Text("You can change this later from the Excerpt menu.")
-                .font(.system(size: 12))
-                .foregroundStyle(Palette.faint)
         }
     }
 
@@ -177,16 +154,6 @@ struct SetupView: View {
         .frame(height: 205).frame(maxWidth: .infinity)
         .clipped().clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityLabel("\(model.overlay.preset.title) subtitle preview: Let’s make it happen.")
-    }
-
-    /// The preview is the real overlay with real text in it, not a picture of one.
-    /// Choosing a look against a mock is choosing it against the wrong thing.
-    private func showPreview() {
-        model.overlay.show()
-        model.overlay.update(
-            speaker: "SPEAKER",
-            text: "Okay. Let's move the campaign launch to October. That's decided."
-        )
     }
 
     // MARK: - 2 · Let it listen
@@ -303,7 +270,7 @@ struct SetupView: View {
                         .frame(maxWidth: 380)
                 }
             case .ready:
-                Row(symbol: "checkmark.circle", tint: Palette.ember, text: "Ready. Nothing will leave this Mac.")
+                Row(symbol: "checkmark.circle", tint: Palette.ember, text: "Ready for on-device transcription.")
             case .failed(let message):
                 VStack(alignment: .leading, spacing: 14) {
                     Callout(
@@ -327,6 +294,43 @@ struct SetupView: View {
         }
     }
 
+    private var inputCheck: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            heading("A quick check", "Hear both sides.",
+                "Choose your microphone, then speak and play meeting audio. The check lasts 15 seconds and saves nothing. Other Mac audio can also be heard; headphones help keep the two sides separate.")
+            Picker("Microphone", selection: Binding(
+                get: { model.microphone.selectedDeviceID },
+                set: { id in
+                    do { try model.microphone.select(id); inputError = nil }
+                    catch { inputError = error.localizedDescription }
+                })) {
+                if !model.microphone.devices.contains(where: { $0.id == model.microphone.selectedDeviceID }) {
+                    Text("Selected input unavailable").tag(model.microphone.selectedDeviceID)
+                }
+                ForEach(model.microphone.devices) { device in Text(device.name).tag(device.id) }
+            }
+            .disabled(model.microphone.selectionLocked)
+            Text(model.microphone.snapshot().message).font(.system(size: 13)).foregroundStyle(Palette.dim)
+            VStack(alignment: .leading, spacing: 10) {
+                Text(model.inputCheck.microphoneMessage).font(.system(size: 13))
+                ProgressView(value: model.inputCheck.microphoneLevel).tint(Palette.ember)
+                Text(model.inputCheck.systemMessage).font(.system(size: 13))
+                ProgressView(value: model.inputCheck.systemLevel).tint(Palette.ember)
+            }
+            if let error = inputError ?? model.inputCheck.error {
+                Callout(tone: .warn, title: "Check your inputs", message: error)
+            }
+            Button(model.inputCheck.running ? "Stop check" : "Check inputs") {
+                Task {
+                    if model.inputCheck.running { await model.inputCheck.stop() }
+                    else { await model.inputCheck.start() }
+                }
+            }.buttonStyle(SecondaryButton())
+            Text("You can continue without playing audio now. Input health remains available in Settings during meetings.")
+                .font(.system(size: 12)).foregroundStyle(Palette.faint)
+        }
+    }
+
     // MARK: - 4 · Done
 
     private var ready: some View {
@@ -339,14 +343,17 @@ struct SetupView: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 Row(symbol: "record.circle", tint: Palette.ember,
-                    text: "Start listening — ⌘⇧R, or from the menu")
+                    text: "Start or end a meeting — ⌘⇧R, or from the menu")
                 Row(symbol: "captions.bubble", tint: Palette.dim,
                     text: "Show captions over my meeting — ⌘⇧C")
                 Row(symbol: "doc.text", tint: Palette.dim,
-                    text: "Open notes — ⌘N. They open by themselves when a meeting ends.")
+                    text: "Open live notes from the menu. Saved notes open when a meeting ends.")
                 Row(symbol: "folder", tint: Palette.dim,
                     text: "Find your saved notes in the Excerpt folder")
             }
+
+            Text("If a shortcut is unavailable, use the menu. Settings shows shortcut conflicts.")
+                .font(.system(size: 12)).foregroundStyle(Palette.faint)
 
             Text("Wear headphones if you can. Otherwise your microphone hears the meeting through the speakers, and Excerpt has to work out which words you actually said.")
                 .font(.system(size: 12))
@@ -361,7 +368,7 @@ struct SetupView: View {
     private var footer: some View {
         HStack {
             if model.step != .preview && model.step != .ready {
-                Button("Back") { model.back() }
+                Button("Back") { Task { await model.back() } }
                     .buttonStyle(SecondaryButton())
             }
 
@@ -369,8 +376,7 @@ struct SetupView: View {
 
             if model.step != .ready {
                 Button("Not now") {
-                    model.dismissForNow()
-                    onFinish()
+                    Task { await model.dismissForNow(); onFinish() }
                 }
                 .buttonStyle(QuietButton())
             }
@@ -390,6 +396,7 @@ struct SetupView: View {
         case .preview: "Continue"
         case .permissions: model.canLeavePermissions ? "Continue" : "Waiting for all three"
         case .model: model.modelState == .ready ? "Continue" : "Getting ready…"
+        case .input: "Continue"
         case .ready: "Start using Excerpt"
         }
     }

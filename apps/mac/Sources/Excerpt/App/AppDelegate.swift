@@ -38,9 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var gateWindow: NSWindow?
     private var setup: SetupWindowController?
     private var previewTimeout: Task<Void, Never>?
-    // Phase 4 continuation still needs to place the shared microphone controller in
-    // setup's input-check step. Until then the existing setup remains buildable.
-    private lazy var setupModel = SetupModel(overlay: overlay)
+    private lazy var setupModel = SetupModel(overlay: overlay, microphone: microphone)
 
     /// Before the first frame, not after. Coming up as a regular app and demoting in
     /// applicationDidFinishLaunching puts a Dock icon on screen for a moment and then
@@ -89,17 +87,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                          preferences: preferences, overlay: overlay,
                                          capture: capture)
             self.session = session
-            session.onStateChange = { [weak self] in self?.refresh() }
+            session.onStateChange = { [weak self] in
+                guard let self else { return }
+                self.microphone.selectionLocked = self.session?.state.isActive == true
+                self.refresh()
+                self.bridge?.publishDesktopSettings()
+            }
             session.onHealthChange = { [weak self] in self?.bridge?.publishDesktopSettings() }
             session.onHeadphoneSuggestion = { [weak self] in self?.suggestHeadphonesIfNeeded() }
             commands = MeetingCommandCoordinator(
                 isActive: { [weak session] in session?.state.isActive == true },
                 start: { [weak self, weak session] in
                     guard let self, let session else { return false }
-                    guard await self.ensurePermissions() else { throw CancellationError() }
+                    await self.setupModel.inputCheck.stop()
+                    guard await self.ensurePermissions() else {
+                        throw MeetingCommandError.unavailable("Allow microphone, speech recognition, and Screen & System Audio Recording in System Settings before starting a meeting.")
+                    }
+                    try Task.checkCancellation()
+                    self.previewTimeout?.cancel()
+                    self.setup?.close()
                     _ = try self.microphone.selectedDeviceIDForCapture()
                     await session.start()
-                    guard session.canCaptureImage else { return false }
+                    guard session.canCaptureImage else {
+                        try Task.checkCancellation()
+                        throw MeetingCommandError.unavailable(session.status)
+                    }
                     if self.overlay.captionsEnabled { self.overlay.show() }
                     self.refresh()
                     return true
@@ -110,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     await session?.stop()
                     self?.refresh()
                 },
-                didStart: { NSApp.hide(nil) }
+                didStart: { if NSApp.isActive { NSApp.hide(nil) } }
             )
             let bridge = NotesBridge(
                 store: store, preferences: preferences,
@@ -132,7 +144,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.refresh()
                 self?.bridge?.publishDesktopSettings()
             }
-            microphone.onChange = { [weak self] in self?.bridge?.publishDesktopSettings() }
+            microphone.onChange = { [weak self] in
+                guard let self else { return }
+                if self.microphone.snapshot().health == .missing {
+                    self.session?.selectedMicrophoneDisconnected(self.microphone.selectedDeviceName)
+                }
+                self.bridge?.publishDesktopSettings()
+            }
             session.onMeetingFinished = { [weak self] meeting in
                 guard let self, !self.termination.isPending else { return }
                 self.notes?.navigate(toMeeting: meeting.id)
@@ -214,22 +232,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        let listen = NSMenuItem(title: "Start meeting", action: #selector(toggleListening), keyEquivalent: "")
+        let listen = MeetingShortcuts.menuItem(title: "Start meeting", action: #selector(toggleListening))
         listen.target = self
         menu.addItem(listen)
         listenItem = listen
 
-        let captions = NSMenuItem(title: "Captions",
-                                  action: #selector(toggleOverlay), keyEquivalent: "")
+        let captions = MeetingShortcuts.menuItem(title: "Captions", action: #selector(toggleOverlay))
         captions.target = self
         menu.addItem(captions)
         captionsItem = captions
 
-        let catchUp = NSMenuItem(title: "Catch up", action: #selector(showCatchUp), keyEquivalent: "")
+        let catchUp = MeetingShortcuts.menuItem(title: "Catch up", action: #selector(showCatchUp))
         catchUp.target = self
         menu.addItem(catchUp)
         catchUpItem = catchUp
-        let screenshot = NSMenuItem(title: "Capture moment…", action: #selector(takeScreenshot), keyEquivalent: "")
+        let screenshot = MeetingShortcuts.menuItem(title: "Capture moment…", action: #selector(takeScreenshot))
         screenshot.target = self
         menu.addItem(screenshot)
         screenshotItem = screenshot
@@ -523,6 +540,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showSetup() {
+        guard session?.state.isActive != true else {
+            openSettings()
+            return
+        }
         if setup == nil { setup = SetupWindowController(model: setupModel) }
         setup?.present()
     }
@@ -600,11 +621,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         microphone.refresh()
         return DesktopSettings(
             captions: overlay.settings(),
-            microphone: microphone.snapshot(liveHealth: session?.microphoneHealth),
+            microphone: microphone.snapshot(liveHealth: session?.canCaptureImage == true ? session?.microphoneHealth : nil),
             shortcuts: shortcuts.statuses())
     }
 
-    private func applyCaptionSettings(_ settings: CaptionSettings) {
+    private func applyCaptionSettings(_ patch: CaptionSettingsPatch) {
+        let settings = patch.applying(to: overlay.settings())
         overlay.apply(settings)
         if session?.canCaptureImage == true, settings.enabled { overlay.show() }
         else if !settings.enabled { overlay.hide() }
@@ -744,6 +766,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// then reply. Optional enhancement is deliberately not awaited.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let requiresCleanup = session?.state.isActive == true || session?.canRetryFailedSave == true
+            || commands?.isStarting == true || setupModel.inputCheck.running
         switch termination.request(
             requiresCleanup: requiresCleanup,
             cancelPendingUI: { [weak self] in
@@ -751,7 +774,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.catchUp.close()
             },
             cleanup: { [weak self] in
-                guard let self, let session = self.session else { return }
+                guard let self else { return }
+                await self.setupModel.inputCheck.stop()
+                await self.commands?.end()
+                guard let session = self.session else { return }
                 if session.state.isActive { await session.stop() }
                 if session.canRetryFailedSave { _ = try? session.retryFailedSave() }
             },

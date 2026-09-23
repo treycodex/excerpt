@@ -31,7 +31,7 @@ export function createFakeNativeHost(input: { meetings?: Meeting[]; preferences?
       displays: [{ id: 'display-1', name: 'Built-in Display', connected: true }], capturable: true,
     },
     microphone: {
-      selectedDeviceId: 'mic-1', health: 'ready', message: 'Connected and ready.',
+      selectionLocked: false, selectedDeviceId: 'mic-1', health: 'ready', message: 'Connected and ready.',
       devices: [{ id: 'mic-1', name: 'MacBook Microphone', connected: true }],
     },
     shortcuts: [
@@ -48,7 +48,7 @@ export function createFakeNativeHost(input: { meetings?: Meeting[]; preferences?
     async startMeeting() { calls.push('startMeeting'); },
     async openLiveNotes() { calls.push('openLiveNotes'); },
     async loadDesktopSettings() { calls.push('loadDesktopSettings'); return clone(desktopSettings); },
-    async saveCaptionSettings(settings: Pick<CaptionSettings, 'preset' | 'size' | 'position' | 'enabled' | 'displayId'>) {
+    async saveCaptionSettings(settings: Partial<Pick<CaptionSettings, 'preset' | 'size' | 'position' | 'enabled' | 'displayId'>>) {
       calls.push('saveCaptionSettings');
       desktopSettings = { ...desktopSettings, captions: { ...desktopSettings.captions, ...clone(settings) } };
       return clone(desktopSettings);

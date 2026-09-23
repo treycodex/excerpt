@@ -65,6 +65,22 @@ struct Phase2LifecycleTests {
         return condition()
     }
 
+    @Test func `selected input loss interrupts and preserves the partial meeting`() async throws {
+        let directory = root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try MeetingStore(root: directory)
+        let capture = LifecycleCapture()
+        let session = try session(store: store, capture: capture) {
+            [.system: LifecycleTranscriber(kind: .system), .microphone: LifecycleTranscriber(kind: .microphone)]
+        }
+        await session.start()
+        session.selectedMicrophoneDisconnected("USB")
+        #expect(await waitUntil { session.lastSaved != nil })
+        #expect(session.lastSaved?.finishReason == .interrupted)
+        #expect(session.lastSaved?.captureError?.contains("USB") == true)
+        #expect(!capture.running)
+    }
+
     @Test func `immediate stop during startup cannot return to listening`() async throws {
         let directory = root()
         defer { try? FileManager.default.removeItem(at: directory) }

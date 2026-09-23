@@ -17,6 +17,14 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  const [commandError, setCommandError] = useState('');
+  const [commandPending, setCommandPending] = useState(false);
+  const runCommand = async (command: () => Promise<void>) => {
+    setCommandPending(true); setCommandError('');
+    try { await command(); }
+    catch (error) { setCommandError(error instanceof Error ? error.message : 'Could not complete that action. Try the Excerpt menu.'); }
+    finally { setCommandPending(false); }
+  };
 
   const refresh = () => {
     void readMeetingLibrary().then((result) => {
@@ -36,6 +44,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
       </header>
 
       {meetings === null && <p className="rubric">Reading…</p>}
+      {commandError && <p role="alert">{commandError}</p>}
       {deleteError && <p className="rubric" role="alert">{deleteError}</p>}
       {!storageAvailable && (
         <div className="empty-library"><p>This Mac’s meeting storage could not be read. Your saved meetings were left unchanged; reopen Excerpt or check the storage location.</p></div>
@@ -43,7 +52,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
       {storageAvailable && meetings?.length === 0 && (
         <div className="empty-library">
           <p>Nothing yet. Start a meeting to capture captions and moments.</p>
-          <div className="actions"><button onClick={() => { void onStart(); }}>Start meeting</button><button onClick={() => { void onOpenLiveNotes(); }}>Open live notes</button></div>
+          <div className="actions"><button disabled={commandPending} onClick={() => { void runCommand(onStart); }}>Start meeting</button><button disabled={commandPending} onClick={() => { void runCommand(onOpenLiveNotes); }}>Open live notes</button></div>
         </div>
       )}
 
@@ -82,7 +91,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
           </article>
         );
       })}
-      {meetings && meetings.length > 0 && <div className="actions"><button onClick={() => { void onStart(); }}>Start meeting</button><button onClick={() => { void onOpenLiveNotes(); }}>Open live notes</button></div>}
+      {meetings && meetings.length > 0 && <div className="actions"><button disabled={commandPending} onClick={() => { void runCommand(onStart); }}>Start meeting</button><button disabled={commandPending} onClick={() => { void runCommand(onOpenLiveNotes); }}>Open live notes</button></div>}
     </div></NotesWorkspace>
   );
 }
