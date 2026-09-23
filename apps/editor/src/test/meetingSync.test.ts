@@ -89,6 +89,41 @@ describe('native editor revision synchronization', () => {
     expect(acknowledgment.meeting.notes?.deletedBlocks?.[0]?.id).toBe('removed');
   });
 
+  it('saves image placement and caption alongside image bytes', async () => {
+    const host = createFakeNativeHost({ meetings: [base] });
+    restore = installFakeNativeHost(host);
+    const image = { id: 'new', dataUrl: 'data:image/png;base64,c3ludGhldGlj',
+      capturedAt: '2026-09-22T01:10:00Z', at: 0, timeKnown: false, caption: 'Important slide', origin: 'import' as const };
+    const next: Meeting = { ...base, images: [image], notes: { ...empty, blocks: [
+      { id: 'written', kind: 'paragraph', text: 'My notes', evidence: [], userEdited: true },
+      { id: 'image-new', kind: 'image', text: image.caption, imageId: image.id,
+        evidence: [], placement: 'manual' },
+    ] } };
+    const mutation = meetingMutation(base, next)!;
+    expect(mutation.changes.map((change) => change.type)).toEqual(['addImages', 'setDocument']);
+    const saved = await mutateMeeting(mutation);
+    expect(saved.meeting.images?.[0]?.timeKnown).toBe(false);
+    expect(saved.meeting.images?.[0]?.caption).toBe('Important slide');
+    expect(saved.meeting.notes?.blocks?.map((block) => block.id)).toEqual(['written', 'image-new']);
+    const captioned: Meeting = { ...saved.meeting,
+      images: [{ ...image, caption: 'Revised caption' }],
+      notes: { ...saved.meeting.notes!, blocks: saved.meeting.notes!.blocks!.map((block) =>
+        block.imageId === image.id ? { ...block, text: 'Revised caption', userEdited: true } : block) } };
+    const captionMutation = meetingMutation(saved.meeting, captioned)!;
+    expect(captionMutation.changes.map((change) => change.type)).toEqual(['updateImage', 'setDocument']);
+    const captionSave = await mutateMeeting(captionMutation);
+    expect(captionSave.meeting.images?.[0]?.caption).toBe('Revised caption');
+    expect(captionSave.meeting.notes?.blocks?.[1]?.text).toBe('Revised caption');
+    const placed: Meeting = { ...captionSave.meeting,
+      images: [{ ...captionSave.meeting.images![0]!, anchorAt: 300_000, timeKnown: true }],
+      notes: { ...captionSave.meeting.notes!, blocks: captionSave.meeting.notes!.blocks!.map((block) =>
+        block.imageId === image.id ? { ...block, at: 300_000 } : block) } };
+    const anchored = await mutateMeeting(meetingMutation(captionSave.meeting, placed)!);
+    expect(anchored.meeting.images?.[0]?.at).toBe(0);
+    expect(anchored.meeting.images?.[0]?.anchorAt).toBe(300_000);
+    expect(anchored.meeting.notes?.blocks?.[1]?.at).toBe(300_000);
+  });
+
   it('propagates native deletion failures so the library can retain the entry', async () => {
     const host = createFakeNativeHost({ meetings: [base] });
     host.deleteMeeting = async () => { throw new Error('Synthetic durable delete failure'); };

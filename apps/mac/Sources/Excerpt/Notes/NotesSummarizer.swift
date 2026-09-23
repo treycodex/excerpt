@@ -296,11 +296,11 @@ enum NotesSummarizer {
         // point and again under two topics: one meeting's notes held three distinct
         // bullets across nine slots. Key points are taken first, so a headline stays
         // a headline and the topics carry what is left.
-        var seen: Set<String> = []
-        var topicIndexByTitle: [String: Int] = [:]
-
         for (chunkIndex, passage) in passages.enumerated() {
             let sources = passage.sources
+            // Deduplicate within one passage, while keeping a later return to the
+            // same subject attached to its later transcript evidence.
+            var seen: Set<String> = []
             let fresh = { (bullet: NoteBullet?) -> NoteBullet? in
                 guard let bullet, seen.insert(normalized(bullet.text)).inserted else { return nil }
                 return bullet
@@ -313,15 +313,7 @@ enum NotesSummarizer {
                     fresh(supported(point, sources: sources, id: "topic-\(chunkIndex)-\(index)-\(n)"))
                 }
                 guard !bullets.isEmpty else { continue }
-                // Passages are summarised independently, so the same subject comes back
-                // under the same heading. Merge rather than print it twice.
-                let key = normalized(topic.title)
-                if let existing = topicIndexByTitle[key] {
-                    topics[existing].bullets += bullets
-                } else {
-                    topicIndexByTitle[key] = topics.count
-                    topics.append(NoteTopic(id: "topic-\(chunkIndex)-\(index)", title: topic.title, bullets: bullets))
-                }
+                topics.append(NoteTopic(id: "topic-\(chunkIndex)-\(index)", title: topic.title, bullets: bullets))
             }
         }
         guard !keyPoints.isEmpty || !topics.isEmpty else { return nil }

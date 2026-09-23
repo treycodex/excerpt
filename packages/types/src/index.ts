@@ -156,6 +156,10 @@ export interface MeetingImage {
   capturedAt: string;
   /** Original capture time on the meeting clock; independent of document position. */
   at: number;
+  /** User-corrected meeting-time anchor; original capture time remains in `at`. */
+  anchorAt?: number;
+  /** False for a finished-meeting import whose meeting time is unknown. */
+  timeKnown?: boolean;
   caption: string;
   /** How the image entered the meeting. Missing means a legacy capture. */
   origin?: 'excerpt' | 'paste' | 'drop' | 'import';
@@ -181,6 +185,8 @@ export interface NoteBlock {
   evidence: Evidence[];
   at?: number;
   imageId?: string;
+  /** Automatic image blocks may be recomposed; a moved image stays where the reader put it. */
+  placement?: 'automatic' | 'manual';
   userEdited?: boolean;
   needsReview?: boolean;
   indent?: number;
@@ -311,7 +317,8 @@ export type MeetingChange =
       sourceRevision: number;
     }
   | { type: 'addImages'; images: MeetingImage[]; blocks: NoteBlock[] }
-  | { type: 'updateImage'; imageId: string; caption: string; needsReview?: boolean; blockText: string };
+  | { type: 'updateImage'; imageId: string; caption: string; needsReview?: boolean;
+      anchorAt?: number; timeKnown?: boolean; blockText: string };
 
 export interface MeetingMutation {
   operationId: string;

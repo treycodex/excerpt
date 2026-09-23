@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { NotesWorkspace, OPEN_AT_KEY } from './NotesWorkspace';
 import { NotesDocument } from './NotesDocument';
 import { readMeetingImage } from '../meetingImages';
-import { acceptsAcknowledgment, applyPreferences, bridge, relateItems, compareNotesDocuments, meetingMutation, mutateMeeting, notesMetadataDifference, matchedBoosts, mergeGeneratedNotes, notesCapability, orderCategories, preserveGeneratedConflict, reconcileMeetingUpdate, toMarkdown, toTurns, refreshMeetingNotes, preserveNoteEdits, noteTitle, editableDocument, insertMeetingImage, meetingImagePassage, previewTranscriptCorrection, safeImageUrl, toHTML, transcriptEventTime } from '@excerpt/core';
+import { acceptsAcknowledgment, applyPreferences, bridge, relateItems, compareNotesDocuments, meetingMutation, mutateMeeting, notesMetadataDifference, matchedBoosts, mergeGeneratedNotes, notesCapability, orderCategories, preserveGeneratedConflict, reconcileMeetingUpdate, toMarkdown, toTurns, refreshMeetingNotes, preserveNoteEdits, noteTitle, editableDocument, insertMeetingImage, meetingImagePassage, meetingImageContext, meetingImageTime, previewTranscriptCorrection, safeImageUrl, toHTML, transcriptEventTime } from '@excerpt/core';
 import { Frame, Strip } from '@excerpt/ui';
 import type { StripMark } from '@excerpt/ui';
 import type { ItemRelation } from '@excerpt/core';
@@ -87,6 +87,7 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   const [running, setRunning] = useState<'' | 'refresh' | Style>('');
   const [generationMessage, setGenerationMessage] = useState('');
   const [generationError, setGenerationError] = useState<{ message: string; style?: Style } | null>(null);
+  const [retryingAutomatic, setRetryingAutomatic] = useState(false);
   const [providerStatus, setProviderStatus] = useState<NotesProviderStatus | undefined>(undefined);
   const [statusRead, setStatusRead] = useState(!bridge()?.getNotesProviderStatus);
   const requestToken = useRef(0);
@@ -96,15 +97,13 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   const durableMeeting = useRef(initial);
   const pendingSaves = useRef(new Set<number>());
   const [correction, setCorrection] = useState<{ eventId: string; text: string } | null>(null);
-  const [pendingImages, setPendingImages] = useState<File[]>([]);
-  const [pendingImageOrigin, setPendingImageOrigin] = useState<MeetingImage['origin']>('import');
-  const [imageTime, setImageTime] = useState('0:00');
   const [imageError, setImageError] = useState('');
   const [importing, setImporting] = useState(false);
   // What the reader would actually end up with, kept beside the wording it came from
   // so it can be re-merged against whatever the document says at the moment they
   // accept it rather than against whatever it said when the request was made.
   const [candidate, setCandidate] = useState<Candidate | null>(null);
+  const [wordingUndo, setWordingUndo] = useState<{ before: Document; after: Document; sourceRevision: number } | null>(null);
   const rows = useRef<Record<string, HTMLDivElement | null>>({});
   const cards = useRef<Record<string, HTMLElement | null>>({});
 
@@ -139,6 +138,7 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   }, []);
 
   const persist = (next: Meeting) => {
+    setWordingUndo(null);
     const version = ++saveVersion.current;
     latestMeeting.current = next;
     setMeeting(next);
@@ -185,34 +185,36 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
 
   const noteDocument = useMemo(() => editableDocument(meeting), [meeting]);
   const editDocument = (notes: Document) => {
-    const next = { ...latestMeeting.current, notes };
+    const captions = new Map((notes.blocks ?? []).filter((block) => block.imageId)
+      .map((block) => [block.imageId!, block.text]));
+    const next = { ...latestMeeting.current, notes,
+      ...(latestMeeting.current.images ? { images: latestMeeting.current.images.map((image) => captions.has(image.id)
+        ? { ...image, caption: captions.get(image.id)! } : image) } : {}) };
     delete next.suggestedNotes;
     persist(next);
   };
   const queueImages = (files: File[], origin: MeetingImage['origin'] = 'import') => {
-    setPendingImages(files); setImageError('');
-    setPendingImageOrigin(origin);
-    const start = new Date(meeting.startedAt).getTime();
-    const end = meeting.endedAt ? new Date(meeting.endedAt).getTime() : start + duration;
-    const fileTime = files[0]?.lastModified ?? 0;
-    setImageTime(clock(fileTime >= start && fileTime <= end ? fileTime - start : position ?? 0));
-  };
-  const importImages = async () => {
-    const match = /^(\d+):([0-5]\d)$/.exec(imageTime);
-    if (!match) { setImageError('Enter a meeting time as minutes:seconds, for example 12:34.'); return; }
-    const at = (Number(match[1]) * 60 + Number(match[2])) * 1000;
-    if (at > duration) { setImageError('Choose a time within this meeting.'); return; }
+    if (!files.length) return;
+    setImageError('');
     setImporting(true);
-    const targetId = meeting.id;
-    try {
-      const capturedAt = new Date(new Date(meeting.startedAt).getTime() + at).toISOString();
-      const images = await Promise.all(pendingImages.map((file) => readMeetingImage(file, at, capturedAt, pendingImageOrigin)));
-      if (latestMeeting.current.id !== targetId) return;
-      let next = latestMeeting.current;
-      for (const image of images) next = insertMeetingImage(next, image);
-      persist(next); setPendingImages([]);
-    } catch (error) { setImageError(error instanceof Error ? error.message : 'Could not import that image.'); }
-    finally { setImporting(false); }
+    const target = latestMeeting.current;
+    void (async () => {
+      try {
+        const live = !target.endedAt && target.draftRevision !== undefined;
+        const at = live ? await bridge()?.getLiveMeetingTime(target.id) : 0;
+        if (at === undefined) throw new Error('The native meeting clock is unavailable.');
+        const capturedAt = new Date().toISOString();
+        const images = await Promise.all(files.map(async (file) => {
+          const image = await readMeetingImage(file, at, capturedAt, origin);
+          return live ? image : { ...image, timeKnown: false };
+        }));
+        if (latestMeeting.current.id !== target.id) return;
+        let next = latestMeeting.current;
+        for (const image of images) next = insertMeetingImage(next, image);
+        persist(next);
+      } catch (error) { setImageError(error instanceof Error ? error.message : 'Could not import that image.'); }
+      finally { setImporting(false); }
+    })();
   };
   /**
    * Offer a finished result — but only if it would change something.
@@ -304,7 +306,7 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
     status: providerStatus,
   });
   const live = prefs ? applyPreferences(visible, prefs) : visible;
-  const duration = Math.max(1, ...meeting.events.map(transcriptEventTime), ...(meeting.images ?? []).map((i) => i.at), meeting.endedAt ? new Date(meeting.endedAt).getTime() - new Date(meeting.startedAt).getTime() : 0);
+  const duration = Math.max(1, ...meeting.events.map(transcriptEventTime), ...(meeting.images ?? []).filter((i) => i.timeKnown !== false).map(meetingImageTime), meeting.endedAt ? new Date(meeting.endedAt).getTime() - new Date(meeting.startedAt).getTime() : 0);
   const decided = live.filter((i) => i.state === 'decided' && i.category === 'decision');
   const mine = live.filter((i) => i.assignee === 'you');
   const review = live.filter((i) => i.category === 'action' && i.assignee === 'unassigned');
@@ -339,8 +341,8 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
     settled: i.state === 'decided',
     label: i.title,
     kind: 'item' as const,
-  })), ...(meeting.images ?? []).map((image) => ({
-    id: `image:${image.id}`, at: image.at, label: image.caption || 'Captured moment', kind: 'image' as const,
+  })), ...(meeting.images ?? []).filter((image) => image.timeKnown !== false).map((image) => ({
+    id: `image:${image.id}`, at: meetingImageTime(image), label: image.caption || 'Captured moment', kind: 'image' as const,
   }))];
 
   const scrollBehavior = () =>
@@ -366,7 +368,7 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
     setActiveItem(null);
     setSelectedMoment(id);
     setExpandedMoment(false);
-    setPosition(image.at);
+    setPosition(meetingImageTime(image));
   };
 
   const selectMark = (id: string) => {
@@ -525,7 +527,7 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
           'text/html': new Blob([html], { type: 'text/html' }),
         })]);
       } else await navigator.clipboard.writeText(markdown);
-      setCopyFailed(false); setCopied(true);
+      setCopyFailed(false); setCopied(true); setGenerationMessage('Notes copied.');
       setTimeout(() => setCopied(false), 1800);
     } catch { setCopyFailed(true); }
   };
@@ -540,7 +542,7 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
     if (host) {
       try {
         const outcome = await host.exportMarkdown(filename, markdown);
-        if (outcome === 'saved') setGenerationMessage('Markdown exported.');
+        setGenerationMessage(outcome === 'saved' ? 'Markdown exported.' : 'Markdown export cancelled.');
       } catch (error) {
         setGenerationMessage(error instanceof Error ? error.message : 'Could not export Markdown.');
       }
@@ -562,7 +564,7 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
     if (host?.exportHTML) {
       try {
         const outcome = await host.exportHTML(filename, html);
-        if (outcome === 'saved') setGenerationMessage('HTML exported.');
+        setGenerationMessage(outcome === 'saved' ? 'HTML exported.' : 'HTML export cancelled.');
       } catch (error) {
         setGenerationMessage(error instanceof Error ? error.message : 'Could not export HTML.');
       }
@@ -583,6 +585,15 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
     delete next.suggestedNotes;
     persist(next);
   };
+  const anchorMoment = (at: number) => {
+    if (!moment || !momentBlock) return;
+    const images = (latestMeeting.current.images ?? []).map((image) => image.id === moment.id
+      ? { ...image, anchorAt: at, timeKnown: true, context: meetingImageContext(latestMeeting.current, at) }
+      : image);
+    const notes = { ...noteDocument, blocks: noteDocument.blocks!.map((block) => block.id === momentBlock.id
+      ? { ...block, at } : block) };
+    persist({ ...latestMeeting.current, images, notes });
+  };
   /**
    * Apply, merging again against the document as it stands now.
    *
@@ -595,14 +606,17 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
     if ((latestMeeting.current.sourceRevision ?? 0) !== candidate.revision) {
       setCandidate(null); setGenerationMessage(STALE); return;
     }
-    editDocument(mergeGeneratedNotes(editableDocument(latestMeeting.current), candidate.produced));
+    const before = editableDocument(latestMeeting.current);
+    const after = mergeGeneratedNotes(before, candidate.produced);
+    editDocument(after);
+    setWordingUndo({ before, after, sourceRevision: candidate.revision });
     setCandidate(null);
     setGenerationMessage('Applied. Your writing, images and image positions were kept.');
   };
 
   return (
     <NotesWorkspace currentId={meeting.id}>
-    <div className="notebook-toolbar"><a href="#/meetings">All meetings <span>/</span> Meeting notes</a><div><span className={`save-state ${saveState}`} role="status">{saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Not saved — export a copy' : 'Saved on this device'}</span><button onClick={copy}>{copied ? 'Copied ✓' : 'Copy notes'}</button><button onClick={() => { void download(); }}>Markdown ↗</button><button onClick={() => { void exportHTML(); }}>Export with images ↗</button></div></div>
+    <div className="notebook-toolbar"><a href="#/meetings">All meetings <span>/</span> Meeting notes</a><div><span className={`save-state ${saveState}`} role="status">{saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Not saved — export a copy' : 'Saved on this device'}</span><details className="toolbar-menu"><summary>Export</summary><div><button onClick={() => { void copy(); }}>{copied ? 'Copied ✓' : 'Copy notes'}</button><button onClick={() => { void download(); }}>Save Markdown…</button><button onClick={() => { void exportHTML(); }}>Save HTML with images…</button></div></details></div></div>
     <div className="notes notes-reading">
       <header className="masthead">
         <div className="notebook-date">{new Date(meeting.startedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })} <span>·</span> {clock(duration)} <span>·</span> {isLiveDraft ? 'Live meeting' : meeting.processing === 'demo' ? 'Legacy meeting' : meeting.processing === 'cloud' ? 'Cloud transcription' : 'On-device transcription'}</div>
@@ -614,14 +628,16 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
           : 'Your conversation, with the important parts ready to revisit.'}</p>
         <div className="note-counts" aria-label="Meeting note counts"><span><b>{decided.length}</b> decisions</span><span><b>{mine.length}</b> assigned to you</span><span><b>{review.length}</b> to assign</span></div>
         {copyFailed && <p role="status" className="rubric">Could not copy to the clipboard. Use Export to save your notes.</p>}
-        <div className="notebook-tabs" role="group" aria-label="Meeting view"><button aria-pressed={tab === 'notes'} onClick={() => setTab('notes')}>Notes</button><button aria-pressed={tab === 'review'} onClick={() => setTab('review')}>Review <span>{live.filter((i) => !i.confirmed || i.needsReview).length}</span></button><button aria-pressed={tab === 'transcript'} onClick={() => setTab('transcript')}>Transcript <span>{meeting.events.length}</span></button></div>
+        <nav className="notebook-view-actions" aria-label="Meeting details">{tab === 'notes'
+          ? <><button onClick={() => setTab('transcript')}>View transcript</button><button onClick={() => setTab('review')}>Review extracted items{live.some((i) => !i.confirmed || i.needsReview) ? ` · ${live.filter((i) => !i.confirmed || i.needsReview).length}` : ''}</button></>
+          : <><button onClick={() => setTab('notes')}>← Back to notes</button><span>{tab === 'review' ? 'Detailed review' : 'Transcript'}</span></>}</nav>
         <details className="notebook-timeline"><summary>Explore meeting timeline</summary><Strip duration={duration} position={position} marks={marks} onScrub={scrub} onSelect={selectMark} {...(selectedMoment ? { selectedId: `image:${selectedMoment}` } : activeItem ? { selectedId: `item:${activeItem}` } : {})} /><p className="rubric">{meeting.events.some((e) => e.tStart !== undefined) ? 'Lines are notes; diamonds are captured moments. Select either to revisit its source.' : 'Lines are notes; diamonds are captured moments. Transcript timings are approximate.'}</p></details>
       </header>
       <div hidden={tab !== 'notes'}>
       <Recap items={live} images={meeting.images ?? []} onItem={openItemSource} onMoment={openMoment} />
       {sourceNote && <SourcePanel note={sourceNote} passages={sourcePassages}
         onOpen={openTranscript} onClose={() => setSourceNote(null)} />}
-      {moment && <MomentViewer image={moment} caption={momentBlock?.text ?? moment.caption} passage={momentPassage} expanded={expandedMoment} onCaption={captionMoment} onExpand={() => setExpandedMoment((value) => !value)} onClose={() => setSelectedMoment(null)} onSource={openTranscript} />}
+      {moment && <MomentViewer key={moment.id} image={moment} caption={momentBlock?.text ?? moment.caption} passage={momentPassage} expanded={expandedMoment} duration={duration} onCaption={captionMoment} onTime={anchorMoment} onExpand={() => setExpandedMoment((value) => !value)} onClose={() => setSelectedMoment(null)} onSource={openTranscript} />}
       <div className="document-toolbar">
         {/* What produced this wording, then what the buttons beside it can actually
             do here — before they are pressed, not in the message afterwards. */}
@@ -630,22 +646,33 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
           {capability.explanation && <small>{capability.explanation}{capability.settings && capability.enhancements.length === 0
             && <> <a href="#/preferences" onClick={rememberReturn}>Note enhancement settings</a></>}</small>}
         </div>
-        {(capability.refresh || capability.enhancements.length > 0) && <div className="generation-actions">
+        {(capability.refresh || capability.enhancements.length > 0) && <details className="generation-actions"><summary>Rewrite options</summary><div>
           {capability.enhancements.map((enhancement) => <button key={enhancement.style} disabled={generating} onClick={() => { void enhance(enhancement.style); }}>
             {running === enhancement.style ? 'Improving notes…' : enhancement.label}
           </button>)}
           {capability.refresh && <button disabled={generating} onClick={refreshExcerpts}>{running === 'refresh' ? 'Refreshing excerpts…' : 'Refresh excerpts'}</button>}
-        </div>}
+        </div></details>}
       </div>
       {/* Why these are the transcript-based notes, where they are read rather than
           only in the menu bar the moment the meeting ended. Suppressed once the user
           has asked for a regeneration, whose own message is the current answer. */}
       {(meeting.generationStatus?.state === 'queued' || meeting.generationStatus?.state === 'running')
         && <p className="rubric" role="status">Organizing notes… You can keep writing while this finishes.</p>}
-      {meeting.generationStatus?.state === 'failed'
-        && <p className="rubric" role="alert">{meeting.generationStatus.message ?? 'Automatic note enhancement could not be saved. Your transcript and current notes are intact.'}</p>}
+      {(meeting.generationStatus?.state === 'failed' || meeting.generationStatus?.state === 'cancelled')
+        && <p className="rubric" role="alert">{meeting.generationStatus.message ?? 'Automatic note enhancement stopped. Your transcript and current notes are intact.'} <button disabled={retryingAutomatic} onClick={() => {
+          setRetryingAutomatic(true);
+          void bridge()?.retryAutomaticNotes(meeting.id).then((updated) => setMeeting(updated))
+            .catch((error) => setGenerationError({ message: error instanceof Error ? error.message : 'Could not retry automatic notes.' }))
+            .finally(() => setRetryingAutomatic(false));
+        }}>{retryingAutomatic ? 'Retrying…' : 'Try again'}</button></p>}
       {noteDocument.notice && !generationMessage && <p className="rubric" role="status">{noteDocument.notice}</p>}
       {generationMessage && <p className="rubric" role="status">{generationMessage}</p>}
+      {wordingUndo && (meeting.sourceRevision ?? 0) === wordingUndo.sourceRevision
+        && compareNotesDocuments(noteDocument, wordingUndo.after) === 'same'
+        && <button className="writing-undo" onClick={() => {
+          editDocument(wordingUndo.before);
+          setGenerationMessage('Previous wording restored.');
+        }}>Undo rewrite</button>}
       {/* A failed rewrite is not a successful rebuild. The notes on screen are the
           ones that were there; running ours instead stays an explicit choice. */}
       {generationError && <section className="generation-error" role="alert">
@@ -667,15 +694,16 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
           : candidate.difference === 'provenance' ? 'Update the description' : 'Update the sources'}</button>
         <button onClick={() => setCandidate(null)}>Keep current notes</button>
       </section>}
-      {pendingImages.length > 0 && <section className="image-placement" aria-label="Place screenshot"><h2>Place {pendingImages.length === 1 ? 'image' : 'images'} in the conversation</h2><p>Choose when this was shown. The image will sit beside the notes from that moment.</p><label>Meeting time <input aria-label="Image meeting time" value={imageTime} onChange={(e) => setImageTime(e.target.value)} placeholder="12:34" /></label><button disabled={importing} onClick={() => { void importImages(); }}>{importing ? 'Adding…' : 'Add to notes'}</button><button disabled={importing} onClick={() => setPendingImages([])}>Cancel</button>{imageError && <p role="alert">{imageError}</p>}</section>}
-      <fieldset className="notes-editor" disabled={generating || importing}>
+      {importing && <p className="rubric" role="status">Adding image…</p>}
+      {imageError && <p className="rubric" role="alert">{imageError}</p>}
+      <fieldset className="notes-editor" disabled={generating}>
       <NotesDocument document={noteDocument} images={meeting.images ?? []} onChange={editDocument} onSource={openBlockSource} onImages={queueImages} onMoment={openMoment} selectedImageId={selectedMoment} />
       </fieldset>
       </div>
       <div hidden={tab !== 'review'}>
       <div className="review-intro"><h2>Before you move on</h2><p>Check what was agreed, what you own, and what still needs an owner. Confirming an item does not mark the work complete.</p><span>{live.filter((i) => i.confirmed && !i.needsReview).length} of {live.length} reviewed</span></div>
       <fieldset className="notes-editor" disabled={generating}>
-      {live.length === 0 && <p>No decisions or commitments were extracted. You can still write freely in Notes.</p>}
+      {live.length === 0 && <p>No decisions or action items found. Your transcript and screenshots are saved.</p>}
       {grouped.map(([category, group]) => (
         <section key={category}>
           <h2>{HEADING[category]}</h2>
@@ -729,9 +757,8 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
       )}
       </fieldset>
       </div>
-      {/* No heading: the segmented control directly above already says Transcript.
-          Turns rather than lines — one speaker label per stretch of speech, because a
-          settled result is not a unit anybody reads in. */}
+      {/* Secondary transcript view: turns rather than lines, with one speaker label
+          per stretch of speech. A settled result is not a unit anybody reads in. */}
       <section className="transcript" hidden={tab !== 'transcript'}>
         {/* The way back. Opening a passage from the source panel switched tabs and
             left nothing saying where the reader had come from, so checking a note
@@ -771,16 +798,28 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
   );
 }
 
-function MomentViewer({ image, caption, passage, expanded, onCaption, onExpand, onClose, onSource }: {
-  image: MeetingImage; caption: string; passage: Meeting['events']; expanded: boolean;
-  onCaption: (text: string) => void; onExpand: () => void; onClose: () => void; onSource: (id: string) => void;
+function MomentViewer({ image, caption, passage, expanded, duration, onCaption, onTime, onExpand, onClose, onSource }: {
+  image: MeetingImage; caption: string; passage: Meeting['events']; expanded: boolean; duration: number;
+  onCaption: (text: string) => void; onTime: (at: number) => void;
+  onExpand: () => void; onClose: () => void; onSource: (id: string) => void;
 }) {
+  const [timeInput, setTimeInput] = useState(image.timeKnown === false ? '' : clock(meetingImageTime(image)));
+  const [timeError, setTimeError] = useState('');
   const origin = image.origin === 'excerpt' ? 'Excerpt capture' : image.origin === 'drop' ? 'Dropped image' : image.origin === 'paste' ? 'Pasted image' : image.origin === 'import' ? 'Imported image' : 'Captured image';
-  return <aside id="selected-moment" className="moment-viewer" aria-label={`Captured moment at ${clock(image.at)}`}>
-    <header><div><span>Captured moment</span><strong>{clock(image.at)}</strong></div><button aria-label="Close captured moment" onClick={onClose}>×</button></header>
+  return <aside id="selected-moment" className="moment-viewer" aria-label={image.timeKnown === false ? 'Captured moment with unknown meeting time' : `Captured moment at ${clock(meetingImageTime(image))}`}>
+    <header><div><span>Captured moment</span><strong>{image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image))}</strong></div><button aria-label="Close captured moment" onClick={onClose}>×</button></header>
     <div className="moment-layout">
-      <div>{safeImageUrl(image.dataUrl) ? <img src={image.dataUrl} alt={caption || `Captured moment at ${clock(image.at)}`} /> : <p>Image unavailable.</p>}<label>Caption<input value={caption} onChange={(event) => onCaption(event.target.value)} placeholder="What should you remember about this?" /></label><small>{origin} · {new Date(image.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small>{image.needsReview && <p className="source-review-notice">Nearby transcript wording changed. Recheck this moment’s context.</p>}</div>
-      <section><h3>Conversation around this moment</h3>{passage.length ? passage.map((event) => <button className="moment-passage" key={event.id} onClick={() => onSource(event.id)}><span>{event.role === 'you' ? 'You' : event.speakerLabel === 'SPEAKER' ? 'Others' : event.speakerLabel} · {stamp(event)}</span>{event.text}</button>) : <p className="moment-empty">No speech settled around this capture. The image is still saved at its original time.</p>}<button className="moment-expand" onClick={onExpand}>{expanded ? 'Show nearby passage' : 'Expand passage'}</button><p>Nearby speech gives context. It does not claim the words describe the image.</p></section>
+      <div>{safeImageUrl(image.dataUrl) ? <img src={image.dataUrl} alt={caption || 'Meeting image'} /> : <p>Image unavailable.</p>}<label>Caption<input value={caption} onChange={(event) => onCaption(event.target.value)} placeholder="What should you remember about this?" /></label><small>{origin} · {new Date(image.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small>
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          const match = /^(\d+):([0-5]\d)$/.exec(timeInput.trim());
+          if (!match) { setTimeError('Enter minutes:seconds, for example 12:34.'); return; }
+          const at = (Number(match[1]) * 60 + Number(match[2])) * 1000;
+          if (at > duration) { setTimeError('Choose a time within this meeting.'); return; }
+          setTimeError(''); onTime(at);
+        }}><label>Meeting time <input aria-label="Image meeting time" value={timeInput} onChange={(event) => setTimeInput(event.target.value)} placeholder="12:34" /></label><button type="submit">Place at time</button></form>
+        {timeError && <p role="alert">{timeError}</p>}{image.needsReview && <p className="source-review-notice">Nearby transcript wording changed. Recheck this moment’s context.</p>}</div>
+      <section><h3>Conversation around this moment</h3>{passage.length ? passage.map((event) => <button className="moment-passage" key={event.id} onClick={() => onSource(event.id)}><span>{event.role === 'you' ? 'You' : event.speakerLabel === 'SPEAKER' ? 'Others' : event.speakerLabel} · {stamp(event)}</span>{event.text}</button>) : <p className="moment-empty">{image.timeKnown === false ? 'This image has no meeting time. Use the block controls to place it in your notes.' : 'No speech settled around this capture. The image is still saved at its original time.'}</p>}{image.timeKnown !== false && <button className="moment-expand" onClick={onExpand}>{expanded ? 'Show nearby passage' : 'Expand passage'}</button>}<p>Nearby speech gives context. It does not claim the words describe the image.</p></section>
     </div>
   </aside>;
 }
@@ -852,7 +891,7 @@ function Recap({ items, images, onItem, onMoment }: {
               <li key={image.id}>
                 <button onClick={() => onMoment(image.id)}>
                   {safeImageUrl(image.dataUrl) && <img src={image.dataUrl} alt="" />}
-                  <span>{image.caption || clock(image.at)}</span>
+                  <span>{image.caption || (image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image)))}</span>
                 </button>
               </li>
             ))}

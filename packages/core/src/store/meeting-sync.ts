@@ -47,12 +47,15 @@ export function meetingMutation(before: Meeting | undefined, after: Meeting): Me
       changes.push({
         type: 'updateImage', imageId: image.id, caption: image.caption,
         ...(image.needsReview === undefined ? {} : { needsReview: image.needsReview }),
+        ...(image.anchorAt === undefined ? {} : { anchorAt: image.anchorAt }),
+        ...(image.timeKnown === undefined ? {} : { timeKnown: image.timeKnown }),
         blockText: block?.text ?? image.caption,
       });
     }
 
-    const imageOnlyDocument = additions.length > 0 || changedImages.length > 0;
-    if (!imageOnlyDocument && (!equal(before.notes, after.notes) || !equal(before.suggestedNotes, after.suggestedNotes))) {
+    // An image mutation carries bytes/caption; the document mutation carries the
+    // exact placement and any writing made while that image was being imported.
+    if (!equal(before.notes, after.notes) || !equal(before.suggestedNotes, after.suggestedNotes)) {
       changes.push({
         type: 'setDocument', document: after.notes ?? null,
         suggestedNotes: after.suggestedNotes ?? null,

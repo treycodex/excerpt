@@ -14,7 +14,7 @@ final class NotesBridge: NSObject {
     /// Names the JavaScript side calls. Matching an unknown one is an error the
     /// webview should see, not a silent undefined.
     private enum Method: String {
-        case startMeeting, openLiveNotes, listMeetings, loadMeeting, mutateMeeting, deleteMeeting
+        case startMeeting, openLiveNotes, getLiveMeetingTime, retryAutomaticNotes, listMeetings, loadMeeting, mutateMeeting, deleteMeeting
         case loadPreferences, savePreferences, exportMarkdown, exportHTML, summarizeNotes
         case getNotesProviderStatus, configureOpenAIKey, removeOpenAIKey
         case loadDesktopSettings, saveCaptionSettings, selectMicrophone
@@ -23,11 +23,13 @@ final class NotesBridge: NSObject {
     private enum Failure: Error, LocalizedError {
         case unknownMethod(String)
         case badArguments(String)
+        case noLiveMeeting
 
         var errorDescription: String? {
             switch self {
             case .unknownMethod(let name): "Excerpt has no \(name)()"
             case .badArguments(let name): "\(name)() was called with the wrong arguments"
+            case .noLiveMeeting: "That meeting is no longer listening. Open the saved notes and add the image there."
             }
         }
     }
@@ -39,6 +41,8 @@ final class NotesBridge: NSObject {
     private let didDeleteMeeting: (String) -> Void
     private let startMeetingAction: () async throws -> Void
     private let openLiveNotesAction: () -> Void
+    private let liveMeetingTime: (String) -> Double?
+    private let retryAutomaticNotesAction: (String) throws -> Meeting
     private let desktopSettings: () -> DesktopSettings
     private let saveCaptionSettingsAction: (CaptionSettingsPatch) throws -> Void
     private let selectMicrophoneAction: (String) throws -> Void
@@ -52,6 +56,8 @@ final class NotesBridge: NSObject {
          didDeleteMeeting: @escaping (String) -> Void = { _ in },
          startMeeting: @escaping () async throws -> Void = {},
          openLiveNotes: @escaping () -> Void = {},
+         liveMeetingTime: @escaping (String) -> Double? = { _ in nil },
+         retryAutomaticNotes: @escaping (String) throws -> Meeting = { _ in throw Failure.noLiveMeeting },
          desktopSettings: @escaping () -> DesktopSettings = {
              DesktopSettings(
                 captions: CaptionSettings(preset: .classic, size: .medium, position: .standard,
@@ -70,6 +76,8 @@ final class NotesBridge: NSObject {
         self.didDeleteMeeting = didDeleteMeeting
         self.startMeetingAction = startMeeting
         self.openLiveNotesAction = openLiveNotes
+        self.liveMeetingTime = liveMeetingTime
+        self.retryAutomaticNotesAction = retryAutomaticNotes
         self.desktopSettings = desktopSettings
         self.saveCaptionSettingsAction = saveCaptionSettings
         self.selectMicrophoneAction = selectMicrophone
@@ -105,6 +113,8 @@ final class NotesBridge: NSObject {
       globalThis.__excerptBridge = {
         startMeeting:     ()          => send('startMeeting', []),
         openLiveNotes:    ()          => send('openLiveNotes', []),
+        getLiveMeetingTime: (id)      => send('getLiveMeetingTime', [id]),
+        retryAutomaticNotes: (id)      => send('retryAutomaticNotes', [id]),
         loadDesktopSettings: ()       => send('loadDesktopSettings', []),
         saveCaptionSettings: (value)  => send('saveCaptionSettings', [JSON.stringify(value)]),
         selectMicrophone: (deviceId)  => send('selectMicrophone', [deviceId]),
@@ -197,6 +207,13 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
         case .openLiveNotes:
             performOpenLiveNotes()
             return nil
+        case .getLiveMeetingTime:
+            guard let id = arguments.first as? String else { throw Failure.badArguments("getLiveMeetingTime") }
+            guard let position = liveMeetingTime(id) else { throw Failure.noLiveMeeting }
+            return try json(position)
+        case .retryAutomaticNotes:
+            guard let id = arguments.first as? String else { throw Failure.badArguments("retryAutomaticNotes") }
+            return try json(retryAutomaticNotesAction(id))
         case .loadDesktopSettings:
             return try json(desktopSettings())
         case .saveCaptionSettings:

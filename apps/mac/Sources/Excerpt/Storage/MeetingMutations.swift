@@ -121,12 +121,17 @@ enum MeetingMutationReducer {
                 meeting.notes = document
                 meeting.suggestedNotes = nil
                 changedDocument = true
-            case .updateImage(let imageId, let caption, let needsReview, let blockText):
+            case .updateImage(let imageId, let caption, let needsReview, let anchorAt, let timeKnown, let blockText):
                 guard let index = meeting.images?.firstIndex(where: { $0.id == imageId }) else {
                     throw MeetingMutationFailure.missingImage(imageId)
                 }
                 meeting.images?[index].caption = caption
                 meeting.images?[index].needsReview = needsReview
+                if let anchorAt {
+                    meeting.images?[index].anchorAt = anchorAt
+                    meeting.images?[index].context = MeetingMoments.context(at: anchorAt, events: meeting.events)
+                }
+                if let timeKnown { meeting.images?[index].timeKnown = timeKnown }
                 if var document = meeting.notes {
                     document.blocks = document.blocks?.map { block in
                         guard block.imageId == imageId else { return block }

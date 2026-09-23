@@ -9,14 +9,17 @@ final class MeetingEnhancer {
     typealias Summarize = @Sendable (Meeting, Preferences, NotesGenerationRequest) async throws -> NotesDocument
     typealias Fallback = (Meeting) throws -> NotesDocument
     typealias ShapeNotice = (Meeting) throws -> String
+    typealias Compose = (Meeting, NotesDocument) throws -> NotesDocument
 
     private let store: MeetingStore
     private let preferences: PreferencesStore
     private let summarize: Summarize
     private let fallback: Fallback
     private let shapeNotice: ShapeNotice
+    private let compose: Compose
     private let log = Logger(subsystem: "com.excerpt.app", category: "meeting-enhancement")
     private var tasks: [String: Task<Void, Never>] = [:]
+    private var taskGenerationIDs: [String: String] = [:]
     private var invalidated: Set<String> = []
 
     init(
@@ -24,13 +27,15 @@ final class MeetingEnhancer {
         preferences: PreferencesStore,
         summarize: @escaping Summarize,
         fallback: @escaping Fallback,
-        shapeNotice: @escaping ShapeNotice
+        shapeNotice: @escaping ShapeNotice,
+        compose: @escaping Compose = { _, document in document }
     ) {
         self.store = store
         self.preferences = preferences
         self.summarize = summarize
         self.fallback = fallback
         self.shapeNotice = shapeNotice
+        self.compose = compose
     }
 
     convenience init(store: MeetingStore, preferences: PreferencesStore, engine: CoreEngine) {
@@ -42,11 +47,16 @@ final class MeetingEnhancer {
                     meeting, preferences: preferences, request: request)
             },
             fallback: { try engine.notes(for: $0) },
-            shapeNotice: { try engine.shapeNotice(for: $0) })
+            shapeNotice: { try engine.shapeNotice(for: $0) },
+            compose: { try engine.composeNotes(for: $0, wording: $1) })
     }
 
     @discardableResult
     func start(source: Meeting, onChange: @escaping (Meeting) -> Void) -> Task<Void, Never> {
+        let generationID = source.generationStatus?.generationId ?? ""
+        if let existing = tasks[source.id], taskGenerationIDs[source.id] == generationID {
+            return existing
+        }
         cancel(id: source.id, markCancelled: false)
         invalidated.remove(source.id)
         let task = Task { [weak self] in
@@ -54,12 +64,14 @@ final class MeetingEnhancer {
             await self.run(source: source, onChange: onChange)
         }
         tasks[source.id] = task
+        taskGenerationIDs[source.id] = generationID
         return task
     }
 
     func cancel(id: String, markCancelled: Bool = false) {
         tasks[id]?.cancel()
         tasks[id] = nil
+        taskGenerationIDs[id] = nil
         invalidated.insert(id)
         guard markCancelled else { return }
         if let updated = try? store.update(id: id, { meeting in
@@ -76,7 +88,16 @@ final class MeetingEnhancer {
     private func run(source: Meeting, onChange: @escaping (Meeting) -> Void) async {
         let generationID = source.generationStatus?.generationId ?? UUID().uuidString
         let inputFingerprint = Self.inputFingerprint(source)
+        defer {
+            if taskGenerationIDs[source.id] == generationID {
+                tasks[source.id] = nil
+                taskGenerationIDs[source.id] = nil
+            }
+        }
         do {
+            let latestSource = try store.load(id: source.id)
+            guard latestSource.generationStatus?.generationId == generationID,
+                  Self.inputFingerprint(latestSource) == inputFingerprint else { return }
             let running = try store.update(id: source.id) { meeting in
                 meeting.generationStatus = NotesGenerationStatus(
                     state: .running, generationId: generationID,
@@ -114,10 +135,10 @@ final class MeetingEnhancer {
                     }
                     return
                 }
-                if Self.hasWriting(latest.notes) {
+                if (latest.documentRevision ?? 0) != (source.documentRevision ?? 0) {
                     latest.suggestedNotes = document
                 } else {
-                    latest.notes = document
+                    latest.notes = try compose(latest, document)
                     latest.suggestedNotes = nil
                 }
                 latest.documentRevision = (latest.documentRevision ?? 0) + 1
@@ -144,18 +165,13 @@ final class MeetingEnhancer {
                 }) { onChange(failed) }
             }
         }
-        tasks[source.id] = nil
-    }
-
-    private static func hasWriting(_ document: NotesDocument?) -> Bool {
-        (document?.deletedBlocks?.isEmpty == false) || document?.blocks?.contains(where: { block in
-            block.kind == "image" || !block.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }) == true
     }
 
     static func inputFingerprint(_ meeting: Meeting) -> String {
         let transcript = meeting.events.map { "\($0.id):\($0.text)" }.joined(separator: "|")
-        let moments = (meeting.images ?? []).map { "\($0.id):\($0.caption)" }.joined(separator: "|")
+        let moments = (meeting.images ?? []).map {
+            "\($0.id):\($0.caption):\($0.anchorAt.map { String($0) } ?? ""):\($0.timeKnown.map { String($0) } ?? "")"
+        }.joined(separator: "|")
         var hash: UInt64 = 14_695_981_039_346_656_037
         for byte in "\(meeting.sourceRevision ?? 0)|\(transcript)|\(moments)".utf8 {
             hash ^= UInt64(byte)

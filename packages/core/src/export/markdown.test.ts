@@ -40,4 +40,18 @@ describe('Markdown export', () => {
     expect(toHTML(meeting)).toContain('Transcript and correction history');
     expect(toHTML(meeting)).toContain('Original: Ship Thursday.');
   });
+
+  it('exports an imported image without inventing a meeting timestamp', () => {
+    const meeting: Meeting = {
+      id: 'm1', title: 'Review', startedAt: '2026-09-10T00:00:00.000Z',
+      processing: 'on-device', events: [], items: [],
+      images: [{ id: 'image', at: 0, timeKnown: false, capturedAt: '2026-09-10T02:00:00Z',
+        caption: 'Slide', origin: 'import', dataUrl: 'data:image/png;base64,aGVsbG8=' }],
+      notes: { version: 1, method: 'extractive', keyPoints: [], topics: [], blocks: [
+        { id: 'image-image', kind: 'image', text: 'Slide', imageId: 'image', evidence: [] },
+      ] },
+    };
+    expect(toMarkdown(meeting)).toContain('Time unknown · Screenshot');
+    expect(toHTML(meeting)).toContain('Time unknown · Slide');
+  });
 });

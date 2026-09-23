@@ -133,6 +133,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 didDeleteMeeting: { [weak session] id in session?.cancelBackgroundWork(for: id) },
                 startMeeting: { [weak self] in try await self?.commands?.start() },
                 openLiveNotes: { [weak self] in self?.openLiveNotesFromEditor() },
+                liveMeetingTime: { [weak session] id in session?.currentMeetingTime(id: id) },
+                retryAutomaticNotes: { [weak session] id in
+                    guard let session else { throw NSError(domain: "Excerpt", code: 1) }
+                    return try session.retryAutomaticNotes(id: id)
+                },
                 desktopSettings: { [weak self] in self?.desktopSettings() ?? Self.emptyDesktopSettings },
                 saveCaptionSettings: { [weak self] settings in self?.applyCaptionSettings(settings) },
                 selectMicrophone: { [weak self] id in try self?.microphone.select(id) }

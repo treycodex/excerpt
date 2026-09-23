@@ -3,7 +3,7 @@ import type { Meeting, TranscriptEvent } from '@excerpt/types';
 import { extractItems } from '../extract';
 import { toSentences } from '../extract/sentences';
 import { toMarkdown } from '../export/markdown';
-import { buildNotesDocument, noteTitle, preserveNoteEdits, refreshMeetingNotes, shapeNotice } from './summary';
+import { buildNotesDocument, noteTitle, preserveNoteEdits, refreshMeetingNotes, shapeNotice, suggestMeetingTitle } from './summary';
 
 const event = (id: string, text: string, at = 0): TranscriptEvent => ({ id, text, tArrived: at,
   isFinal: true, role: 'you', speakerLabel: 'YOU', sessionId: 's' });
@@ -11,6 +11,19 @@ const meeting = (events: TranscriptEvent[]): Meeting => ({ id: 'm', title: 'Laun
   startedAt: '2026-09-07T09:00:00Z', processing: 'on-device', events, items: [] });
 
 describe('readable meeting notes', () => {
+  it('suggests a short source-backed title and falls back when speech has no useful topic', () => {
+    const input = meeting([event('topic', 'The customer onboarding flow needs fewer steps before launch.')]);
+    expect(suggestMeetingTitle(input)).toBe('The customer onboarding flow needs fewer steps before launch');
+    expect(suggestMeetingTitle(meeting([]))).toBeUndefined();
+  });
+  it('keeps a subject that returns much later in its later passage', () => {
+    const statement = 'We decided the customer onboarding flow needs fewer steps before launch.';
+    const notes = buildNotesDocument(meeting([
+      event('first', statement, 0), event('later', statement, 1_200_000),
+    ]));
+    expect(notes.topics).toHaveLength(2);
+    expect(notes.topics.map((topic) => topic.bullets[0]?.evidence[0]?.eventIds[0])).toEqual(['first', 'later']);
+  });
   it('joins a fragmented commitment while preserving exact source quotes', () => {
     const events = [event('a', "I'll send the revised", 100), event('b', 'deck before Friday.', 2000)];
     const [item] = extractItems(events, new Date('2026-09-07T09:00:00Z'));

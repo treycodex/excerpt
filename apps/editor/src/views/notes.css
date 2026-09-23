@@ -160,6 +160,20 @@
   .notebook-toolbar button:hover { background: #fff; border-color: var(--line-strong, #c9c7ae); }
 }
 .notebook-toolbar .save-state { color: var(--faint); }
+.toolbar-menu, .generation-actions { position: relative; }
+.toolbar-menu > summary, .generation-actions > summary {
+  cursor: pointer; list-style: none; border: 1px solid var(--line); border-radius: 6px;
+  padding: 7px 12px; color: var(--ink); background: #fbfaf1;
+}
+.toolbar-menu > summary::-webkit-details-marker, .generation-actions > summary::-webkit-details-marker { display: none; }
+.toolbar-menu > summary::after, .generation-actions > summary::after { content: ' ▾'; }
+.toolbar-menu > div, .generation-actions > div {
+  position: absolute; right: 0; top: calc(100% + 5px); z-index: 5;
+  display: grid; gap: 4px; min-width: 190px; padding: 6px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--paper);
+  box-shadow: 0 8px 24px rgba(36, 40, 31, .13);
+}
+.toolbar-menu button, .generation-actions button { text-align: left; white-space: nowrap; }
 
 /* ── The page ─────────────────────────────────────────────────────────────── */
 .notebook .notes { max-width: 720px; padding: 40px 26px 140px; }
@@ -188,36 +202,18 @@
 .notebook .note-counts span { padding: 0; background: none; border-radius: 0; }
 .notebook .note-counts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-/* Segmented control — the Mac idiom for "same content, two views". */
-.notebook-tabs {
-  display: flex; align-items: center; gap: 3px;
-  margin: 26px 0 0; padding: 3px;
-  border: 1px solid var(--line); border-radius: 9px;
-  background: var(--paper-deep); width: fit-content; max-width: 100%;
-}
-.notebook-tabs button {
-  padding: 7px 14px; border: 0; border-radius: 6px; background: none;
-  font: 13px var(--sans); color: var(--dim);
-  transition: background .15s, color .15s;
-}
-.notebook-tabs button[aria-pressed="true"] {
-  background: #fbfaf1; color: var(--ink); font-weight: 500;
-  box-shadow: 0 1px 2px rgba(36,40,31,.09);
-}
-.notebook-tabs button span {
-  margin-left: 6px; font-size: 11px; color: var(--faint);
-  font-variant-numeric: tabular-nums;
-}
-.notebook-tabs button[aria-pressed="true"] span { color: var(--dim); }
-.notebook-tabs .notebook-replay {
-  margin-left: 8px; border: 0; background: none; color: var(--dim); font-size: 12.5px;
-}
+.notebook-view-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 22px 0 0; font: 13px var(--sans); color: var(--dim); }
+.notebook-view-actions button { border: 0; background: none; padding: 4px 0; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.advanced-preferences { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 18px; }
+.advanced-preferences > summary { cursor: pointer; }
 
 .notebook-timeline { margin-top: 18px; }
 .notebook summary { font: 13px/1.6 var(--sans); color: var(--dim); list-style: none; }
 .notebook summary::-webkit-details-marker { display: none; }
 .notebook summary::before { content: "▸ "; color: var(--faint); }
 .notebook details[open] > summary::before { content: "▾ "; }
+.notebook .toolbar-menu > summary::before, .notebook .generation-actions > summary::before,
+.notebook .toolbar-menu[open] > summary::before, .notebook .generation-actions[open] > summary::before { content: none; }
 
 /* ── Items: a list of things said, not a deck of cards ────────────────────── */
 /* The group heading is structure and the state is an attribute of one item, so the

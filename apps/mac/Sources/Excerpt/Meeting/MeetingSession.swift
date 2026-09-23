@@ -26,8 +26,9 @@ enum MeetingMoments {
 
     static func reconcile(_ images: [MeetingImage], events: [TranscriptEvent]) -> [MeetingImage] {
         images.map { image in
+            if image.timeKnown == false { return image }
             var next = image
-            next.context = context(at: image.at, events: events)
+            next.context = context(at: image.anchorAt ?? image.at, events: events)
             return next
         }
     }
@@ -206,6 +207,11 @@ final class MeetingSession {
     func activeMeeting(id: String? = nil) -> Meeting? {
         guard state.isActive, !meetingId.isEmpty, id == nil || id == meetingId else { return nil }
         return draftMeeting()
+    }
+
+    func currentMeetingTime(id: String) -> Double? {
+        guard id == meetingId, case .listening = state else { return nil }
+        return clock.positionMilliseconds()
     }
 
     /// Returns nil when this mutation belongs to a completed meeting. NotesBridge
@@ -708,6 +714,22 @@ final class MeetingSession {
         }
     }
 
+    func retryAutomaticNotes(id: String) throws -> Meeting {
+        let source = try store.update(id: id) { meeting in
+            guard meeting.endedAt != nil,
+                  meeting.generationStatus?.state == .failed || meeting.generationStatus?.state == .cancelled else {
+                throw NSError(domain: "Excerpt", code: 1, userInfo: [NSLocalizedDescriptionKey: "These notes are not waiting for a retry."])
+            }
+            meeting.generationStatus = NotesGenerationStatus(
+                state: .queued, generationId: UUID().uuidString,
+                sourceRevision: meeting.sourceRevision ?? 0,
+                inputFingerprint: MeetingEnhancer.inputFingerprint(meeting))
+        }
+        onMeetingChange?(source)
+        startEnhancement(for: source)
+        return source
+    }
+
     private func buildMeeting(reason: MeetingFinishReason, captureError: String?) -> Meeting {
         // Raw settled segments are what the journal holds; sentences are what a
         // transcript is. Assembly joins the first and resolves the far side's echo.
@@ -742,6 +764,16 @@ final class MeetingSession {
             finishReason: reason,
             captureError: captureError
         )
+        // The first durable finished file already contains useful transcript-based
+        // notes and captures. Provider work only improves wording later.
+        if draftTitle == Self.title(for: clock.startedAt),
+           let suggested = try? engine.suggestedTitle(for: meeting), !suggested.isEmpty {
+            meeting.title = suggested
+        }
+        if let immediate = try? engine.notes(for: meeting) {
+            meeting.notes = immediate
+            meeting.documentRevision = (meeting.documentRevision ?? 0) + 1
+        }
         let inputFingerprint = MeetingEnhancer.inputFingerprint(meeting)
         meeting.generationStatus?.inputFingerprint = inputFingerprint
         return meeting
@@ -780,7 +812,8 @@ final class MeetingSession {
         var blocks = draftNotes.blocks ?? []
         guard !blocks.contains(where: { $0.imageId == image.id }) else { return }
         let block = NoteBlock(id: "image-\(image.id)", kind: "image", text: image.caption,
-                              evidence: [], at: image.at, imageId: image.id)
+                              evidence: [], at: image.anchorAt ?? image.at,
+                              imageId: image.id, placement: "automatic")
         var insertion = blocks.endIndex
         var nearest = -Double.infinity
         for (index, candidate) in blocks.enumerated() {

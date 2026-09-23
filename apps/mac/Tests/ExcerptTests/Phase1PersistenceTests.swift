@@ -24,6 +24,13 @@ struct Phase1PersistenceTests {
             documentRevision: 1)
     }
 
+    private func engine() throws -> CoreEngine {
+        let root = URL(filePath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        return try CoreEngine(engineURL: root.appending(path: "apps/mac/Resources/excerpt-engine.js"))
+    }
+
     private func mutation(
         _ meeting: Meeting, id: String = UUID().uuidString,
         changes: [MeetingChange]
@@ -300,6 +307,79 @@ struct Phase1PersistenceTests {
         #expect(completed.generationStatus?.state == .ready)
     }
 
+    @Test func `enhanced wording retains automatic captures in the saved document`() async throws {
+        let directory = root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try MeetingStore(root: directory)
+        let engine = try engine()
+        var source = meeting()
+        source.events = [event(text: "We decided the revised launch plan needs fewer steps before release.")]
+        let image = MeetingImage(id: "capture", dataUrl: "data:image/png;base64,c3ludGhldGlj",
+                                 capturedAt: source.startedAt, at: 2_000, caption: "",
+                                 origin: "excerpt", context: MeetingMoments.context(at: 2_000, events: source.events))
+        source.images = [image]
+        source.notes = try engine.notes(for: source)
+        source.generationStatus = NotesGenerationStatus(
+            state: .queued, generationId: "generation-visual", sourceRevision: 0,
+            inputFingerprint: MeetingEnhancer.inputFingerprint(source))
+        try store.save(source)
+        let evidence = Evidence(eventIds: ["event-1"], tArrived: 1_000,
+                                quote: source.events[0].text, speakerLabel: "SPEAKER", tStart: 1)
+        let enhancer = MeetingEnhancer(
+            store: store,
+            preferences: PreferencesStore(defaults: UserDefaults(suiteName: UUID().uuidString)!),
+            summarize: { _, _, _ in NotesDocument(method: "on-device", keyPoints: [], topics: [], blocks: [
+                NoteBlock(id: "enhanced", kind: "bullet", text: "Revised launch plan needs fewer steps.",
+                          evidence: [evidence], at: 1_000)
+            ]) },
+            fallback: { try engine.notes(for: $0) },
+            shapeNotice: { _ in "" },
+            compose: { try engine.composeNotes(for: $0, wording: $1) })
+        let task = enhancer.start(source: source) { _ in }
+        _ = await task.value
+        let saved = try store.load(id: source.id)
+        #expect(saved.notes?.method == "on-device")
+        #expect(saved.notes?.blocks?.filter { $0.imageId == image.id }.count == 1)
+        #expect(saved.notes?.blocks?.contains { $0.text.contains("Revised launch plan") } == true)
+        #expect(saved.suggestedNotes == nil)
+    }
+
+    @Test func `a transcript correction cancels stale automatic wording`() async throws {
+        let directory = root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try MeetingStore(root: directory)
+        var source = meeting(id: "corrected-during-generation")
+        source.generationStatus = NotesGenerationStatus(
+            state: .queued, generationId: "generation-corrected", sourceRevision: 0,
+            inputFingerprint: MeetingEnhancer.inputFingerprint(source))
+        try store.save(source)
+        let gate = ProviderGate()
+        let enhancer = MeetingEnhancer(
+            store: store, preferences: PreferencesStore(defaults: UserDefaults(suiteName: UUID().uuidString)!),
+            summarize: { meeting, _, _ in try await gate.run(meeting: meeting) },
+            fallback: { _ in NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: []) },
+            shapeNotice: { _ in "" })
+        let task = enhancer.start(source: source) { _ in }
+        await gate.waitUntilStarted()
+        let duplicate = enhancer.start(source: source) { _ in }
+        #expect(await gate.numberOfStarts == 1)
+        let running = try store.load(id: source.id)
+        var corrected = running.events[0]
+        corrected.text = "Use the corrected launch plan."
+        _ = try store.apply(mutation(running, changes: [
+            .correctTranscript(events: [corrected], items: running.items,
+                               document: running.notes, suggestedNotes: nil,
+                               images: running.images ?? [], sourceRevision: 1)
+        ]))
+        await gate.finish()
+        _ = await task.value
+        _ = await duplicate.value
+        let saved = try store.load(id: source.id)
+        #expect(saved.events[0].text == corrected.text)
+        #expect(saved.generationStatus?.state == .cancelled)
+        #expect(saved.suggestedNotes == nil)
+    }
+
     @Test func `journal failure reports a degraded recovery boundary`() throws {
         struct Failure: Error {}
         let directory = root()
@@ -321,15 +401,19 @@ private final class FixtureExporter: NotesExporting {
 
 private actor ProviderGate {
     private var started = false
+    private var starts = 0
     private var startWaiters: [CheckedContinuation<Void, Never>] = []
     private var result: CheckedContinuation<NotesDocument, Error>?
 
     func run(meeting: Meeting) async throws -> NotesDocument {
         started = true
+        starts += 1
         startWaiters.forEach { $0.resume() }
         startWaiters = []
         return try await withCheckedThrowingContinuation { result = $0 }
     }
+
+    var numberOfStarts: Int { starts }
 
     func waitUntilStarted() async {
         if started { return }

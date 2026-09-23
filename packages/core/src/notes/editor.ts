@@ -5,6 +5,7 @@ import { withoutDeletedBlocks } from './generation';
 export const evidenceTime = (e: Evidence) => e.tStart !== undefined ? e.tStart * 1000 : e.tArrived;
 const timeOf = (evidence: Evidence[]) => evidence.length ? Math.min(...evidence.map(evidenceTime)) : undefined;
 export const transcriptEventTime = (event: Meeting['events'][number]) => event.tStart !== undefined ? event.tStart * 1000 : event.tArrived;
+export const meetingImageTime = (image: MeetingImage) => image.anchorAt ?? image.at;
 const transcriptEventEnd = (event: Meeting['events'][number]) => event.tEnd !== undefined ? event.tEnd * 1000 : transcriptEventTime(event);
 
 export const MOMENT_CONTEXT_BEFORE = 20_000;
@@ -26,7 +27,8 @@ export function reconcileMeetingImageContexts(meeting: Meeting): Meeting {
   if (!meeting.images?.length) return meeting;
   let changed = false;
   const images = meeting.images.map((image) => {
-    const context = meetingImageContext(meeting, image.at);
+    if (image.timeKnown === false) return image;
+    const context = meetingImageContext(meeting, meetingImageTime(image));
     if (image.context && image.context.startAt === context.startAt && image.context.endAt === context.endAt
       && image.context.eventIds.join('\0') === context.eventIds.join('\0')) return image;
     changed = true;
@@ -51,7 +53,7 @@ export function editableDocument(meeting: Meeting): NotesDocument {
         ...(timeOf(first.evidence) !== undefined ? { at: timeOf(first.evidence)! } : {}) });
     }
     for (const bullet of bullets) {
-      const key = bullet.text.toLowerCase().trim();
+      const key = `${bullet.text.toLowerCase().trim()}|${bullet.evidence.flatMap((source) => source.eventIds).join(',')}`;
       if (seen.has(key)) continue;
       seen.add(key);
       const at = timeOf(bullet.evidence);
@@ -60,12 +62,16 @@ export function editableDocument(meeting: Meeting): NotesDocument {
   }
   // Keep important points omitted by a model's topic list, without repeating them.
   for (const bullet of notes.keyPoints) {
-    if (seen.has(bullet.text.toLowerCase().trim())) continue;
-    seen.add(bullet.text.toLowerCase().trim());
+    const key = `${bullet.text.toLowerCase().trim()}|${bullet.evidence.flatMap((source) => source.eventIds).join(',')}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     const at = timeOf(bullet.evidence);
     insertAtTime(blocks, { ...bullet, kind: 'bullet', ...(at !== undefined ? { at } : {}) });
   }
-  for (const image of [...(meeting.images ?? [])].sort((a, b) => a.at - b.at)) insertAtTime(blocks, imageBlock(image));
+  for (const image of [...(meeting.images ?? [])].sort((a, b) => meetingImageTime(a) - meetingImageTime(b))) {
+    if (image.timeKnown === false) blocks.push(imageBlock(image));
+    else insertAtTime(blocks, imageBlock(image));
+  }
   return { ...notes, blocks };
 }
 
@@ -82,21 +88,24 @@ function insertAtTime(blocks: NoteBlock[], block: NoteBlock) {
 }
 
 function imageBlock(image: MeetingImage): NoteBlock {
-  return { id: `image-${image.id}`, kind: 'image', text: image.caption, imageId: image.id, at: image.at, evidence: [] };
+  return { id: `image-${image.id}`, kind: 'image', text: image.caption, imageId: image.id,
+    ...(image.timeKnown === false ? {} : { at: meetingImageTime(image) }), evidence: [], placement: 'automatic' };
 }
 
 export function insertMeetingImage(meeting: Meeting, image: MeetingImage): Meeting {
   if (meeting.images?.some((existing) => existing.id === image.id)) return meeting;
-  image = { ...image, context: meetingImageContext(meeting, image.at) };
+  if (image.timeKnown !== false) image = { ...image, context: meetingImageContext(meeting, meetingImageTime(image)) };
   const document = editableDocument(meeting);
   const blocks = [...document.blocks!];
-  insertAtTime(blocks, imageBlock(image));
+  if (image.timeKnown === false) blocks.push(imageBlock(image));
+  else insertAtTime(blocks, imageBlock(image));
   return { ...meeting, images: [...(meeting.images ?? []), image], notes: { ...document, blocks } };
 }
 
 /** Source passage for a moment. Expanded mode grows the range, still from real events only. */
 export function meetingImagePassage(meeting: Pick<Meeting, 'events'>, image: MeetingImage, expanded = false) {
-  const context = image.context ?? meetingImageContext(meeting, image.at);
+  if (image.timeKnown === false) return [];
+  const context = image.context ?? meetingImageContext(meeting, meetingImageTime(image));
   if (!expanded) {
     const ids = new Set(context.eventIds);
     return meeting.events.filter((event) => ids.has(event.id));

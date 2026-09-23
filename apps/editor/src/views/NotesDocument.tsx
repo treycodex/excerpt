@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { boundTombstones, safeImageUrl } from '@excerpt/core';
+import { boundTombstones, meetingImageTime, safeImageUrl } from '@excerpt/core';
 import type { MeetingImage, NoteBlock, NotesDocument as Document } from '@excerpt/types';
 
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
@@ -118,8 +118,8 @@ export function NotesDocument({ document, images, onChange, onSource, onImages, 
               {block.kind !== 'image' && <div className="block-kind-picker" role="group" aria-label="Block style">
                 {(['paragraph', 'heading', 'bullet'] as const).map((kind) => <button key={kind} aria-pressed={block.kind === kind} onClick={() => update(block.id, { kind, indent: kind === 'bullet' ? block.indent ?? 0 : 0 })}>{blockLabel[kind]}</button>)}
               </div>}
-              <button disabled={index === 0} onClick={() => { const next = [...blocks]; next.splice(index, 1); next.splice(index - 1, 0, block); commit(next, true); }}>Move up</button>
-              <button disabled={index === blocks.length - 1} onClick={() => { const next = [...blocks]; next.splice(index, 1); next.splice(index + 1, 0, block); commit(next, true); }}>Move down</button>
+              <button disabled={index === 0} onClick={() => { const next = [...blocks]; next.splice(index, 1); next.splice(index - 1, 0, block.kind === 'image' ? { ...block, placement: 'manual' } : block); commit(next, true); }}>Move up</button>
+              <button disabled={index === blocks.length - 1} onClick={() => { const next = [...blocks]; next.splice(index, 1); next.splice(index + 1, 0, block.kind === 'image' ? { ...block, placement: 'manual' } : block); commit(next, true); }}>Move down</button>
               <button className="block-delete" onClick={() => commit(blocks.filter((b) => b.id !== block.id), true)}>Delete</button>
             </div>
           </details>
@@ -127,7 +127,7 @@ export function NotesDocument({ document, images, onChange, onSource, onImages, 
         <div className="block-body">
           {block.kind === 'image' ? <figure>
             {image && safeImageUrl(image.dataUrl) ? <img className="moment-image" role="button" tabIndex={0} onClick={() => onMoment?.(image.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onMoment?.(image.id); } }} src={image.dataUrl} alt={block.text || `Meeting screenshot at ${clock(image.at)}`} /> : <p>Image unavailable.</p>}
-            <figcaption><button className="moment-time" onClick={() => image && onMoment?.(image.id)}>{clock(image?.at ?? block.at ?? 0)} · Captured moment</button><input aria-label="Screenshot caption" placeholder="Add a caption…" value={block.text} onChange={(e) => update(block.id, { text: e.target.value })} /></figcaption>
+            <figcaption><button className="moment-time" onClick={() => image && onMoment?.(image.id)}>{image?.timeKnown === false ? 'Time unknown' : clock(image ? meetingImageTime(image) : block.at ?? 0)} · Captured moment</button><input aria-label="Screenshot caption" placeholder="Add a caption…" value={block.text} onChange={(e) => update(block.id, { text: e.target.value })} /></figcaption>
           </figure> : <GrowingText value={block.text} label={block.kind === 'heading' ? 'Section heading' : block.kind === 'bullet' ? 'Bullet point' : 'Paragraph'}
             fieldRef={(field) => { fields.current[block.id] = field; }}
             onChange={(text) => {

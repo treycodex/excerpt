@@ -1,6 +1,6 @@
 import type { Category, Item, Meeting } from '@excerpt/types';
 import { noteTitle } from '../notes/summary';
-import { editableDocument, safeImageUrl } from '../notes/editor';
+import { editableDocument, meetingImageTime, safeImageUrl } from '../notes/editor';
 
 const HEADING: Record<Category, string> = {
   decision: 'Decisions',
@@ -49,7 +49,7 @@ export function toMarkdown(meeting: Meeting): string {
     for (const block of meeting.notes.blocks) {
       if (block.kind === 'image') {
         const image = meeting.images?.find((i) => i.id === block.imageId);
-        if (image && safeImageUrl(image.dataUrl)) out.push(`![${block.text.replace(/[\[\]\n]/g, ' ') || 'Meeting screenshot'}](${image.dataUrl})`, `_${clock(image.at)} · Screenshot_`, '');
+        if (image && safeImageUrl(image.dataUrl)) out.push(`![${block.text.replace(/[\[\]\n]/g, ' ') || 'Meeting screenshot'}](${image.dataUrl})`, `_${image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image))} · Screenshot_`, '');
       } else out.push(`${block.kind === 'heading' ? '## ' : block.kind === 'bullet' ? `${'  '.repeat(block.indent ?? 0)}- ` : ''}${block.text}`, '');
     }
   } else if (meeting.notes) {
@@ -102,7 +102,7 @@ export function toHTML(meeting: Meeting): string {
   const body = document.blocks!.map((block) => {
     if (block.kind === 'image') {
       const image = meeting.images?.find((i) => i.id === block.imageId);
-      return image && safeImageUrl(image.dataUrl) ? `<figure><img src="${image.dataUrl}" alt="${escape(block.text || 'Meeting screenshot')}"><figcaption>${clock(image.at)} · ${escape(block.text || 'Screenshot')}</figcaption></figure>` : '';
+      return image && safeImageUrl(image.dataUrl) ? `<figure><img src="${image.dataUrl}" alt="${escape(block.text || 'Meeting screenshot')}"><figcaption>${image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image))} · ${escape(block.text || 'Screenshot')}</figcaption></figure>` : '';
     }
     const text = escape(block.text).replace(/\n/g, '<br>');
     if (block.kind === 'heading') return `<h2>${text}</h2>`;

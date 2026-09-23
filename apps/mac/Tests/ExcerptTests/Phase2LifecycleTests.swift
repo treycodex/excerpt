@@ -65,6 +65,38 @@ struct Phase2LifecycleTests {
         return condition()
     }
 
+    @Test func `ending saves visual transcript notes before optional enhancement`() async throws {
+        let directory = root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try MeetingStore(root: directory)
+        let gate = LifecycleGate()
+        let prefs = preferences()
+        let delayed = enhancer(store: store, preferences: prefs) { _, _, _ in
+            await gate.wait()
+            return NotesDocument(method: "on-device", keyPoints: [], topics: [], blocks: [])
+        }
+        let factory = TranscriberFactory()
+        let session = try session(store: store, capture: LifecycleCapture(),
+                                  transcribers: { factory.make() }, enhancer: delayed)
+        await session.start()
+        let system = try #require(factory.runs.first?[.system])
+        await system.emit(Segment(start: 0, end: 1,
+                                  text: "We decided the customer onboarding flow needs fewer steps before launch."))
+        #expect(await waitUntil { session.events.count == 1 })
+        for _ in 0..<2 {
+            _ = try session.addScreenshot(MeetingScreenshot.Capture(
+                dataURL: "data:image/png;base64,c3ludGhldGlj", capturedAt: Date(), origin: "excerpt"),
+                for: session.meetingId)
+        }
+        await session.stop()
+        let saved = try store.load(id: session.meetingId)
+        #expect(saved.notes?.blocks?.contains { $0.kind == "bullet" && $0.text.contains("onboarding") } == true)
+        #expect(saved.notes?.blocks?.filter { $0.kind == "image" }.count == 2)
+        #expect(saved.suggestedNotes == nil)
+        #expect(saved.title.contains("onboarding"))
+        await gate.open()
+    }
+
     @Test func `selected input loss interrupts and preserves the partial meeting`() async throws {
         let directory = root()
         defer { try? FileManager.default.removeItem(at: directory) }

@@ -113,9 +113,9 @@ export function Preferences() {
 
       <section className="notes-provider-settings">
         <h2>Note enhancement</h2>
-        <p className="rubric">Choose who rewrites the transcript into cleaner notes. With OpenAI selected, Excerpt sends the transcript and screenshot captions to OpenAI. Screenshot pixels stay on this Mac.</p>
+        <p className="rubric">Transcription stays on this Mac. The selected provider may enhance notes automatically after a meeting and is also used for manual rewrites. With OpenAI selected, Excerpt sends transcript text and screenshot captions to OpenAI; screenshot pixels stay on this Mac.</p>
         <label className="provider-choice"><input type="radio" name="notes-provider" checked={(prefs.notesProvider ?? 'apple') === 'apple'} onChange={() => commit({ ...prefs, notesProvider: 'apple' })} /><span><b>On this Mac</b><small>Apple Intelligence, when available</small></span></label>
-        <label className="provider-choice"><input type="radio" name="notes-provider" checked={prefs.notesProvider === 'openai'} onChange={() => commit({ ...prefs, notesProvider: 'openai' })} /><span><b>OpenAI with your key</b><small>Uses gpt-5-mini only when you choose this</small></span></label>
+        <label className="provider-choice"><input type="radio" name="notes-provider" checked={prefs.notesProvider === 'openai'} onChange={() => commit({ ...prefs, notesProvider: 'openai' })} /><span><b>OpenAI with your key</b><small>Used for automatic and manual note enhancement</small></span></label>
         <div className="api-key-setting">
           <p>{keyConfigured ? 'An API key is stored in macOS Keychain.' : 'Add an API key to use OpenAI for note wording.'}</p>
           <button disabled={keyState === 'saving'} onClick={() => { void configureKey(); }}>{keyState === 'saving' ? 'Opening Keychain…' : keyConfigured ? 'Replace key…' : 'Add key…'}</button>
@@ -123,7 +123,7 @@ export function Preferences() {
           <span className="rubric" role="status">{keyState === 'saved' ? 'Saved in Keychain' : keyState === 'failed' ? 'Could not update Keychain' : ''}</span>
         </div>
       </section>
-      <section>
+      <details className="advanced-preferences"><summary>Advanced · extraction priorities</summary><section>
         <h2>Order</h2>
         <p className="rubric">Most important first.</p>
         <ol className="pref-order">
@@ -183,7 +183,7 @@ export function Preferences() {
             <button onClick={() => { if (saved_.current) setPrefs(saved_.current); setUnsaved(null); setSaved('idle'); }}>Cancel</button>
           </>}
         </div>
-      </section>
+      </section></details>
     </div>
   );
 }

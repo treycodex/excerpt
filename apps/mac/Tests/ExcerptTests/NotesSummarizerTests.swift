@@ -93,15 +93,16 @@ struct NotesSummarizerTests {
         #expect((notes.keyPoints + notes.topics.flatMap(\.bullets)).count == 1)
     }
 
-    @Test func `the same heading in two passages is one topic`() throws {
+    @Test func `the same heading in a later passage remains a later topic`() throws {
         let sources = captureSources()
         let first = DraftMeetingNotes(keyPoints: [], topics: [DraftNoteTopic(
             title: "Extra income", bullets: [point("A second income stream takes a skill beyond engineering.", Capture.incomeQuote)])])
         let second = DraftMeetingNotes(keyPoints: [], topics: [DraftNoteTopic(
             title: "Extra Income", bullets: [point("Most engineers never start one.", Capture.collegeQuote)])])
         let notes = try #require(NotesSummarizer.assemble([(first, sources), (second, sources)]))
-        #expect(notes.topics.count == 1)
-        #expect(notes.topics.first?.bullets.count == 2)
+        #expect(notes.topics.count == 2)
+        #expect(notes.topics.map(\.id) == ["topic-0-0", "topic-1-0"])
+        #expect(notes.topics.allSatisfy { $0.bullets.count == 1 })
     }
 
     @Test func `nothing survives means no document, never an empty one`() {

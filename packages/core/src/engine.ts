@@ -12,7 +12,8 @@
  */
 import type { Item, Meeting, Preferences, TranscriptEvent } from '@excerpt/types';
 import { extractItems } from './extract';
-import { buildNotesDocument, shapeNotice } from './notes/summary';
+import { buildNotesDocument, shapeNotice, suggestMeetingTitle } from './notes/summary';
+import { composeVisualNotes } from './notes/visual';
 import { splitIntoSubtitleLines, dashDialogue } from './caption/lines';
 import { applyPreferences, deriveBoosts, orderCategories, matchedBoosts, DEFAULT_PREFERENCES } from './scoring';
 import { toMarkdown } from './export/markdown';
@@ -32,7 +33,8 @@ export interface EngineAPI {
   boostsFor(instruction: string): string;
   subtitleLines(text: string, maxChars?: number): string;
   /**
-   * The extractive notes document — excerpts of what was said, never a rewrite.
+   * The immediately saved extractive document, with captured moments composed
+   * alongside source-backed text.
    *
    * The macOS app's optional on-device summary can be unavailable, time out, or
    * produce nothing a quote supports. When it does, the host needs the same
@@ -40,6 +42,8 @@ export interface EngineAPI {
    * notes in it at all.
    */
   notes(meetingJSON: string): string;
+  composeNotes(meetingJSON: string, wordingJSON: string): string;
+  suggestTitle(meetingJSON: string): string;
   /**
    * A plain sentence about what kind of recording this is, or empty when there is
    * nothing worth saying. Defined here so the website and the app cannot come to
@@ -50,7 +54,7 @@ export interface EngineAPI {
   defaultPreferences(): string;
 }
 
-export const ENGINE_VERSION = '2';
+export const ENGINE_VERSION = '3';
 
 function parse<T>(json: string, fallback: T): T {
   try {
@@ -95,7 +99,18 @@ export const engine: EngineAPI = {
 
   notes(meetingJSON) {
     const meeting = parse<Meeting | null>(meetingJSON, null);
-    return meeting ? JSON.stringify(buildNotesDocument(meeting)) : '';
+    return meeting ? JSON.stringify(composeVisualNotes(meeting, buildNotesDocument(meeting))) : '';
+  },
+
+  composeNotes(meetingJSON, wordingJSON) {
+    const meeting = parse<Meeting | null>(meetingJSON, null);
+    const wording = parse<ReturnType<typeof buildNotesDocument> | null>(wordingJSON, null);
+    return meeting && wording ? JSON.stringify(composeVisualNotes(meeting, wording)) : '';
+  },
+
+  suggestTitle(meetingJSON) {
+    const meeting = parse<Meeting | null>(meetingJSON, null);
+    return meeting ? suggestMeetingTitle(meeting) ?? '' : '';
   },
 
   shapeNotice(meetingJSON) {

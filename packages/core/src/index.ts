@@ -17,7 +17,8 @@ export {
   meetingMutation, reconcileMeetingUpdate, acceptsAcknowledgment, preserveGeneratedConflict,
 } from './store/meeting-sync';
 export { toMarkdown, toHTML } from './export/markdown';
-export { buildNotesDocument, preserveNoteEdits, refreshMeetingNotes, noteTitle, shapeNotice } from './notes/summary';
+export { buildNotesDocument, preserveNoteEdits, refreshMeetingNotes, noteTitle, shapeNotice, suggestMeetingTitle } from './notes/summary';
+export { composeVisualNotes } from './notes/visual';
 export {
   DEFAULT_PREFERENCES, applyPreferences, deriveBoosts, matchedBoosts, scoreItem,
   orderCategories,
@@ -28,5 +29,5 @@ export type { NotesCapability, NotesEnhancement } from './notes/generation';
 export {
   editableDocument, insertMeetingImage, previewTranscriptCorrection, preserveDocument,
   safeImageUrl, meetingImageContext, reconcileMeetingImageContexts, meetingImagePassage,
-  transcriptEventTime, MOMENT_CONTEXT_BEFORE, MOMENT_CONTEXT_AFTER,
+  transcriptEventTime, meetingImageTime, MOMENT_CONTEXT_BEFORE, MOMENT_CONTEXT_AFTER,
 } from './notes/editor';

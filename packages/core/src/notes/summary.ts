@@ -110,8 +110,6 @@ const PASSAGE_MS = 10 * 60 * 1000;
 /** Excerpts kept from each passage, so selection is spread over the meeting
     rather than taken from whichever stretch happened to be densest. */
 const PER_PASSAGE = 8;
-/** Below this, sectioning a short meeting only gets in the way. */
-const PASSAGE_FLOOR = 12;
 
 const at = (bullet: NoteBullet) => bullet.evidence[0]?.tArrived ?? 0;
 
@@ -146,7 +144,7 @@ function stamp(ms: number): string {
  */
 function passages(bullets: NoteBullet[], recurring: Set<string>, end: number): NoteTopic[] {
   if (!bullets.length) return [];
-  if (bullets.length <= PASSAGE_FLOOR || span(bullets) < PASSAGE_MS) {
+  if (span(bullets) < PASSAGE_MS) {
     return [{ id: 'discussion', title: 'Discussion excerpts', bullets }];
   }
 
@@ -213,7 +211,9 @@ export function buildNotesDocument(meeting: Meeting): NotesDocument {
   for (const sentence of sentences) {
     if (sentence.text.split(/\s+/).length < 6 || /^(?:hi|hello|thanks|thank you|can you hear me)\b|\b(?:we're all here|we are all here|flag one thing|this morning)\b/i.test(sentence.text)) continue;
     if (substance(sentence.text, recurring) < 2 && !classifyAction(sentence)) continue;
-    const key = normal(sentence.text);
+    // A repeated sentence in the same passage is noise; the same subject returning
+    // much later belongs to the later part of the meeting.
+    const key = `${normal(sentence.text)}|${Math.floor(sentence.event.tArrived / PASSAGE_MS)}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const joined = withAntecedent(sentence, sentences[sentence.index - 1]);
@@ -231,6 +231,18 @@ export function buildNotesDocument(meeting: Meeting): NotesDocument {
   return { version: 1, method: 'extractive', ...(notice ? { notice } : {}),
     keyPoints: keyPoints.slice(0, keyPointBudget(span(bullets))),
     topics: passages(bullets, recurring, sentences.at(-1)?.event.tArrived ?? 0) };
+}
+
+/** A short verbatim topic from supported speech; no model or invented subject. */
+export function suggestMeetingTitle(meeting: Meeting): string | undefined {
+  const source = meeting.items.find((item) => item.category === 'decision' && !item.dismissed)?.title
+    ?? buildNotesDocument(meeting).keyPoints[0]?.text;
+  if (!source) return undefined;
+  const words = source.replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '').split(' ');
+  if (words.length < 3) return undefined;
+  let title = words.slice(0, 10).join(' ');
+  if (title.length > 64) title = title.slice(0, 64).replace(/\s+\S*$/, '');
+  return title.length >= 12 ? title[0]!.toUpperCase() + title.slice(1) : undefined;
 }
 
 /** Regeneration cannot erase edits, including an edited point no longer selected. */

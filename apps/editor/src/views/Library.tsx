@@ -29,7 +29,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
   const refresh = () => {
     void readMeetingLibrary().then((result) => {
       setMeetings(result.meetings); setStorageAvailable(result.available);
-    });
+    }).catch(() => { setMeetings([]); setStorageAvailable(false); });
   };
   useEffect(refresh, []);
 
@@ -66,7 +66,8 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
               <form className="rename" onSubmit={(e) => {
                 e.preventDefault();
                 const next = { ...m, title: title.trim() || m.title };
-                void saveMeeting(next).then(() => { setRenaming(null); refresh(); });
+                void saveMeeting(next).then(() => { setRenaming(null); setCommandError(''); refresh(); })
+                  .catch((error) => setCommandError(error instanceof Error ? error.message : 'Could not rename this meeting. Your title is still here.'));
               }}>
                 <input aria-label="Meeting title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
                 <button type="submit">Save</button><button type="button" onClick={() => setRenaming(null)}>Cancel</button>

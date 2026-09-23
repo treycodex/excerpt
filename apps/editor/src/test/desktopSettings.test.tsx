@@ -5,6 +5,7 @@ import type { DesktopSettings, Meeting } from '@excerpt/types';
 import { bridge } from '@excerpt/core';
 import { DesktopPreferences } from '../views/DesktopPreferences';
 import { Library } from '../views/Library';
+import { Notes } from '../views/Notes';
 import { createFakeNativeHost, installFakeNativeHost } from './fakeNativeHost';
 
 let renderer: ReactTestRenderer;
@@ -120,5 +121,64 @@ describe('library native actions', () => {
     const host = createFakeNativeHost({ meetings: [legacy] }); restore = installFakeNativeHost(host);
     await act(async () => { renderer = create(<Library onOpen={() => {}} onStart={host.startMeeting} onOpenLiveNotes={host.openLiveNotes} />); });
     expect(text()).toContain('Legacy'); expect(host.meetings.get('legacy')!.processing).toBe('demo');
+  });
+
+  it('distinguishes unavailable storage from an empty library and keeps a refused rename visible', async () => {
+    const host = createFakeNativeHost(); restore = installFakeNativeHost(host);
+    host.listMeetings = async () => { throw new Error('Storage unavailable'); };
+    await act(async () => { renderer = create(<Library onOpen={() => {}} onStart={host.startMeeting} onOpenLiveNotes={host.openLiveNotes} />); });
+    expect(text()).toContain('meeting storage could not be read');
+    expect(text()).not.toContain('Nothing yet');
+    host.listMeetings = async () => [...host.meetings.values()];
+    host.meetings.set('rename-fixture', { id: 'rename-fixture', title: 'Original', startedAt: '2026-09-01T09:00:00Z', processing: 'on-device', events: [], items: [] });
+    await act(async () => { renderer.unmount(); renderer = create(<Library onOpen={() => {}} onStart={host.startMeeting} onOpenLiveNotes={host.openLiveNotes} />); });
+    await act(async () => { renderer.root.findAllByType('button').find((node) => node.children.includes('Rename'))!.props.onClick(); });
+    host.mutateMeeting = async () => { throw new Error('Rename write refused'); };
+    await act(async () => { renderer.root.findByProps({ 'aria-label': 'Meeting title' }).props.onChange({ target: { value: 'New title' } }); });
+    await act(async () => { renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }); });
+    expect(text()).toContain('Rename write refused');
+    expect(renderer.root.findByProps({ 'aria-label': 'Meeting title' }).props.value).toBe('New title');
+  });
+});
+
+describe('meeting document navigation', () => {
+  it('keeps the document primary and makes transcript and detailed review reversible', async () => {
+    const meeting: Meeting = {
+      id: 'document-nav', title: 'Document navigation', processing: 'on-device',
+      startedAt: '2026-09-01T09:00:00Z', endedAt: '2026-09-01T09:05:00Z', events: [], items: [],
+      notes: { version: 1, method: 'extractive', keyPoints: [], topics: [], blocks: [] },
+    };
+    const host = createFakeNativeHost({ meetings: [meeting] }); restore = installFakeNativeHost(host);
+    await act(async () => { renderer = create(<Notes meeting={meeting} />); });
+    const button = (label: string) => renderer.root.findAllByType('button').find((node) => node.children.some((child) => typeof child === 'string' && child.includes(label)))!;
+    expect(text()).toContain('View transcript');
+    expect(text()).toContain('Review extracted items');
+    expect(renderer.root.findAllByType('details').some((node) => node.props.className === 'toolbar-menu')).toBe(true);
+    await act(async () => { button('View transcript').props.onClick(); });
+    expect(text()).toContain('Back to notes');
+    await act(async () => { button('Back to notes').props.onClick(); });
+    expect(text()).toContain('No decisions or action items found. Your transcript and screenshots are saved.');
+  });
+
+  it('offers a bounded undo after accepting new wording', async () => {
+    const evidence = [{ eventIds: ['event-1'], tArrived: 1000, quote: 'We approved the revised plan.', speakerLabel: 'SPEAKER' }];
+    const oldNotes: NonNullable<Meeting['notes']> = { version: 1, method: 'extractive', keyPoints: [], topics: [],
+      blocks: [{ id: 'old', kind: 'bullet', text: 'The plan was approved.', evidence }] };
+    const meeting: Meeting = {
+      id: 'undo-fixture', title: 'Wording undo', processing: 'on-device',
+      startedAt: '2026-09-01T09:00:00Z', endedAt: '2026-09-01T09:05:00Z',
+      events: [{ id: 'event-1', sessionId: 'undo-fixture', role: 'remote', speakerLabel: 'SPEAKER', text: evidence[0]!.quote, isFinal: true, tArrived: 1000 }], items: [],
+      notes: oldNotes,
+      suggestedNotes: { ...oldNotes, method: 'on-device', blocks: [{ id: 'new', kind: 'bullet', text: 'The revised plan was approved.', evidence }] },
+    };
+    const host = createFakeNativeHost({ meetings: [meeting] }); restore = installFakeNativeHost(host);
+    await act(async () => { renderer = create(<Notes meeting={meeting} />); });
+    const button = (label: string) => renderer.root.findAllByType('button').find((node) => node.children.includes(label))!;
+    await act(async () => { button('Use this wording').props.onClick(); });
+    expect(text()).toContain('Undo rewrite');
+    await act(async () => { button('Undo rewrite').props.onClick(); });
+    expect(text()).toContain('Previous wording restored.');
+    expect(text()).not.toContain('Undo rewrite');
+    expect(host.meetings.get('undo-fixture')?.notes?.blocks?.[0]?.text).toBe('The plan was approved.');
   });
 });

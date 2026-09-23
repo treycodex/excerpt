@@ -1,3 +1,4 @@
+import { meetingImageContext } from '@excerpt/core';
 import type { ExcerptBridge } from '@excerpt/core';
 import type { CaptionSettings, DesktopSettings, Meeting, MeetingMutation, MeetingMutationAcknowledgment, Preferences } from '@excerpt/types';
 
@@ -47,6 +48,22 @@ export function createFakeNativeHost(input: { meetings?: Meeting[]; preferences?
     meetings,
     async startMeeting() { calls.push('startMeeting'); },
     async openLiveNotes() { calls.push('openLiveNotes'); },
+    async getLiveMeetingTime(id) {
+      calls.push(`getLiveMeetingTime:${id}`);
+      const meeting = meetings.get(id);
+      if (!meeting || meeting.endedAt) throw new Error('That meeting is no longer listening.');
+      return Math.max(0, Date.now() - new Date(meeting.startedAt).getTime());
+    },
+    async retryAutomaticNotes(id) {
+      calls.push(`retryAutomaticNotes:${id}`);
+      const meeting = meetings.get(id);
+      if (!meeting) throw new Error('Meeting missing');
+      const updated: Meeting = { ...meeting, generationStatus: {
+        state: 'queued', generationId: `retry-${id}`, sourceRevision: meeting.sourceRevision ?? 0,
+      } };
+      meetings.set(id, updated);
+      return clone(updated);
+    },
     async loadDesktopSettings() { calls.push('loadDesktopSettings'); return clone(desktopSettings); },
     async saveCaptionSettings(settings: Partial<Pick<CaptionSettings, 'preset' | 'size' | 'position' | 'enabled' | 'displayId'>>) {
       calls.push('saveCaptionSettings');
@@ -113,7 +130,11 @@ function applyMutation(current: Meeting | undefined, mutation: MeetingMutation):
     }
     if (change.type === 'updateImage') {
       meeting.images = (meeting.images ?? []).map((image) => image.id === change.imageId
-        ? { ...image, caption: change.caption, ...(change.needsReview === undefined ? {} : { needsReview: change.needsReview }) }
+        ? { ...image, caption: change.caption,
+          ...(change.needsReview === undefined ? {} : { needsReview: change.needsReview }),
+          ...(change.anchorAt === undefined ? {} : { anchorAt: change.anchorAt }),
+          ...(change.timeKnown === undefined ? {} : { timeKnown: change.timeKnown }),
+          ...(change.anchorAt === undefined ? {} : { context: meetingImageContext(meeting, change.anchorAt) }) }
         : image);
       if (meeting.notes?.blocks) meeting.notes = { ...meeting.notes, blocks: meeting.notes.blocks.map((block) => block.imageId === change.imageId ? { ...block, text: change.blockText, userEdited: true } : block) };
       changedDocument = true;

@@ -144,11 +144,12 @@ enum MeetingChange: Codable, Sendable, Equatable {
     case correctTranscript(events: [TranscriptEvent], items: [Item], document: NotesDocument?,
                            suggestedNotes: NotesDocument?, images: [MeetingImage], sourceRevision: Int)
     case addImages(images: [MeetingImage], blocks: [NoteBlock])
-    case updateImage(imageId: String, caption: String, needsReview: Bool?, blockText: String)
+    case updateImage(imageId: String, caption: String, needsReview: Bool?,
+                     anchorAt: Double?, timeKnown: Bool?, blockText: String)
 
     private enum CodingKeys: String, CodingKey {
         case type, meeting, title, document, suggestedNotes, items, events, images
-        case sourceRevision, blocks, imageId, caption, needsReview, blockText
+        case sourceRevision, blocks, imageId, caption, needsReview, anchorAt, timeKnown, blockText
     }
     private enum Kind: String, Codable {
         case create, setTitle, setDocument, setReviewItems, correctTranscript, addImages, updateImage
@@ -184,6 +185,8 @@ enum MeetingChange: Codable, Sendable, Equatable {
                 imageId: try values.decode(String.self, forKey: .imageId),
                 caption: try values.decode(String.self, forKey: .caption),
                 needsReview: try values.decodeIfPresent(Bool.self, forKey: .needsReview),
+                anchorAt: try values.decodeIfPresent(Double.self, forKey: .anchorAt),
+                timeKnown: try values.decodeIfPresent(Bool.self, forKey: .timeKnown),
                 blockText: try values.decode(String.self, forKey: .blockText))
         }
     }
@@ -216,11 +219,13 @@ enum MeetingChange: Codable, Sendable, Equatable {
             try values.encode(Kind.addImages, forKey: .type)
             try values.encode(images, forKey: .images)
             try values.encode(blocks, forKey: .blocks)
-        case .updateImage(let imageId, let caption, let needsReview, let blockText):
+        case .updateImage(let imageId, let caption, let needsReview, let anchorAt, let timeKnown, let blockText):
             try values.encode(Kind.updateImage, forKey: .type)
             try values.encode(imageId, forKey: .imageId)
             try values.encode(caption, forKey: .caption)
             try values.encodeIfPresent(needsReview, forKey: .needsReview)
+            try values.encodeIfPresent(anchorAt, forKey: .anchorAt)
+            try values.encodeIfPresent(timeKnown, forKey: .timeKnown)
             try values.encode(blockText, forKey: .blockText)
         }
     }
@@ -326,6 +331,8 @@ struct MeetingImage: Codable, Sendable, Equatable, Identifiable {
     var capturedAt: String
     /// Original capture time. Moving the image block never changes this anchor.
     var at: Double
+    var anchorAt: Double? = nil
+    var timeKnown: Bool? = nil
     var caption: String
     var origin: String? = nil
     var context: MeetingImageContext? = nil
@@ -345,6 +352,7 @@ struct NoteBlock: Codable, Sendable, Equatable, Identifiable {
     var evidence: [Evidence]
     var at: Double?
     var imageId: String?
+    var placement: String? = nil
     var userEdited: Bool?
     var needsReview: Bool?
     var indent: Int?

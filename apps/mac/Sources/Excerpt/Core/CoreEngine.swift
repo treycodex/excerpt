@@ -46,7 +46,7 @@ final class CoreEngine {
 
     /// Bumped in `packages/core/src/engine.ts` whenever the contract changes, so a
     /// stale bundle fails loudly at launch instead of quietly at the first meeting.
-    private static let expectedVersion = "2"
+    private static let expectedVersion = "3"
 
     private let context: JSContext
     private let engine: JSValue
@@ -127,13 +127,22 @@ final class CoreEngine {
         try decode([String].self, from: call("subtitleLines", [text, maxChars]))
     }
 
-    /// The extractive notes document: excerpts of what was said, with the quote each
-    /// one came from. This is the website's long-standing fallback, and the Mac's
-    /// only notes when the optional on-device summary is unavailable or produces
-    /// nothing a quote supports.
+    /// The immediately saved extractive document: sourced excerpts and captures.
+    /// Optional provider wording can replace the excerpts after the save.
     func notes(for meeting: Meeting) throws -> NotesDocument {
         let json = try String(decoding: JSONEncoder.excerpt.encode(meeting), as: UTF8.self)
         return try decode(NotesDocument.self, from: call("notes", [json]))
+    }
+
+    func composeNotes(for meeting: Meeting, wording: NotesDocument) throws -> NotesDocument {
+        let meetingJSON = try String(decoding: JSONEncoder.excerpt.encode(meeting), as: UTF8.self)
+        let wordingJSON = try String(decoding: JSONEncoder.excerpt.encode(wording), as: UTF8.self)
+        return try decode(NotesDocument.self, from: call("composeNotes", [meetingJSON, wordingJSON]))
+    }
+
+    func suggestedTitle(for meeting: Meeting) throws -> String {
+        let json = try String(decoding: JSONEncoder.excerpt.encode(meeting), as: UTF8.self)
+        return try call("suggestTitle", [json])
     }
 
     /// What kind of recording this is, when it is not the kind Excerpt is for — one
