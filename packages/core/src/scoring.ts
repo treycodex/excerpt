@@ -9,6 +9,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   order: ['decision', 'action', 'deadline', 'question'],
   boosts: [],
   instruction: '',
+  notesProvider: 'apple',
 };
 
 /** Words that carry no signal about what a person cares about in a meeting. */

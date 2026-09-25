@@ -42,6 +42,9 @@
 .strip-rail .mark:hover { background: var(--ink); transform: translateX(-0.5px) scaleY(1.375); }
 .strip-rail .mark.settled { background: var(--ember); transform: translateX(-0.5px) scaleY(1.375); }
 .strip-rail .mark.settled:hover { transform: translateX(-0.5px) scaleY(1.69); }
+.strip-rail .mark.image { width: 5px; height: 5px; bottom: 22px; border: 1px solid var(--ink); background: var(--ground); transform: translateX(-2.5px) rotate(45deg); }
+.strip-rail .mark.image:hover { background: var(--ink); transform: translateX(-2.5px) rotate(45deg) scale(1.25); }
+.strip-rail .mark.selected { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ember) 25%, transparent); background: var(--ember); }
 
 /* One ember dot. The playhead is the only round thing on the page. */
 .strip-rail .playhead {

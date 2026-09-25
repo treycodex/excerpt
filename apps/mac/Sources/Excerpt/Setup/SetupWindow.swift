@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The one window Excerpt opens on its own, and only ever once.
 @MainActor
-final class SetupWindowController: NSWindowController {
+final class SetupWindowController: NSWindowController, NSWindowDelegate {
 
     private let model: SetupModel
 
@@ -22,6 +22,7 @@ final class SetupWindowController: NSWindowController {
         window.center()
 
         super.init(window: window)
+        window.delegate = self
 
         window.contentView = NSHostingView(rootView: SetupView(model: model) { [weak self] in
             self?.finish()
@@ -39,6 +40,10 @@ final class SetupWindowController: NSWindowController {
 
     /// The preview overlay is the setup's, not the meeting's. Leaving a sample caption
     /// floating over the desktop after setup closes would be the app failing to end.
+    func windowWillClose(_ notification: Notification) {
+        Task { await model.inputCheck.stop() }
+    }
+
     private func finish() {
         model.overlay.update(speaker: "", text: "")
         model.overlay.hide()

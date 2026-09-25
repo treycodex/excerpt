@@ -1,0 +1,743 @@
+/* ── The notes workspace ───────────────────────────────────────────────────────
+   Three influences, in this order of authority:
+
+   1. Apple Notes, for restraint. A list, a page, and almost nothing else. No card
+      borders, no coloured chips, no decorative rules. What is on screen is the
+      meeting; the interface is the margin around it.
+   2. The Excerpt home page, for identity. The same paper and ink as the manifesto
+      section — `--paper: #f1f0dd` on `#24281f` — Archivo for interface, Instrument
+      Serif where you read rather than are sold to, and mono at wide tracking for
+      labels. Nothing here invents a colour the marketing site does not have.
+   3. macOS, for the chrome. A tinted sidebar that reads as a separate material, a
+      scroll-edge fade instead of a hard divider under the toolbar, a segmented
+      control, and rounded selection fills rather than outlines.
+
+   The previous version used a green accent that appears nowhere else in the
+   product. Hierarchy here comes from weight, size and the paper/ink contrast, so
+   the one place colour is still spent is state — decided, needs review — where it
+   carries meaning rather than decoration. */
+
+.notebook {
+  /* Paper, from the home page's own light section. */
+  --paper:      #f4f3e6;
+  --paper-deep: #eae8d5;
+  --ink:        #1d201a;
+  --ink-soft:   #4c5045;
+  /* Both meet WCAG AA (4.5:1) for small text on paper and paper-deep. */
+  --dim:        #585c4e;
+  --faint:      #5f6355;
+  --line:       #dedcc5;
+  --line-soft:  #e7e5d2;
+  /* State, spent sparingly. Settled is the ink itself; the rest are muted. */
+  --settled:    #24281f;
+  --warn:       #7d6420;
+  --bad:        #a13a2b;
+  --select:     #dedbc2;
+
+  --label: 400 11px/1.6 var(--mono);
+
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  min-height: 100vh;
+  color: var(--ink);
+  background: var(--paper);
+  font-synthesis-weight: none;
+}
+.notebook a { color: inherit; text-decoration: none; }
+.notebook button, .notebook summary { cursor: pointer; }
+.notebook :is(button, a, input, select, summary):focus-visible {
+  outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px;
+}
+
+/* ── Sidebar: a material, not a column ─────────────────────────────────────── */
+.notebook-sidebar {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 26px 12px 16px;
+  background: var(--paper-deep);
+  border-right: 1px solid var(--line);
+  /* Real translucency where the host gives us something to blur against. */
+  backdrop-filter: saturate(140%) blur(20px);
+  -webkit-backdrop-filter: saturate(140%) blur(20px);
+}
+/* Inside Excerpt's own window the title bar is transparent and sits over the page,
+   so the sidebar has to start below the traffic lights rather than under them. */
+[data-host="mac"] .notebook-sidebar { padding-top: 46px; }
+
+.notebook-brand { display: block; padding: 0 10px 18px; font-size: 19px; }
+
+.notebook-new {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px; margin-bottom: 4px;
+  border-radius: 7px; background: var(--ink); color: var(--paper) !important;
+  font-size: 13px; font-weight: 500;
+  transition: background .15s;
+}
+.notebook-new:hover { background: #33372c; }
+
+.notebook-search input {
+  width: 100%; min-width: 0; padding: 8px 11px;
+  font: 13px var(--sans); color: var(--ink);
+  background: #fbfaf1;
+  border: 1px solid var(--line); border-radius: 7px;
+}
+.notebook-search input::placeholder { color: var(--faint); }
+
+.notebook-all {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 11px; border-radius: 7px; font-size: 13.5px;
+}
+.notebook-all span { color: var(--faint); font-variant-numeric: tabular-nums; }
+.notebook .selected { background: var(--select); }
+.notebook .selected span { color: var(--dim); }
+
+.notebook-sidebar-label {
+  font: var(--label); letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--faint); padding: 14px 11px 4px;
+}
+
+/* The list. Two lines each, like Apple Notes: what it is, then when and how much. */
+/* A found passage under the meeting it was found in. */
+.notebook-snippet {
+  display: block; margin-top: 4px; font: 400 12px/1.45 var(--sans);
+  color: var(--faint); overflow-wrap: anywhere;
+}
+.notebook-snippet em {
+  font-style: normal; text-transform: uppercase; letter-spacing: .06em;
+  font-size: 10px; color: var(--faint); opacity: .8;
+}
+.notebook-snippet mark { background: none; color: var(--ink); font-weight: 500; }
+
+.notebook-recent { overflow-y: auto; flex: 1; margin: 0 -2px; padding: 0 2px; }
+.notebook-recent a { display: block; padding: 9px 11px; border-radius: 7px; }
+.notebook-recent strong {
+  display: block; font-size: 13.5px; font-weight: 500; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.notebook-recent span {
+  display: block; margin-top: 3px; font-size: 12px; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.notebook-recent p { padding: 4px 11px; font-size: 13px; line-height: 1.6; color: var(--faint); }
+@media (hover: hover) and (pointer: fine) {
+  .notebook-recent a:hover { background: #e2e0ca; }
+  .notebook-recent a.selected:hover { background: var(--select); }
+}
+
+.notebook-sidebar-footer {
+  display: grid; gap: 8px; margin-top: 10px; padding: 14px 11px 0;
+  border-top: 1px solid var(--line); font-size: 13px;
+}
+.notebook-sidebar-footer span { color: var(--faint); font-size: 11px; }
+
+/* ── Toolbar: a floating strip, with a fade where content passes under ─────── */
+.notebook-main { min-width: 0; position: relative; }
+.notebook-toolbar {
+  position: sticky; top: 0; z-index: 3;
+  min-height: 56px;
+  display: flex; justify-content: space-between; align-items: center; gap: 20px;
+  padding: 10px 26px;
+  font-size: 12.5px; color: var(--faint);
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+}
+[data-host="mac"] .notebook-toolbar { min-height: 72px; padding-top: 26px; }
+/* Apple's scroll edge: content dissolves into the chrome instead of stopping at a
+   1px line. The rule only exists where floating chrome actually overlaps content. */
+.notebook-toolbar::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 22px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--paper) 88%, transparent), transparent);
+  pointer-events: none;
+}
+.notebook-toolbar > a span { padding: 0 9px; color: #b0b3a1; }
+.notebook-toolbar > div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.notebook-toolbar button {
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 12px; background: #fbfaf1; color: var(--ink-soft);
+  font: 13px var(--sans);
+  transition: background .15s, border-color .15s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .notebook-toolbar button:hover { background: #fff; border-color: var(--line-strong, #c9c7ae); }
+}
+.notebook-toolbar .save-state { color: var(--faint); }
+.toolbar-menu, .generation-actions { position: relative; }
+.toolbar-menu > summary, .generation-actions > summary {
+  cursor: pointer; list-style: none; border: 1px solid var(--line); border-radius: 6px;
+  padding: 7px 12px; color: var(--ink); background: #fbfaf1;
+}
+.toolbar-menu > summary::-webkit-details-marker, .generation-actions > summary::-webkit-details-marker { display: none; }
+.toolbar-menu > summary::after, .generation-actions > summary::after { content: ' ▾'; }
+.toolbar-menu > div, .generation-actions > div {
+  position: absolute; right: 0; top: calc(100% + 5px); z-index: 5;
+  display: grid; gap: 4px; min-width: 190px; padding: 6px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--paper);
+  box-shadow: 0 8px 24px rgba(36, 40, 31, .13);
+}
+.toolbar-menu button, .generation-actions button { text-align: left; white-space: nowrap; }
+
+/* ── The page ─────────────────────────────────────────────────────────────── */
+.notebook .notes { max-width: 720px; padding: 40px 26px 140px; }
+
+.notebook-date {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  font: var(--label); letter-spacing: 0.11em; text-transform: uppercase;
+  color: var(--faint); margin-bottom: 18px;
+}
+.notebook .notes h1 {
+  font-family: var(--serif); font-weight: 400;
+  /* Tracking is size-specific: this is display size, so it tightens. */
+  font-size: clamp(34px, 3.4vw, 46px); line-height: 1.06; letter-spacing: -0.02em;
+  margin: 0 0 14px;
+}
+.notebook-description { color: var(--dim); font-size: 15px; line-height: 1.65; margin: 0; }
+
+/* One quiet line, not three chips. The numbers are worth reading; they are not
+   worth three boxes. */
+.notebook .note-counts {
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+  border: 0; padding: 18px 0 0; margin: 0;
+  font: 13px var(--sans); text-transform: none; letter-spacing: 0;
+  color: var(--dim);
+}
+.notebook .note-counts span { padding: 0; background: none; border-radius: 0; }
+.notebook .note-counts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.notebook-view-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 22px 0 0; font: 13px var(--sans); color: var(--dim); }
+.notebook-view-actions button { border: 0; background: none; padding: 4px 0; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.advanced-preferences { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 18px; }
+.advanced-preferences > summary { cursor: pointer; }
+
+.notebook-timeline { margin-top: 18px; }
+.notebook summary { font: 13px/1.6 var(--sans); color: var(--dim); list-style: none; }
+.notebook summary::-webkit-details-marker { display: none; }
+.notebook summary::before { content: "▸ "; color: var(--faint); }
+.notebook details[open] > summary::before { content: "▾ "; }
+.notebook .toolbar-menu > summary::before, .notebook .generation-actions > summary::before,
+.notebook .toolbar-menu[open] > summary::before, .notebook .generation-actions[open] > summary::before { content: none; }
+
+/* ── Items: a list of things said, not a deck of cards ────────────────────── */
+/* The group heading is structure and the state is an attribute of one item, so the
+   heading has to be the stronger of the two. First pass had it the other way round
+   and the eye read "DECIDED" as the section title. */
+.notebook .notes h2 {
+  font: 600 12px/1.4 var(--mono); letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--ink-soft); border: 0; margin: 42px 0 2px; padding: 0;
+}
+.notebook .item { padding: 20px 0; border-bottom: 1px solid var(--line-soft); }
+.notebook .item .state {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  font: 400 10px/1.6 var(--mono); letter-spacing: 0.1em; text-transform: uppercase;
+  margin-bottom: 8px; color: var(--faint);
+}
+.notebook .item .state > span { text-transform: uppercase; }
+.notebook .item .badge { padding: 0; background: none; border-radius: 0; color: var(--faint); }
+/* Settled is the only state that gets full ink. Everything else stays quiet. */
+.notebook .item.decided .badge { color: var(--ink-soft); font-weight: 500; }
+.notebook .item .mine { color: var(--settled); font-weight: 500; }
+.notebook .item .needs-review, .notebook .item .review { color: var(--warn); }
+.notebook .item .title {
+  font: 400 17px/1.6 var(--sans); color: var(--ink); margin: 0 0 10px;
+  letter-spacing: -0.005em;
+}
+.note-evidence { margin: 8px 0; }
+.notebook .item blockquote {
+  font: 400 17px/1.62 var(--serif); color: var(--ink-soft);
+  border-left: 2px solid var(--line); padding: 2px 0 2px 16px; margin: 12px 0;
+}
+.notebook .item blockquote cite {
+  display: block; margin-top: 8px;
+  font: var(--label); letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--faint); font-style: normal;
+}
+.notebook .view-passage {
+  font: 12.5px var(--sans); text-transform: none; letter-spacing: 0;
+  margin-top: 6px; color: var(--dim); border: 0; background: none; padding: 0;
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong, #c9c7ae);
+}
+
+/* Controls stay out of the way until you reach for them — but only where there is
+   a pointer to hover with. On touch there is no hover, so they are always there. */
+.notebook .controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .notebook .controls { opacity: 0; transition: opacity .15s; }
+  .notebook .item:hover .controls,
+  .notebook .item:focus-within .controls,
+  .notebook .is-active .controls { opacity: 1; }
+}
+.notebook .controls :is(button, select), .notebook .edit button {
+  font: 12.5px var(--sans); text-transform: none; letter-spacing: 0;
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px;
+  background: #fbfaf1; color: var(--dim);
+}
+@media (hover: hover) and (pointer: fine) {
+  .notebook .controls :is(button, select):hover { color: var(--ink); border-color: #c9c7ae; }
+}
+.notebook .due-edit input { color-scheme: light; border-radius: 6px; }
+.notebook .edit { display: flex; flex-wrap: wrap; gap: 8px; }
+.notebook .edit input {
+  min-width: 0; width: 100%; font: 16px var(--sans);
+  border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; background: #fbfaf1;
+}
+
+.notebook .passage-context { border-radius: 8px; background: var(--paper-deep); padding: 14px 16px; }
+.notebook .passage-context p { grid-template-columns: 92px 1fr; }
+.notebook .passage-context::before, .notebook .passage-context::after { display: none; }
+
+/* ── Transcript ───────────────────────────────────────────────────────────────
+   A document, not a chat log. Each turn is one person speaking without
+   interruption: the label and the time sit in a hanging gutter and are said once,
+   and the words run as paragraphs. Your own turns take ink-weight labels and a rule
+   in the gutter, because telling you from everyone else is the whole claim. */
+.notebook .transcript { margin-top: 12px; }
+.notebook .turn {
+  display: grid; grid-template-columns: 118px minmax(0, 1fr);
+  gap: 0 20px; padding: 16px 0; border-bottom: 1px solid var(--line-soft);
+}
+.notebook .turn > header { display: flex; flex-direction: column; gap: 3px; padding-top: 2px; }
+.notebook .turn .who {
+  font: 500 10px/1.6 var(--mono); letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--faint);
+}
+.notebook .turn.mine .who { color: var(--settled); }
+.notebook .turn .at {
+  font: 400 11px/1.5 var(--mono); color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+/* The rule marks your turns without colouring them — the far side is the default,
+   and you are the exception worth spotting. */
+.notebook .turn.mine > header { border-left: 2px solid var(--line-strong, #c9c7ae); margin-left: -12px; padding-left: 10px; }
+
+.notebook .line-row {
+  display: block; margin: 0; padding: 0; border: 0;
+  font: 400 15.5px/1.72 var(--sans); color: var(--ink-soft);
+  /* The toolbar floats over the page, so a row scrolled to by evidence has to stop
+     below it rather than under it. */
+  scroll-margin-top: 96px;
+}
+.notebook .turn.mine .line-row { color: var(--ink); }
+.notebook .line-row + .line-row { margin-top: 7px; }
+.notebook .line-row.focused {
+  margin: 0 -10px; padding: 3px 10px; border-radius: 5px;
+  background: var(--select); color: var(--ink);
+}
+.notebook .line-row + .line-row.focused { margin-top: 4px; }
+.notebook .nudge { font-size: 13px; margin-top: 30px; color: var(--dim); }
+.notebook .nudge a { text-decoration: underline; text-underline-offset: 3px; }
+
+/* The one mention of optional personalization, after the notes rather than before
+   them. A rule and quiet type: this is a footnote, not a second onboarding step. */
+.notebook .preferences-hint {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--line);
+  font: 13px/1.5 var(--sans); color: var(--dim);
+}
+.notebook .preferences-hint p { margin: 0; }
+.notebook .preferences-hint div { display: flex; gap: 8px; }
+.notebook .preferences-hint a, .notebook .preferences-hint button {
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 11px;
+  font: 13px var(--sans); color: var(--ink); background: transparent; cursor: pointer;
+}
+.notebook .preferences-return {
+  display: inline-block; margin-bottom: 14px; font: 13px var(--sans); color: var(--dim);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.notebook .preferences-return:hover { color: var(--ink); }
+
+.notebook .empty-notes h2 { font: var(--serif); font-size: 22px; letter-spacing: -0.01em; color: var(--ink); text-transform: none; margin-top: 34px; }
+
+/* ── Capture and preferences ───────────────────────────────────────────────────
+   These two are workspace screens, not marketing ones, so they inherit the paper
+   ground and only need the controls that app.css styles for a dark page put right. */
+.notebook select, .notebook textarea, .notebook input[type="text"], .notebook input[type="date"] {
+  color-scheme: light;
+  background: #fbfaf1; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px;
+  font: 14px var(--sans);
+}
+.notebook select { padding-right: 28px; }
+.notebook .instruction { width: 100%; line-height: 1.6; }
+
+/* The live caption preview stays a dark frame inside the light page — a subtitle is
+   white on a picture, and showing it on paper would be showing something the product
+   never does. Same reason the notes page keeps its strip dark. */
+.notebook .call {
+  background: #101110; border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden;
+}
+.notebook .call .caption .line { color: var(--cap-color); }
+.notebook .call-chrome { color: #8d9184; }
+
+.notebook .diagnostics { font: 12.5px var(--sans); color: var(--dim); margin-top: 14px; }
+.notebook .diagnostics summary { color: var(--dim); }
+
+/* Cards for the two capture modes, and the preset picker on Preferences. */
+.notebook .share-option, .notebook .caption-style-card {
+  background: #fbfaf1; border: 1px solid var(--line); border-radius: 9px;
+}
+.notebook .caption-style-preview { background: #101110; border-radius: 7px; }
+.notebook .chip {
+  background: var(--paper-deep); border: 1px solid var(--line); border-radius: 20px;
+  color: var(--ink-soft); font: 12.5px var(--sans); padding: 5px 11px;
+}
+.notebook .pref-order li { border-bottom: 1px solid var(--line-soft); }
+.notebook .rank { color: var(--faint); font: 12px var(--mono); }
+
+/* ── Library ──────────────────────────────────────────────────────────────── */
+.notebook .meeting-row { padding: 18px 0; border-bottom: 1px solid var(--line-soft); gap: 16px; }
+.notebook .meeting-row .mtitle { font-family: var(--serif); font-size: 21px; letter-spacing: -0.015em; }
+.notebook .meeting-row .mmeta {
+  margin-top: 6px; font: var(--label); letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint);
+}
+.notebook .meeting-row button { color: var(--dim); }
+.notebook .meeting-row .row-actions button {
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px;
+  font: 12.5px var(--sans); text-transform: none; letter-spacing: 0; background: #fbfaf1;
+}
+.notebook .notebook-library .eyebrow { color: var(--faint); }
+.notebook [hidden] { display: none !important; }
+
+.notebook .notes-editor { border: 0; padding: 0; margin: 0; min-width: 0; }
+.notebook .notes-editor:disabled { opacity: .65; }
+.document-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin: 24px 0; font: 12px var(--sans); color: var(--dim); }
+.document-toolbar button { border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; color: var(--ink); }
+.document-toolbar button:disabled { opacity: .5; cursor: default; }
+/* The sentence sits under the provenance and before the buttons, so what an action
+   can do here is read rather than discovered by pressing it. */
+.document-provenance { display: grid; gap: 4px; max-width: 46ch; }
+.document-provenance small { font: 12px/1.5 var(--sans); color: var(--faint); }
+.document-provenance small a { color: var(--dim); text-decoration: underline; text-underline-offset: 3px; }
+.generation-actions { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; flex:none; }
+.generation-error { padding:16px 18px; margin:16px 0 24px; border:1px solid #d9d5cc; border-left:2px solid var(--ember); background:#f0eee8; border-radius:5px; }
+.generation-error p { margin:0 0 12px; font:14px/1.6 var(--sans); color:var(--ink); }
+.generation-error div { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.generation-error button { border:1px solid var(--line-strong); border-radius:6px; padding:7px 12px; font:inherit; font-size:13px; color:var(--ink); background:transparent; cursor:pointer; }
+.generation-error a { font:13px var(--sans); color:var(--dim); text-decoration:underline; text-underline-offset:3px; }
+.notebook .notes-document h2 { font: 600 18px var(--sans); letter-spacing: -.025em; text-transform: none; margin: 30px 0 14px; }
+.notebook .key-points { border-bottom: 1px solid var(--line); padding-bottom: 24px; }
+.document-bullets { padding-left: 22px; margin: 0; }
+.document-bullets > li { padding-left: 5px; margin: 0 0 14px; color: var(--ink); }
+.document-bullets p { margin: 0; font: 16px/1.65 var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; }
+.bullet-tools { display: flex; gap: 12px; align-items: baseline; margin-top: 3px; font: 11px var(--sans); color: var(--dim); }
+.bullet-tools button, .bullet-tools summary { color: var(--dim); font: inherit; cursor: pointer; }
+.bullet-tools button { border: 0; background: transparent; padding: 0; }
+.bullet-tools button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.bullet-tools details { min-width: 0; }
+.bullet-tools blockquote { font: 13px/1.5 var(--sans); margin: 8px 0; padding-left: 10px; border-left: 2px solid var(--line); }
+.bullet-tools blockquote button { display: block; margin-top: 5px; }
+.bullet-editor textarea { width: 100%; min-height: 90px; resize: vertical; }
+.bullet-editor > button { font: 12px var(--sans); padding: 6px 12px 6px 0; }
+.notebook .document-more { font: 12px var(--sans); color: var(--dim); margin-top: 8px; }
+.notebook .action-check { accent-color: #6d714c; width: 17px; height: 17px; margin: 0 12px 0 0; vertical-align: middle; }
+.notebook .title.completed { text-decoration: line-through; color: var(--dim); }
+
+@media (prefers-reduced-transparency: reduce) {
+  .notebook-sidebar, .notebook-toolbar { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .notebook-toolbar { background: var(--paper); }
+}
+
+@media (max-width: 1100px) {
+  .notebook { grid-template-columns: 224px minmax(0, 1fr); }
+  .notebook .notes { padding: 34px 24px 100px; }
+}
+@media (max-width: 740px) {
+  .notebook { display: block; }
+  .notebook-sidebar {
+    position: relative; height: auto; padding: 14px 18px;
+    flex-direction: row; align-items: center; flex-wrap: wrap; gap: 12px;
+    border-right: 0; border-bottom: 1px solid var(--line);
+  }
+  [data-host="mac"] .notebook-sidebar { padding-top: 34px; }
+  .notebook-brand { padding: 0; margin-right: auto; }
+  .notebook-new { margin: 0; padding: 8px 12px; }
+  /* Search stays reachable at the 720 px minimum window; the list is one click away. */
+  .notebook-sidebar-label, .notebook-recent, .notebook-sidebar-footer { display: none; }
+  .notebook-search { order: 1; flex: 1 1 100%; }
+  .notebook-sidebar:has(.notebook-search input:not(:placeholder-shown)) .notebook-recent {
+    display: block; order: 2; flex: 1 1 100%; max-height: 45vh;
+  }
+  .notebook-all { padding: 7px 10px; gap: 10px; }
+  .notebook-toolbar { padding: 10px 18px; min-height: 54px; }
+  [data-host="mac"] .notebook-toolbar { padding-top: 12px; min-height: 54px; }
+  .notebook-toolbar > a { display: none; }
+  .notebook-toolbar > div { width: 100%; justify-content: flex-end; }
+  .notebook .notes { padding: 26px 20px 90px; }
+  .notebook .passage-context p { display: block; }
+  .notebook .passage-context p span { display: block; margin-bottom: 4px; }
+  .notebook .turn { grid-template-columns: 1fr; gap: 8px; }
+  .notebook .turn > header { flex-direction: row; align-items: baseline; gap: 10px; }
+  .notebook .turn.mine > header { margin-left: 0; padding-left: 8px; }
+  .notebook .meeting-row { flex-wrap: wrap; }
+}
+
+/* A page first, an editor second. The writing keeps its full hierarchy while the
+   machinery lives in a Notion-like gutter and only appears near the active block. */
+.document-title {
+  display:block; width:100%; border:0; border-radius:0; background:transparent;
+  font-family:var(--serif); font-size:clamp(34px,4vw,48px); line-height:1.08;
+  letter-spacing:-.025em; color:inherit; padding:0; margin:14px 0;
+}
+.document-title:focus { outline:0; box-shadow:none; }
+.free-document { padding:8px 0 36px; }
+.writing-block {
+  position:relative; display:grid; grid-template-columns:28px minmax(0,1fr);
+  align-items:start; padding:2px 0;
+}
+.block-body { position:relative; min-width:0; }
+.writing-block textarea {
+  display:block; width:100%; resize:none; overflow:hidden; box-sizing:border-box;
+  min-height:36px; padding:3px 0; border:0; border-radius:0; background:transparent;
+  color:inherit; font:400 17px/1.68 var(--sans); letter-spacing:-.006em;
+}
+.writing-block textarea::placeholder { color:color-mix(in srgb,var(--faint) 72%,transparent); }
+.writing-block textarea:focus { outline:0; box-shadow:none; }
+.writing-block.heading { margin-top:24px; margin-bottom:4px; }
+.writing-block.heading textarea {
+  min-height:42px; font:400 28px/1.22 var(--serif); letter-spacing:-.018em;
+}
+.writing-block.bullet .block-body { padding-left:22px; }
+.writing-block.bullet .block-body::before {
+  content:'•'; position:absolute; left:2px; top:4px; color:var(--ink-soft);
+  font:400 17px/1.68 var(--sans);
+}
+
+.block-gutter { position:relative; min-height:34px; }
+.block-menu { position:absolute; top:3px; left:0; z-index:7; }
+.block-menu summary {
+  display:grid; place-items:center; width:22px; height:27px; border-radius:5px;
+  color:var(--faint); opacity:0; cursor:pointer; list-style:none;
+  font:16px/1 var(--sans); transition:opacity .12s,background .12s,color .12s;
+}
+.block-menu summary::-webkit-details-marker { display:none; }
+.writing-block:hover .block-menu summary,
+.writing-block:focus-within .block-menu summary,
+.block-menu[open] summary { opacity:.72; }
+.block-menu summary:hover,.block-menu[open] summary { opacity:1; color:var(--ink); background:var(--paper-deep); }
+.block-popover {
+  position:absolute; top:32px; left:0; z-index:8; width:174px; padding:6px;
+  border:1px solid var(--line); border-radius:8px; background:#fbfaf1;
+}
+.block-popover button {
+  display:block; width:100%; padding:7px 9px; border:0; border-radius:5px;
+  background:transparent; color:var(--ink-soft); text-align:left;
+  font:13px var(--sans); cursor:pointer;
+}
+.block-popover button:hover { background:var(--paper-deep); color:var(--ink); }
+.block-popover button:disabled { opacity:.35; cursor:default; background:transparent; }
+.block-kind-picker {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:3px;
+  margin-bottom:5px; padding-bottom:6px; border-bottom:1px solid var(--line-soft);
+}
+.block-kind-picker button { padding:6px 3px; text-align:center; font-size:11px; }
+.block-kind-picker button[aria-pressed="true"] { background:var(--select); color:var(--ink); font-weight:600; }
+.block-popover .block-delete { margin-top:5px; padding-top:7px; border-top:1px solid var(--line-soft); color:var(--bad); border-radius:0 0 5px 5px; }
+
+.block-meta { display:flex; align-items:center; flex-wrap:wrap; gap:10px; min-height:18px; }
+.slash-menu {
+  position:absolute; left:0; top:calc(100% + 4px); z-index:6;
+  display:flex; align-items:center; gap:3px; padding:6px;
+  border:1px solid var(--line); border-radius:7px; background:#fbfaf1;
+}
+.slash-menu span { padding:0 6px; font:10px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+.slash-menu button { padding:5px 8px; border:0; border-radius:4px; background:transparent; color:var(--ink-soft); font:12px var(--sans); cursor:pointer; }
+.slash-menu button:hover { background:var(--paper-deep); color:var(--ink); }
+
+.writing-block figure { margin:20px 0 6px; }
+.writing-block img { display:block; max-width:100%; max-height:620px; object-fit:contain; border:1px solid var(--line); border-radius:7px; }
+.writing-block .moment-image { cursor:zoom-in; }
+.writing-block .moment-image:focus-visible { outline:2px solid var(--settled); outline-offset:3px; }
+.writing-block.selected-moment figure { margin-inline:-12px; padding:12px; background:var(--select); border-radius:9px; }
+.writing-block figcaption { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:9px 0; font-size:12px; color:var(--faint); }
+.writing-block .moment-time { padding:0; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:#c9c7ae; text-underline-offset:3px; }
+.writing-block figcaption input { flex:1; min-width:180px; padding:6px 0; border:0; border-radius:0; background:transparent; font:inherit; color:inherit; }
+
+.writing-toolbar {
+  display:flex; align-items:center; flex-wrap:wrap; gap:3px;
+  margin-top:28px; padding-top:12px; border-top:1px solid var(--line-soft);
+  color:var(--dim);
+}
+.writing-toolbar>span {
+  margin-right:5px; font:10px var(--mono); letter-spacing:.1em;
+  text-transform:uppercase; color:var(--faint);
+}
+.writing-toolbar button {
+  display:inline-flex; align-items:center; gap:6px; padding:6px 8px;
+  border:0; border-radius:5px; background:transparent; color:inherit;
+  font:12px var(--sans); cursor:pointer;
+}
+.writing-toolbar button>span { min-width:13px; text-align:center; color:var(--faint); }
+.writing-toolbar button:hover { background:var(--paper-deep); color:var(--ink); }
+.writing-toolbar .writing-undo { margin-left:auto; color:var(--ink-soft); }
+.writing-hint { margin:9px 0 0; font:11px/1.65 var(--sans); color:var(--faint); }
+.empty-document { width:100%; padding:30px 28px; text-align:left; color:var(--faint); border:0; background:none; font:16px var(--sans); cursor:text; }
+.review-intro { margin:22px 0 30px; }
+.review-intro h2 { margin-bottom:10px; }
+.review-intro p { max-width:600px; line-height:1.6; color:#666; }
+.review-intro>span { display:block; margin-top:12px; font-size:13px; }
+.review-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.review-actions button,.image-placement button,.document-preview button,.correction-preview button { padding:7px 12px; font:inherit; font-size:13px; cursor:pointer; }
+.confirmed { color:#55764b; }
+.image-placement,.document-preview,.correction-preview { padding:20px; margin:16px 0 28px; background:#f0eee8; border:1px solid #d9d5cc; border-radius:5px; }
+/* What an item absorbed when the reader joined two, and the way out of it. */
+.item-joined { margin:8px 0 2px; }
+.item-joined p { margin:0; font:400 12px/1.5 var(--sans); color:var(--faint); }
+.item-joined p span { text-transform:uppercase; letter-spacing:.07em; font-size:10px; }
+.item-joined button {
+  margin-left:8px; border:0; background:transparent; padding:0; cursor:pointer;
+  font:12px var(--sans); color:var(--dim); text-decoration:underline; text-underline-offset:3px;
+}
+.item-joined button:hover { color:var(--ink); }
+
+/* The way back from a passage to the note that cited it. */
+.return-to-note {
+  display:block; width:100%; text-align:left; margin:0 0 16px; padding:9px 12px;
+  border:1px solid var(--line); border-radius:6px; background:transparent;
+  font:400 13px/1.5 var(--sans); color:var(--dim); cursor:pointer;
+}
+.return-to-note span { display:block; color:var(--faint); font-size:12px; margin-top:2px; }
+.return-to-note:hover { color:var(--ink); border-color:var(--line-strong); }
+
+/* A proposed relation between two items. Phrased and styled as a question, not
+   as a finding: nothing here has happened until the reader answers. */
+.item-relation { margin:10px 0 4px; padding:10px 12px; border:1px dashed var(--line-strong); border-radius:6px; background:rgba(120,110,90,.03); }
+.item-relation p { margin:0; font:400 13px/1.5 var(--sans); color:var(--ink); }
+.item-relation p span { color:var(--faint); }
+.item-relation-why { margin-top:4px !important; font-size:11px !important; color:var(--faint) !important; }
+.item-relation-actions { display:flex; gap:8px; margin-top:8px; }
+.item-relation-actions button { font:12px var(--sans); padding:4px 10px; border:1px solid var(--line-strong); border-radius:4px; background:transparent; color:var(--dim); cursor:pointer; }
+.item-relation-actions button:first-child { color:var(--ink); }
+.item-relation-actions button:hover { background:#e9e6df; color:var(--ink); }
+
+/* Summary and next steps: part of the page, not a dashboard above it. The labels
+   are quiet; the lines themselves carry the reading weight. */
+.overview { margin:20px 0 8px; display:grid; gap:22px; }
+.overview-label { margin:0 0 8px; font:var(--label); letter-spacing:.14em; text-transform:uppercase; color:var(--faint); }
+.document-label { margin-top:28px; }
+.summary-lines, .next-steps { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+.summary-lines li { font:400 16px/1.6 var(--sans); color:var(--ink); }
+.summary-lines li::before { content:"—"; margin-right:8px; color:var(--faint); }
+.next-step { display:grid; grid-template-columns:24px minmax(0,1fr); align-items:start; gap:4px; padding:3px 0; }
+.next-step .action-check { margin:4px 0 0; }
+.next-step-marker { margin-top:2px; color:var(--faint); font-size:14px; text-align:center; }
+.next-step-text { font:400 16px/1.55 var(--sans); color:var(--ink); }
+.next-step.done .next-step-text { text-decoration:line-through; color:var(--dim); }
+.next-step-meta { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; margin-top:1px; font:12px/1.5 var(--sans); color:var(--dim); }
+.next-step-review { color:var(--warn); }
+.next-step-actions { display:inline-flex; gap:10px; }
+.next-step-actions button, .overview-more {
+  border:0; background:transparent; padding:0; font:12px var(--sans); color:var(--dim);
+  text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--line-strong, #c9c7ae);
+}
+.next-step-actions button:hover, .overview-more:hover { color:var(--ink); }
+.overview-more { margin-top:8px; }
+/* Row actions stay reachable by keyboard and touch, but recede until wanted. */
+@media (hover: hover) and (pointer: fine) {
+  .next-step .next-step-actions { opacity:0; transition:opacity .12s; }
+  .next-step:hover .next-step-actions, .next-step:focus-within .next-step-actions { opacity:1; }
+}
+.next-step-edit { display:flex; flex-wrap:wrap; gap:8px; }
+.next-step-edit input { flex:1 1 240px; min-width:0; padding:6px 8px; font:15px var(--sans); color:var(--ink); background:#fbfaf1; border:1px solid var(--line); border-radius:5px; }
+.next-step-edit button { font:12px var(--sans); padding:5px 10px; border:1px solid var(--line); border-radius:5px; background:#fbfaf1; color:var(--ink); }
+/* Clear of the sticky toolbar when scrolled into view. */
+.source-panel, .moment-viewer { scroll-margin-top:72px; }
+.source-panel:focus, .moment-viewer:focus { outline:none; }
+.source-panel:focus-visible, .moment-viewer:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+
+/* Source passages, in the same frame as a captured moment: both answer "where
+   did this come from", and they should not look like two different products. */
+.source-panel { margin:24px 0 34px; border:1px solid var(--line); border-radius:8px; background:var(--paper-deep); overflow:hidden; }
+.source-panel>header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); }
+.source-panel>header div { display:flex; align-items:baseline; gap:12px; }
+.source-panel>header span,.source-panel>header strong { font:10px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+.source-panel>header span { color:var(--faint); } .source-panel>header strong { color:var(--ink); }
+.source-panel>header button { border:0; background:transparent; font-size:20px; color:var(--dim); cursor:pointer; }
+.source-panel>.rubric { margin:0; padding:12px 18px 16px; border-top:1px solid var(--line); font-size:12px; }
+.source-note { margin:0; padding:16px 18px 0; font:500 15px/1.6 var(--sans); color:var(--ink); }
+.source-list { list-style:none; margin:0; padding:14px 18px 4px; display:grid; gap:16px; }
+.source-list>li { padding-left:12px; border-left:2px solid var(--line-strong); min-width:0; }
+.source-meta { display:flex; gap:10px; align-items:baseline; font:10px var(--mono); letter-spacing:.09em; text-transform:uppercase; }
+.source-meta .dim { color:var(--faint); }
+.source-quote { margin:6px 0 0; font:400 14px/1.6 var(--sans); color:var(--ink); }
+.source-around { margin:6px 0 0; font:400 13px/1.6 var(--sans); color:var(--faint); }
+.source-around .matched { color:var(--ink); }
+.source-open { margin-top:7px; border:0; background:transparent; padding:0; font:12px var(--sans); color:var(--dim); cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+.source-open:hover { color:var(--ink); }
+@media (max-width:640px) { .source-list { padding-inline:14px; } }
+
+/* Evidence stays visible, but reads as document metadata rather than editor chrome. */
+.block-citation {
+  border:0; background:transparent; padding:1px 0; cursor:pointer;
+  font:10.5px var(--sans); color:var(--faint);
+}
+.block-citation span { display:inline-block; margin-left:2px; transition:transform .12s; }
+.block-citation:hover { color:var(--ink); }
+.block-citation:hover span { transform:translate(1px,-1px); }
+
+.moment-viewer { margin:24px 0 34px; border:1px solid var(--line); border-radius:8px; background:var(--paper-deep); overflow:hidden; }
+.moment-viewer>header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); }
+.moment-viewer>header div { display:flex; align-items:baseline; gap:12px; }
+.moment-viewer>header span,.moment-viewer>header strong { font:10px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+.moment-viewer>header span { color:var(--faint); }.moment-viewer>header strong { color:var(--ink); }
+.moment-viewer>header button { border:0; background:transparent; font-size:20px; color:var(--dim); cursor:pointer; }
+.moment-layout { display:grid; grid-template-columns:minmax(220px,.9fr) minmax(260px,1.1fr); gap:0; }
+.moment-layout>div,.moment-layout>section { padding:18px; min-width:0; }
+.moment-layout>section { border-left:1px solid var(--line); }
+.moment-layout img { display:block; width:100%; max-height:360px; object-fit:contain; background:#171814; border-radius:5px; }
+.moment-layout label { display:block; margin-top:14px; font:10px var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--faint); }
+.moment-layout label input { display:block; width:100%; box-sizing:border-box; margin-top:6px; text-transform:none; letter-spacing:0; }
+.moment-layout small { display:block; margin-top:9px; color:var(--faint); font:11px var(--sans); }
+.moment-layout h3 { margin:0 0 10px; font:600 14px var(--sans); color:var(--ink); }
+.moment-passage { display:block; width:100%; padding:9px 0; border:0; border-bottom:1px solid var(--line-soft); background:transparent; text-align:left; font:14px/1.5 var(--sans); color:var(--ink-soft); cursor:pointer; }
+.moment-passage span { display:block; margin-bottom:3px; color:var(--faint); font:9px var(--mono); letter-spacing:.08em; text-transform:uppercase; }
+.moment-passage:hover { color:var(--ink); }
+.moment-layout .moment-expand { margin-top:13px; padding:5px 9px; border:1px solid var(--line); border-radius:5px; background:#fbfaf1; color:var(--dim); cursor:pointer; font:12px var(--sans); }
+.moment-layout section>p { margin:10px 0 0; color:var(--faint); font:11px/1.5 var(--sans); }
+.moment-layout .moment-empty { color:var(--dim); font-size:13px; }
+@media (max-width:760px) { .moment-layout { grid-template-columns:1fr; }.moment-layout>section { border-left:0; border-top:1px solid var(--line); } }
+.image-placement p,.document-preview p,.correction-preview p { line-height:1.6; }
+.image-placement input { width:100px; padding:7px; margin:8px; }
+.correction-preview textarea { display:block; width:100%; min-height:100px; font:inherit; padding:12px; box-sizing:border-box; margin:15px 0; }
+.correction-change { padding:12px 0; border-top:1px solid #d9d5cc; }
+.correction-change del { color:#72574d; }
+.correct-transcript { display:block; background:transparent; border:0; padding:6px 0; font:inherit; font-size:12px; color:var(--dim); cursor:pointer; }
+.correction-original { display:block; font-size:12px; color:var(--faint); margin-top:6px; }
+/* The correction opens under the line being corrected, so nobody loses their place. */
+.line-row .correction-preview { display:block; margin:8px 0 14px; padding:12px 14px; border:1px solid var(--line); border-radius:7px; background:var(--paper-deep); }
+.line-row .correction-preview textarea { margin:0 0 10px; min-height:80px; background:#fbfaf1; color:var(--ink); border:1px solid var(--line); border-radius:5px; }
+.correction-note { display:block; margin:6px 0; font:12px/1.5 var(--sans); color:var(--dim); }
+.line-row .correction-change { display:block; padding:8px 0; border-top:1px solid var(--line); font-size:13px; }
+.line-row .correction-change>span { display:block; }
+.correction-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.correction-actions button { font:12px var(--sans); padding:5px 10px; border:1px solid var(--line); border-radius:5px; background:#fbfaf1; color:var(--ink); }
+.correction-actions button:disabled { color:var(--faint); cursor:default; }
+@media(max-width:700px) { .notebook-toolbar { flex-wrap:wrap; gap:8px; } .notebook-toolbar>div { flex-wrap:wrap; } }
+.source-review-notice { margin:0; font-size:11px; color:var(--warn); padding:2px 0; }
+.source-review-notice button { font:inherit; color:inherit; background:transparent; border:0; text-decoration:underline; cursor:pointer; }
+
+@media (hover:none) {
+  .block-menu summary { opacity:.42; }
+}
+@media (max-width:640px) {
+  .writing-block { grid-template-columns:24px minmax(0,1fr); }
+  .writing-block textarea { font-size:16px; }
+  .writing-block.heading textarea { font-size:25px; }
+  .writing-toolbar button { padding-inline:6px; }
+  .writing-hint { max-width:42ch; }
+}
+
+.desktop-settings { display: grid; gap: 1.4rem; margin: 2rem 0; }
+.desktop-settings fieldset { display: grid; gap: 1rem; border: 1px solid var(--line); padding: 1.25rem; min-width: 0; }
+.desktop-settings legend { padding: 0 .4rem; font-weight: 600; }
+.desktop-settings label { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.desktop-settings select { font: inherit; color: inherit; background: var(--ground); border: 1px solid var(--line); border-radius: 4px; padding: .4rem .6rem; max-width: 100%; }
+.desktop-settings p { margin: 0; }
+.desktop-settings summary { cursor: pointer; }
+.desktop-settings li { margin: .6rem 0; }
+
+/* Reduced motion: no transitions, no smooth scrolling, nothing that slides. */
+@media (prefers-reduced-motion: reduce) {
+  .notebook *, .notebook *::before, .notebook *::after {
+    transition-duration: 0s !important; animation-duration: 0s !important; scroll-behavior: auto !important;
+  }
+}

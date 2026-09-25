@@ -1,5 +1,5 @@
 {
-  "comment": "Cross-runtime fixtures. vitest runs these against the TypeScript source; ExcerptTests runs them against the compiled bundle inside JavaScriptCore. One file, two runtimes \u2014 the only way 'one engine' is a fact rather than an intention.",
+  "comment": "Cross-runtime fixtures. vitest runs these against the TypeScript source; ExcerptTests runs them against the compiled bundle inside JavaScriptCore. One file, two runtimes — the only way 'one engine' is a fact rather than an intention.",
   "reference": "2026-09-07T09:00:00Z",
   "cases": [
     {
@@ -80,11 +80,27 @@
       ]
     },
     {
-      "name": "negation is not a decision",
+      "name": "a decision not to do something is still a decision",
       "lines": [
         [
           "remote",
           "We're not moving the launch to October."
+        ]
+      ],
+      "expect": [
+        {
+          "category": "decision",
+          "state": "decided",
+          "assignee": "unassigned"
+        }
+      ]
+    },
+    {
+      "name": "a negation that narrows a plan is not a decision against it",
+      "lines": [
+        [
+          "remote",
+          "We're not moving the whole campaign, just the hero spot."
         ]
       ],
       "expect": []

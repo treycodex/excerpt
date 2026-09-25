@@ -2,6 +2,38 @@ import AVFoundation
 import Foundation
 import OSLog
 
+/// Stable transcript anchors for captured moments. Images keep their original time;
+/// moving a block in the editor changes presentation order only.
+enum MeetingMoments {
+    static let before: Double = 20_000
+    static let after: Double = 15_000
+
+    static func time(_ event: TranscriptEvent) -> Double {
+        event.tStart.map { $0 * 1000 } ?? event.tArrived
+    }
+
+    static func end(_ event: TranscriptEvent) -> Double {
+        event.tEnd.map { $0 * 1000 } ?? time(event)
+    }
+
+    static func context(at: Double, events: [TranscriptEvent]) -> MeetingImageContext {
+        let start = max(0, at - before)
+        let finish = at + after
+        let ids = events.filter { $0.isFinal && end($0) >= start && time($0) <= finish }
+            .sorted { time($0) < time($1) }.map(\.id)
+        return MeetingImageContext(eventIds: ids, startAt: start, endAt: finish)
+    }
+
+    static func reconcile(_ images: [MeetingImage], events: [TranscriptEvent]) -> [MeetingImage] {
+        images.map { image in
+            if image.timeKnown == false { return image }
+            var next = image
+            next.context = context(at: image.anchorAt ?? image.at, events: events)
+            return next
+        }
+    }
+}
+
 /// One meeting, from Start to notes on disk.
 ///
 /// This is the product's spine: capture feeds two transcribers, both settle onto one
@@ -12,24 +44,41 @@ import OSLog
 @Observable
 final class MeetingSession {
 
+    enum RecoveryHealth: Equatable {
+        case healthy
+        case degraded(String)
+    }
+
     enum State: Equatable {
         case idle
         case starting
         case listening(since: Date)
-        case saving
+        case finishing(MeetingFinishReason)
+        case completed(id: String)
+        case interrupted(id: String, message: String)
         case failed(String)
 
         var isActive: Bool {
             switch self {
-            case .listening, .starting, .saving: true
-            case .idle, .failed: false
+            case .listening, .starting, .finishing: true
+            case .idle, .completed, .interrupted, .failed: false
             }
         }
     }
 
-    private(set) var state: State = .idle
+    var onStateChange: (() -> Void)?
+    /// NotesBridge forwards these snapshots to the editor. Captions never take this
+    /// path; only settled, readable meeting state does.
+    var onMeetingChange: ((Meeting) -> Void)?
+    /// The sole post-save completion route. AppDelegate opens this exact meeting for
+    /// both manual stops and capture interruptions, and is never handed an older save.
+    var onMeetingFinished: ((Meeting) -> Void)?
+    var onHeadphoneSuggestion: (() -> Void)?
+    var onHealthChange: (() -> Void)?
+    private(set) var state: State = .idle { didSet { onStateChange?() } }
     private(set) var events: [TranscriptEvent] = []
     private(set) var lastSaved: Meeting?
+    private(set) var recoveryHealth: RecoveryHealth = .healthy
 
     /// What the user is told while it runs. One line, in their words, not ours.
     private(set) var status = "Not listening"
@@ -49,120 +98,411 @@ final class MeetingSession {
     /// "Nothing worth noting was said" is the right answer to exactly one of them, and
     /// saying it for all four is how a broken app looks like a working one.
     private(set) var diagnosis = ""
+
     private var audioStats: [SourceKind: SourceStats] = [:]
     private var speechStats: [SourceKind: TranscriptStats] = [:]
 
+    /// Live per-source health, and the watch that keeps it current.
+    ///
+    /// Both stats dictionaries above were only ever filled in `finish()`, to compose
+    /// a diagnostic line for a meeting that had already ended. A source that stops
+    /// being recognised halfway through is exactly the failure worth interrupting
+    /// somebody for, and it was discoverable only afterwards, in the notes.
+    private var monitors: [SourceKind: SourceHealthMonitor] = [:]
+    private(set) var health: [SourceKind: SourceHealth] = [:]
+    private var healthWatch: Task<Void, Never>?
+    /// The concern currently being shown, so the status line is not rewritten with
+    /// the same words every second.
+    private var shownConcern: String?
+
     private let engine: CoreEngine
     private let store: MeetingStore
+    private let preferences: PreferencesStore
     private let overlay: OverlayController
+    private let enhancer: MeetingEnhancer
     private let log = Logger(subsystem: "com.excerpt.app", category: "meeting")
 
-    private let capture = CaptureEngine()
+    private let capture: any MeetingCapturing
+    private let makeTranscribers: () -> [SourceKind: any MeetingTranscribing]
 
     /// Rebuilt for every meeting, never reused. A `SourceTranscriber` is a one-run
     /// object — see its own note — and holding one across two meetings costs the
     /// second meeting its entire transcript without any visible failure.
-    private var transcribers: [SourceKind: SourceTranscriber] = MeetingSession.freshTranscribers()
+    private var transcribers: [SourceKind: any MeetingTranscribing] = [:]
 
-    private static func freshTranscribers() -> [SourceKind: SourceTranscriber] {
+    nonisolated private static func freshTranscribers() -> [SourceKind: any MeetingTranscribing] {
         [.system: SourceTranscriber(kind: .system),
          .microphone: SourceTranscriber(kind: .microphone)]
     }
 
-    private var meetingId = ""
+    private(set) var meetingId = ""
+    private(set) var images: [MeetingImage] = []
+    private var draftTitle = ""
+    private var draftNotes = NotesDocument(
+        method: "extractive", keyPoints: [], topics: [], blocks: [])
+    private var draftItems: [Item] = []
+    private var draftRevision = 0
+    private var meetingRevision = 0
+    private var documentRevision = 0
+    private var sourceRevision = 0
+    private var appliedOperationIds: [String] = []
     private var clock = MeetingClock()
     private var pumps: [Task<Void, Never>] = []
     private var edgePumps: [Task<Void, Never>] = []
     private var eventCounter = 0
+    private var lifecycleToken: UUID?
+    private var finishTask: Task<Void, Never>?
+    private var requestedFinishReason: MeetingFinishReason?
+    private var captureFailure: String?
+    private var pendingSave: Meeting?
+    private var headphoneSuggestionIssued = false
+    private var journalRecoveryAvailable = true
+    private var draftRecoveryAvailable = true
 
     /// The latest live edge from each side, on the meeting clock. Kept because a push
     /// carries one source's news and the caption is a decision about both.
-    private var youEdge: (end: Double, text: String)?
-    private var remoteEdge: (end: Double, text: String)?
+    private struct LiveState {
+        var start: Double
+        var end: Double
+        var caption: String
+        var provisional: String
+    }
+    private var youEdge: LiveState?
+    private var remoteEdge: LiveState?
 
-    init(engine: CoreEngine, store: MeetingStore, overlay: OverlayController) {
+    init(engine: CoreEngine, store: MeetingStore, preferences: PreferencesStore,
+         overlay: OverlayController, capture: any MeetingCapturing = CaptureEngine(),
+         makeTranscribers: @escaping () -> [SourceKind: any MeetingTranscribing] = { MeetingSession.freshTranscribers() },
+         enhancer: MeetingEnhancer? = nil) {
         self.engine = engine
         self.store = store
+        self.preferences = preferences
         self.overlay = overlay
+        self.enhancer = enhancer ?? MeetingEnhancer(store: store, preferences: preferences, engine: engine)
+        self.capture = capture
+        self.makeTranscribers = makeTranscribers
+    }
+
+    var elapsedMilliseconds: Double { clock.positionMilliseconds() }
+    var canCaptureImage: Bool { if case .listening = state { return true }; return false }
+    var microphoneHealth: SourceHealth? { health[.microphone] }
+
+    /// Settled speech plus one stable, replaceable live row per source. These rows are
+    /// display-only: they never enter the journal, saved meeting, or note extraction.
+    var catchUpEvents: [TranscriptEvent] {
+        var result = TranscriptAssembly.assemble(events.filter(\.isFinal))
+        for (role, edge) in [(SourceRole.you, youEdge), (.remote, remoteEdge)] {
+            guard let edge, !edge.provisional.isEmpty else { continue }
+            result.append(TranscriptEvent(
+                id: "\(meetingId)-provisional-\(role.rawValue)", sessionId: meetingId,
+                role: role, speakerLabel: role == .you ? "YOU" : "SPEAKER",
+                text: edge.provisional, isFinal: false, tArrived: edge.end * 1000,
+                confidence: nil, tStart: edge.start, tEnd: edge.end))
+        }
+        return result.sorted { MeetingMoments.time($0) < MeetingMoments.time($1) }
+    }
+
+    /// The editor gets a merged view. It may write the title and document back, but
+    /// never owns transcript, images, extracted items, or capture state.
+    func activeMeeting(id: String? = nil) -> Meeting? {
+        guard state.isActive, !meetingId.isEmpty, id == nil || id == meetingId else { return nil }
+        return draftMeeting()
+    }
+
+    func currentMeetingTime(id: String) -> Double? {
+        guard id == meetingId, case .listening = state else { return nil }
+        return clock.positionMilliseconds()
+    }
+
+    /// Returns nil when this mutation belongs to a completed meeting. NotesBridge
+    /// then applies it to that meeting's own file, even while another meeting runs.
+    @discardableResult
+    func applyEditorMutation(_ mutation: MeetingMutation) throws -> MeetingMutationAcknowledgment? {
+        guard state.isActive, mutation.meetingId == meetingId else { return nil }
+        let current = draftMeeting()
+        let acknowledgment = try MeetingMutationReducer.acknowledgment(for: mutation, applyingTo: current)
+        guard acknowledgment.status == .applied || acknowledgment.status == .rebased else {
+            return acknowledgment
+        }
+
+        let next = acknowledgment.meeting
+        let nextImages = MeetingMoments.reconcile(next.images ?? images, events: next.events)
+        if nextImages != images {
+            do { try store.checkpointImages(nextImages, id: meetingId) }
+            catch {
+                draftRecoveryAvailable = false
+                markRecoveryDegraded("image recovery unavailable", error: error)
+                throw error
+            }
+        }
+        var durable = next
+        durable.images = nextImages
+        do { try store.checkpointDraft(durable) }
+        catch {
+            draftRecoveryAvailable = false
+            markRecoveryDegraded("live notes recovery unavailable", error: error)
+            throw error
+        }
+        draftRecoveryAvailable = true
+        refreshRecoveryHealth()
+
+        // Commit in-memory capture state only after the recovery checkpoint succeeds.
+        draftTitle = durable.title
+        draftNotes = durable.notes ?? draftNotes
+        draftItems = durable.items
+        events = durable.events
+        images = nextImages
+        meetingRevision = durable.revision ?? meetingRevision
+        documentRevision = durable.documentRevision ?? documentRevision
+        sourceRevision = durable.sourceRevision ?? sourceRevision
+        appliedOperationIds = durable.appliedOperationIds ?? appliedOperationIds
+        draftRevision = documentRevision
+        onMeetingChange?(durable)
+        return MeetingMutationAcknowledgment(
+            operationId: acknowledgment.operationId, meetingId: acknowledgment.meetingId,
+            status: acknowledgment.status, revision: meetingRevision,
+            documentRevision: documentRevision, sourceRevision: sourceRevision,
+            meeting: durable, message: acknowledgment.message)
+    }
+
+    func cancelBackgroundWork(for id: String) { enhancer.cancel(id: id) }
+
+    @discardableResult
+    func addScreenshot(_ capture: MeetingScreenshot.Capture, for id: String) throws -> MeetingImage {
+        guard id == meetingId, canCaptureImage else { throw NSError(domain: "Excerpt", code: 1, userInfo: [NSLocalizedDescriptionKey: "The meeting ended before the screenshot could be added."]) }
+        let at = clock.positionMilliseconds(at: capture.capturedAt)
+        let image = MeetingImage(id: UUID().uuidString, dataUrl: capture.dataURL,
+            capturedAt: ISO8601DateFormatter().string(from: capture.capturedAt),
+            at: at, caption: "", origin: capture.origin,
+            context: MeetingMoments.context(at: at, events: TranscriptAssembly.assemble(events.filter(\.isFinal))))
+        let next = images + [image]
+        do { try store.checkpointImages(next, id: meetingId) }
+        catch {
+            draftRecoveryAvailable = false
+            markRecoveryDegraded("image recovery unavailable", error: error)
+            throw error
+        }
+        images = next
+        insertImageBlock(image)
+        draftRevision += 1
+        documentRevision += 1
+        meetingRevision += 1
+        try checkpointDraftAndPublish()
+        status = "Screenshot added · \(images.count) in this meeting"
+        return image
     }
 
     // MARK: - Start
 
     func start() async {
         guard !state.isActive else { return }
-        state = .starting
+        if let failed = pendingSave {
+            do { try persistFinished(failed) }
+            catch {
+                status = "Could not save the previous meeting yet — its recovery copy is still on this Mac"
+                return
+            }
+        }
+        let token = UUID()
+        lifecycleToken = token
         status = "Getting ready…"
+        state = .starting
 
-        meetingId = "m-\(Int(Date().timeIntervalSince1970 * 1000))"
+        meetingId = "m-\(Int(Date().timeIntervalSince1970 * 1000))-\(UUID().uuidString.lowercased())"
+        lastSaved = nil
+        pendingSave = nil
+        requestedFinishReason = nil
+        captureFailure = nil
         clock = MeetingClock()
         events = []
+        images = []
+        draftTitle = Self.title(for: clock.startedAt)
+        draftNotes = NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [])
+        draftItems = []
+        draftRevision = 0
+        meetingRevision = 0
+        documentRevision = 0
+        sourceRevision = 0
+        appliedOperationIds = []
+        recoveryHealth = .healthy
+        audioStats = [:]
+        speechStats = [:]
+        diagnosis = ""
         eventCounter = 0
         suppressedEchoes = 0
+        headphoneSuggestionIssued = false
+        journalRecoveryAvailable = true
+        draftRecoveryAvailable = true
         youEdge = nil
         remoteEdge = nil
-        transcribers = Self.freshTranscribers()
+        transcribers = makeTranscribers()
+        let startupTranscribers = transcribers
 
         do {
-            for (_, transcriber) in transcribers { try await transcriber.start() }
+            for kind in SourceKind.allCases {
+                guard let transcriber = startupTranscribers[kind] else { continue }
+                try await transcriber.start()
+                guard lifecycleToken == token, case .starting = state else { return }
+            }
         } catch {
+            guard lifecycleToken == token, case .starting = state else { return }
+            await cleanUpFailedStart(token: token)
+            guard lifecycleToken == token, case .starting = state else { return }
+            lifecycleToken = nil
+            store.discardJournal(id: meetingId)
+            overlay.update(speaker: "", text: "")
+            overlay.hide()
             fail("Speech recognition could not start. \(error.localizedDescription)")
             return
         }
 
-        consumeSettledSpeech()
-        consumeLiveEdge()
+        guard lifecycleToken == token, case .starting = state else { return }
+        consumeSettledSpeech(token: token)
+        consumeLiveEdge(token: token)
 
         do {
             try await capture.start(
-                onBuffer: { [weak self, transcribers] kind, buffer, time in
+                onBuffer: { [weak self, startupTranscribers] kind, buffer, time in
                     // The capture callback runs on the capture queue. Nothing here
                     // touches shared state except through the actor it belongs to.
-                    Task { @MainActor [weak self] in self?.clock.adopt(firstBufferAt: time) }
-                    Task { await transcribers[kind]?.feed(buffer, at: time) }
+                    Task { @MainActor [weak self] in
+                        guard let self, self.lifecycleToken == token else { return }
+                        self.clock.adopt(firstBufferAt: time)
+                        await startupTranscribers[kind]?.feed(buffer, at: time)
+                    }
                 },
                 onStreamError: { [weak self] message in
-                    Task { @MainActor in self?.reportCaptureLoss(message) }
+                    Task { @MainActor in self?.reportCaptureLoss(message, token: token) }
                 }
             )
         } catch {
-            for (_, transcriber) in transcribers { await transcriber.stop() }
+            guard lifecycleToken == token, case .starting = state else { return }
+            await cleanUpFailedStart(token: token)
+            guard lifecycleToken == token, case .starting = state else { return }
+            lifecycleToken = nil
+            store.discardJournal(id: meetingId)
+            overlay.update(speaker: "", text: "")
+            overlay.hide()
             fail("Excerpt could not hear the meeting. \(error.localizedDescription)")
             return
         }
 
-        state = .listening(since: Date())
+        guard lifecycleToken == token, case .starting = state else {
+            // Stop may have arrived while ScreenCaptureKit was suspended. Its first
+            // stop can race before the stream exists, so release once more here.
+            if lifecycleToken == token {
+                await capture.stop()
+                for (_, transcriber) in startupTranscribers { await transcriber.stop() }
+            }
+            return
+        }
         status = "Listening"
+        state = .listening(since: Date())
+        startHealthWatch()
+        do { try checkpointDraftAndPublish() }
+        catch { log.error("initial draft checkpoint failed: \(error.localizedDescription)") }
+    }
+
+    private func cleanUpFailedStart(token: UUID) async {
+        guard lifecycleToken == token else { return }
+        healthWatch?.cancel()
+        healthWatch = nil
+        await capture.stop()
+        for (_, transcriber) in transcribers { await transcriber.stop() }
+        for pump in pumps { pump.cancel() }
+        pumps = []
+        for pump in edgePumps { pump.cancel() }
+        edgePumps = []
+    }
+
+    /// How often the counters are folded in. A second is far finer than the
+    /// thresholds need and cheap: it reads two in-memory structs.
+    private static let healthInterval = Duration.seconds(1)
+
+    /// Watch both sources while the meeting runs, and say so when one stops working.
+    ///
+    /// Only `stalled` and `failed` reach the status line. A microphone nobody is
+    /// speaking into is the normal state of a microphone for most of a meeting, and
+    /// reporting that would train people to ignore the line that carries the real
+    /// problem. Capture is never torn down over this: one dead source still leaves
+    /// the other working, and everything settled so far is already journalled.
+    private func startHealthWatch() {
+        healthWatch?.cancel()
+        monitors = [:]
+        health = [:]
+        shownConcern = nil
+        healthWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: MeetingSession.healthInterval)
+                guard let self, self.state.isActive else { return }
+                await self.sampleHealth()
+            }
+        }
+    }
+
+    private func sampleHealth() async {
+        let audio = capture.statistics()
+        var speech: [SourceKind: TranscriptStats] = [:]
+        for (kind, transcriber) in transcribers { speech[kind] = await transcriber.statistics() }
+
+        var concerns: [String] = []
+        for kind in SourceKind.allCases {
+            var monitor = monitors[kind] ?? SourceHealthMonitor()
+            let state = monitor.update(
+                audio: audio[kind] ?? SourceStats(), speech: speech[kind] ?? TranscriptStats())
+            monitors[kind] = monitor
+            if health[kind] != state {
+                health[kind] = state
+                onHealthChange?()
+            }
+            if let concern = state.concern(for: kind.sourceName) { concerns.append(concern) }
+        }
+
+        let concern = concerns.first
+        guard concern != shownConcern else { return }
+        shownConcern = concern
+        refreshListeningStatus()
     }
 
     private func fail(_ message: String) {
-        state = .failed(message)
         status = message
+        state = .failed(message)
         log.error("\(message)")
     }
 
     /// An interruption stops capture. It must not look like a clean stop, and it must
     /// not lose the transcript — everything settled so far is already journalled.
-    private func reportCaptureLoss(_ message: String) {
+    func selectedMicrophoneDisconnected(_ name: String) {
+        guard let token = lifecycleToken else { return }
+        reportCaptureLoss("The selected microphone, \(name), disconnected. Reconnect it or choose another input in Settings, then start a new meeting.", token: token)
+    }
+
+    private func reportCaptureLoss(_ message: String, token: UUID) {
+        guard lifecycleToken == token, isPreparingOrListening else { return }
         log.error("capture lost: \(message)")
-        status = "Stopped hearing the meeting — your notes so far are saved"
-        Task { await finish(reason: .interrupted) }
+        captureFailure = message
+        requestedFinishReason = .interrupted
+        status = "Stopped hearing the meeting — saving your notes so far…"
+        Task { await stop(reason: .interrupted) }
     }
 
     // MARK: - Settled speech becomes transcript
 
-    private func consumeSettledSpeech() {
+    private func consumeSettledSpeech(token: UUID) {
         pumps = transcribers.map { kind, transcriber in
             Task { [weak self] in
                 for await segment in transcriber.segments {
                     guard let self else { return }
-                    await self.record(segment, from: kind)
+                    await self.record(segment, from: kind, token: token)
                 }
             }
         }
     }
 
-    private func record(_ segment: Segment, from kind: SourceKind) async {
+    private func record(_ segment: Segment, from kind: SourceKind, token: UUID) async {
+        guard lifecycleToken == token, state.isActive else { return }
         let sourceStart = await transcribers[kind]?.captureOffsetSeconds() ?? 0
+        guard lifecycleToken == token, state.isActive else { return }
         let offset = clock.offsetSeconds(
             forSourceStartingAt: CMTime(seconds: sourceStart, preferredTimescale: 1000))
 
@@ -187,8 +527,20 @@ final class MeetingSession {
         )
 
         events.append(event)
+        let assembled = TranscriptAssembly.assemble(events.filter(\.isFinal))
+        images = MeetingMoments.reconcile(images, events: assembled)
+        suppressedEchoes = events.count - assembled.count
+        if shouldSuggestHeadphones, !headphoneSuggestionIssued {
+            headphoneSuggestionIssued = true
+            onHeadphoneSuggestion?()
+        }
         // Journalled the moment it settles, not at Stop. This is the whole of gate 12.
-        store.append(event, toJournalFor: meetingId)
+        meetingRevision += 1
+        journalRecoveryAvailable = store.append(event, toJournalFor: meetingId)
+        if journalRecoveryAvailable { refreshRecoveryHealth() }
+        else { markRecoveryDegraded("transcript recovery unavailable") }
+        do { try checkpointDraftAndPublish() }
+        catch { log.error("draft checkpoint failed after speech: \(error.localizedDescription)") }
     }
 
     // MARK: - The live edge drives the overlay
@@ -201,18 +553,19 @@ final class MeetingSession {
     /// words appeared in clumps of whatever the tick caught. The transcriber knows the
     /// instant a result lands, and its stream keeps only the newest edge, so a burst
     /// coalesces into the latest rather than queueing behind live speech.
-    private func consumeLiveEdge() {
+    private func consumeLiveEdge(token: UUID) {
         edgePumps = transcribers.map { kind, transcriber in
             Task { [weak self] in
                 for await edge in transcriber.live {
                     guard let self else { return }
-                    await self.show(edge, from: kind)
+                    self.show(edge, from: kind, token: token)
                 }
             }
         }
     }
 
-    private func show(_ edge: SourceTranscriber.LiveEdge, from kind: SourceKind) {
+    private func show(_ edge: SourceTranscriber.LiveEdge, from kind: SourceKind, token: UUID) {
+        guard lifecycleToken == token, state.isActive else { return }
         // On the meeting clock, not this source's own. The two sources start at
         // different instants, so raw local seconds hand whichever began first a
         // permanent lead and the caption sticks to one speaker.
@@ -220,30 +573,55 @@ final class MeetingSession {
             localStart: 0,
             localEnd: edge.localEnd,
             sourceStartingAt: CMTime(seconds: edge.sourceStart, preferredTimescale: 1000))
-        let latest = edge.text.isEmpty ? nil : (end: placed.end, text: edge.text)
+        let latest = edge.text.isEmpty && edge.provisionalText.isEmpty ? nil : LiveState(
+            start: max(0, placed.end - max(0, edge.localEnd - edge.localStart)),
+            end: placed.end, caption: edge.text, provisional: edge.provisionalText)
 
         if kind == .microphone { youEdge = latest } else { remoteEdge = latest }
 
         switch CaptionEdge.owner(you: youEdge?.end, remote: remoteEdge?.end) {
-        case .you: overlay.update(speaker: "YOU", text: youEdge?.text ?? "")
-        case .remote: overlay.update(speaker: "SPEAKER", text: remoteEdge?.text ?? "")
+        case .you: overlay.update(speaker: "YOU", text: youEdge?.caption ?? "")
+        case .remote: overlay.update(speaker: "SPEAKER", text: remoteEdge?.caption ?? "")
         case nil: break
         }
     }
 
     // MARK: - Stop
 
-    enum FinishReason { case stopped, interrupted }
-
     func stop() async {
-        guard state.isActive else { return }
-        await finish(reason: .stopped)
+        await stop(reason: .stopped)
     }
 
-    private func finish(reason: FinishReason) async {
-        guard state.isActive else { return }
-        state = .saving
-        status = "Writing your notes…"
+    private func stop(reason: MeetingFinishReason) async {
+        if reason == .interrupted { requestedFinishReason = .interrupted }
+        else if requestedFinishReason == nil { requestedFinishReason = reason }
+
+        if let finishTask {
+            await finishTask.value
+            return
+        }
+        guard state.isActive, let token = lifecycleToken else { return }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.finish(token: token)
+        }
+        finishTask = task
+        await task.value
+    }
+
+    private func finish(token: UUID) async {
+        guard lifecycleToken == token, state.isActive else {
+            finishTask = nil
+            return
+        }
+        let initialReason = requestedFinishReason ?? .stopped
+        status = initialReason == .interrupted
+            ? "The meeting was interrupted — saving your notes so far…"
+            : "Writing your notes…"
+        state = .finishing(initialReason)
+
+        healthWatch?.cancel()
+        healthWatch = nil
 
         // Read the meters before tearing anything down, or the evidence goes with it.
         audioStats = capture.statistics()
@@ -265,24 +643,94 @@ final class MeetingSession {
         log.info("meeting \(self.meetingId) ended — \(self.diagnosis)")
 
         overlay.update(speaker: "", text: "")
+        overlay.hide()
 
-        let meeting = buildMeeting(interrupted: reason == .interrupted)
+        let reason = requestedFinishReason ?? initialReason
+        let meeting = buildMeeting(reason: reason, captureError: captureFailure)
+        pendingSave = meeting
+        lifecycleToken = nil
         do {
-            try store.save(meeting)
-            store.discardJournal(id: meetingId)
-            lastSaved = meeting
-            state = .idle
-            status = summary(of: meeting)
+            try persistFinished(meeting)
         } catch {
             // The journal is still on disk, so nothing is lost — say that rather than
             // implying the meeting is gone.
-            state = .failed("Could not write the notes file.")
             status = "Could not save — but your transcript is still on this Mac"
+            state = .failed("Could not write the notes file.")
             log.error("save failed: \(error)")
+        }
+        finishTask = nil
+    }
+
+    /// Retries the exact finished snapshot after a durable write failure. Starting a
+    /// later meeting never silently replaces this recovery path; its journal remains
+    /// available even if the retry is deferred until the next launch.
+    @discardableResult
+    func retryFailedSave() throws -> Meeting? {
+        guard let meeting = pendingSave else { return nil }
+        try persistFinished(meeting)
+        return meeting
+    }
+
+    var canRetryFailedSave: Bool { pendingSave != nil }
+
+    private func persistFinished(_ meeting: Meeting) throws {
+        try store.save(meeting)
+        store.discardJournal(id: meeting.id)
+        pendingSave = nil
+        lastSaved = meeting
+        if meeting.finishReason == .interrupted {
+            let message = "The meeting was interrupted — your notes so far were saved"
+            status = message
+            state = .interrupted(id: meeting.id, message: message)
+        } else {
+            status = summary(of: meeting) + " · organizing notes"
+            state = .completed(id: meeting.id)
+        }
+        onMeetingChange?(meeting)
+        onMeetingFinished?(meeting)
+        startEnhancement(for: meeting)
+    }
+
+    private func startEnhancement(for meeting: Meeting) {
+        // Saving and opening the meeting must not wait on a model. Its result is
+        // merged with whatever is on disk later and offered as a reviewable
+        // suggestion when the person already wrote something.
+        enhancer.start(source: meeting) { [weak self] updated in
+            guard let self else { return }
+            if self.lastSaved?.id == updated.id { self.lastSaved = updated }
+            if case .completed(let id) = self.state, id == updated.id {
+                self.status = self.summary(of: updated)
+            }
+            self.onMeetingChange?(updated)
         }
     }
 
-    private func buildMeeting(interrupted: Bool) -> Meeting {
+    /// A queued/running enhancement is durable work, not a reason to hold Quit open.
+    /// On the next launch it is restarted from its saved source snapshot.
+    func resumePendingEnhancements() {
+        for meeting in store.list() where meeting.generationStatus?.state == .queued
+            || meeting.generationStatus?.state == .running {
+            startEnhancement(for: meeting)
+        }
+    }
+
+    func retryAutomaticNotes(id: String) throws -> Meeting {
+        let source = try store.update(id: id) { meeting in
+            guard meeting.endedAt != nil,
+                  meeting.generationStatus?.state == .failed || meeting.generationStatus?.state == .cancelled else {
+                throw NSError(domain: "Excerpt", code: 1, userInfo: [NSLocalizedDescriptionKey: "These notes are not waiting for a retry."])
+            }
+            meeting.generationStatus = NotesGenerationStatus(
+                state: .queued, generationId: UUID().uuidString,
+                sourceRevision: meeting.sourceRevision ?? 0,
+                inputFingerprint: MeetingEnhancer.inputFingerprint(meeting))
+        }
+        onMeetingChange?(source)
+        startEnhancement(for: source)
+        return source
+    }
+
+    private func buildMeeting(reason: MeetingFinishReason, captureError: String?) -> Meeting {
         // Raw settled segments are what the journal holds; sentences are what a
         // transcript is. Assembly joins the first and resolves the far side's echo.
         let finals = TranscriptAssembly.assemble(events.filter(\.isFinal))
@@ -293,21 +741,145 @@ final class MeetingSession {
             log.info("no items extracted from \(finals.count) events — silence is the designed answer when nothing qualifies")
         }
 
-        return Meeting(
+        let generationID = UUID().uuidString
+        var meeting = Meeting(
             id: meetingId,
-            title: Self.title(for: clock.startedAt),
+            title: draftTitle,
             startedAt: ISO8601DateFormatter().string(from: clock.startedAt),
             endedAt: ISO8601DateFormatter().string(from: Date()),
             processing: .onDevice,
             events: finals,
-            items: items
+            items: items,
+            notes: draftNotes,
+            images: MeetingMoments.reconcile(images, events: finals),
+            draftRevision: nil,
+            sourceRevision: sourceRevision,
+            schemaVersion: Meeting.currentSchemaVersion,
+            revision: meetingRevision + 1,
+            documentRevision: documentRevision,
+            appliedOperationIds: appliedOperationIds,
+            generationStatus: NotesGenerationStatus(
+                state: .queued, generationId: generationID, sourceRevision: sourceRevision,
+                inputFingerprint: nil),
+            finishReason: reason,
+            captureError: captureError
+        )
+        // The first durable finished file already contains useful transcript-based
+        // notes and captures. Provider work only improves wording later.
+        if draftTitle == Self.title(for: clock.startedAt),
+           let suggested = try? engine.suggestedTitle(for: meeting), !suggested.isEmpty {
+            meeting.title = suggested
+        }
+        if let immediate = try? engine.notes(for: meeting) {
+            meeting.notes = immediate
+            meeting.documentRevision = (meeting.documentRevision ?? 0) + 1
+        }
+        let inputFingerprint = MeetingEnhancer.inputFingerprint(meeting)
+        meeting.generationStatus?.inputFingerprint = inputFingerprint
+        return meeting
+    }
+
+    private func draftMeeting() -> Meeting {
+        let settled = TranscriptAssembly.assemble(events.filter(\.isFinal))
+        return Meeting(
+            id: meetingId, title: draftTitle,
+            startedAt: ISO8601DateFormatter().string(from: clock.startedAt),
+            endedAt: nil, processing: .onDevice,
+            events: settled, items: draftItems,
+            notes: draftNotes, images: MeetingMoments.reconcile(images, events: settled),
+            draftRevision: draftRevision, sourceRevision: sourceRevision,
+            schemaVersion: Meeting.currentSchemaVersion,
+            revision: meetingRevision,
+            documentRevision: documentRevision,
+            appliedOperationIds: appliedOperationIds
         )
     }
 
-    /// Meeting ids are `m-<milliseconds since 1970>`, so the start time survives even
-    /// when nothing but the journal's filename is left.
+    private func checkpointDraftAndPublish() throws {
+        let draft = draftMeeting()
+        do { try store.checkpointDraft(draft) }
+        catch {
+            draftRecoveryAvailable = false
+            markRecoveryDegraded("live notes recovery unavailable", error: error)
+            throw error
+        }
+        draftRecoveryAvailable = true
+        refreshRecoveryHealth()
+        onMeetingChange?(draft)
+    }
+
+    private func insertImageBlock(_ image: MeetingImage) {
+        var blocks = draftNotes.blocks ?? []
+        guard !blocks.contains(where: { $0.imageId == image.id }) else { return }
+        let block = NoteBlock(id: "image-\(image.id)", kind: "image", text: image.caption,
+                              evidence: [], at: image.anchorAt ?? image.at,
+                              imageId: image.id, placement: "automatic")
+        var insertion = blocks.endIndex
+        var nearest = -Double.infinity
+        for (index, candidate) in blocks.enumerated() {
+            guard candidate.kind != "heading", let at = candidate.at,
+                  at <= image.at, at >= nearest else { continue }
+            nearest = at
+            insertion = index + 1
+        }
+        blocks.insert(block, at: insertion)
+        draftNotes.blocks = blocks
+    }
+
+    private func hasWriting(_ document: NotesDocument?) -> Bool {
+        (document?.deletedBlocks?.isEmpty == false) || document?.blocks?.contains(where: { block in
+            block.kind == "image" || !block.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) == true
+    }
+
+    private func markRecoveryDegraded(_ message: String, error: Error? = nil) {
+        recoveryHealth = .degraded(message)
+        refreshListeningStatus()
+        if let error { log.error("persistence degraded: \(error.localizedDescription)") }
+    }
+
+    private var isPreparingOrListening: Bool {
+        switch state {
+        case .starting, .listening: true
+        default: false
+        }
+    }
+
+    private func refreshRecoveryHealth() {
+        let message: String?
+        if !journalRecoveryAvailable && !draftRecoveryAvailable {
+            message = "transcript and live notes recovery unavailable"
+        } else if !journalRecoveryAvailable {
+            message = "transcript recovery unavailable"
+        } else if !draftRecoveryAvailable {
+            message = "live notes recovery unavailable"
+        } else {
+            message = nil
+        }
+        let previous = recoveryHealth
+        recoveryHealth = message.map(RecoveryHealth.degraded) ?? .healthy
+        if previous != recoveryHealth { refreshListeningStatus() }
+    }
+
+    private func refreshListeningStatus() {
+        guard isPreparingOrListening else { return }
+        let recovery: String? = if case .degraded(let message) = recoveryHealth {
+            message
+        } else {
+            nil
+        }
+        let messages = [shownConcern, recovery].compactMap { $0 }
+        status = messages.isEmpty ? "Listening" : "Listening · " + messages.joined(separator: " · ")
+        onStateChange?()
+    }
+
+    /// Meeting ids begin `m-<milliseconds since 1970>-`; the UUID suffix prevents two
+    /// back-to-back meetings in one millisecond from sharing a file while preserving
+    /// the recoverable start time in the journal name.
     private static func startTime(fromMeetingId id: String) -> Date? {
-        guard id.hasPrefix("m-"), let millis = Double(id.dropFirst(2)) else { return nil }
+        guard id.hasPrefix("m-"),
+              let component = id.dropFirst(2).split(separator: "-").first,
+              let millis = Double(component) else { return nil }
         return Date(timeIntervalSince1970: millis / 1000)
     }
 
@@ -375,8 +947,20 @@ final class MeetingSession {
     func recover(id: String) -> Meeting? {
         // The same assembly the live path uses, so a recovered meeting reads like one
         // that ended normally rather than like a pile of fragments.
-        let recovered = TranscriptAssembly.assemble(store.replayJournal(id: id))
-        guard !recovered.isEmpty else {
+        let draft: Meeting?
+        let sidecarImages: [MeetingImage]
+        do {
+            draft = try store.recoverDraft(id: id)
+            sidecarImages = try store.recoverImages(id: id)
+        } catch {
+            status = "Could not read recovered notes — their recovery files were kept"
+            return nil
+        }
+        let journalEvents = store.replayJournal(id: id)
+        let recovered = TranscriptAssembly.assemble(journalEvents.isEmpty ? (draft?.events ?? []) : journalEvents)
+        let recoveredImages = sidecarImages.isEmpty ? (draft?.images ?? []) : sidecarImages
+        let recoveredWriting = hasWriting(draft?.notes)
+        guard !recovered.isEmpty || !recoveredImages.isEmpty || recoveredWriting else {
             store.discardJournal(id: id)
             return nil
         }
@@ -384,17 +968,34 @@ final class MeetingSession {
         // meeting against today's date would reinterpret every "Thursday" in it.
         let started = Self.startTime(fromMeetingId: id) ?? Date()
         let items = (try? engine.extract(events: recovered, reference: started)) ?? []
-        let meeting = Meeting(
+        var meeting = Meeting(
             id: id,
-            title: "\(Self.title(for: started)) (recovered)",
-            startedAt: ISO8601DateFormatter().string(from: started),
-            endedAt: nil,
+            title: "\(draft?.title ?? Self.title(for: started)) (recovered)",
+            startedAt: draft?.startedAt ?? ISO8601DateFormatter().string(from: started),
+            endedAt: ISO8601DateFormatter().string(from: Date()),
             processing: .onDevice,
             events: recovered,
-            items: items
+            items: items,
+            notes: draft?.notes,
+            images: MeetingMoments.reconcile(recoveredImages, events: recovered),
+            sourceRevision: draft?.sourceRevision ?? 0,
+            schemaVersion: Meeting.currentSchemaVersion,
+            revision: (draft?.revision ?? 0) + 1,
+            documentRevision: draft?.documentRevision ?? draft?.draftRevision ?? 0,
+            appliedOperationIds: draft?.appliedOperationIds,
+            finishReason: .recovered
         )
-        try? store.save(meeting)
-        store.discardJournal(id: id)
-        return meeting
+        // A recovered meeting used to arrive with no notes at all. The summary is not
+        // re-run here — recovery is meant to be immediate — but the extractive document
+        // costs nothing and is what the notes window expects to open onto.
+        if !recoveredWriting { meeting.notes = try? engine.notes(for: meeting) }
+        do {
+            try store.save(meeting)
+            store.discardJournal(id: id)
+            return meeting
+        } catch {
+            status = "Could not save recovered notes — the transcript and screenshots are still recoverable"
+            return nil
+        }
     }
 }

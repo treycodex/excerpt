@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "description": "Synthetic persisted meetings shared by TypeScript and Swift migration tests. They contain no user meeting data.",
+  "meetings": [
+    {
+      "name": "text-only-finished",
+      "state": "finished",
+      "meeting": {
+        "id": "fixture-text-only",
+        "title": "Synthetic launch review",
+        "startedAt": "2026-09-01T09:00:00Z",
+        "endedAt": "2026-09-01T09:18:00Z",
+        "processing": "on-device",
+        "events": [
+          { "id": "text-1", "sessionId": "fixture-text-only", "role": "remote", "speakerLabel": "SPEAKER", "text": "The team chose the compact navigation for the trial.", "isFinal": true, "tArrived": 4000, "tStart": 4, "tEnd": 8 },
+          { "id": "text-2", "sessionId": "fixture-text-only", "role": "you", "speakerLabel": "YOU", "text": "I will send the revised outline by Friday.", "isFinal": true, "tArrived": 12000, "tStart": 12, "tEnd": 16 }
+        ],
+        "items": [
+          { "id": "text-action", "category": "action", "state": "decided", "title": "I will send the revised outline by Friday.", "evidence": [{ "eventIds": ["text-2"], "tArrived": 12000, "quote": "I will send the revised outline by Friday.", "speakerLabel": "YOU", "tStart": 12 }], "assignee": "you", "due": "2026-09-04", "salience": 0.9 }
+        ],
+        "notes": {
+          "version": 1,
+          "method": "extractive",
+          "keyPoints": [],
+          "topics": [],
+          "blocks": [
+            { "id": "text-heading", "kind": "heading", "text": "Navigation trial", "evidence": [{ "eventIds": ["text-1"], "tArrived": 4000, "quote": "compact navigation", "speakerLabel": "SPEAKER", "tStart": 4 }], "at": 4000 },
+            { "id": "text-bullet", "kind": "bullet", "text": "Use compact navigation for the trial.", "evidence": [{ "eventIds": ["text-1"], "tArrived": 4000, "quote": "compact navigation", "speakerLabel": "SPEAKER", "tStart": 4 }], "at": 4000 }
+          ]
+        },
+        "sourceRevision": 0
+      }
+    },
+    {
+      "name": "screenshot-only-finished",
+      "state": "finished",
+      "meeting": {
+        "id": "fixture-screenshot-only",
+        "title": "Synthetic visual capture",
+        "startedAt": "2026-09-02T10:00:00Z",
+        "endedAt": "2026-09-02T10:03:00Z",
+        "processing": "on-device",
+        "events": [],
+        "items": [],
+        "images": [
+          { "id": "shot-only", "dataUrl": "data:image/png;base64,c3ludGhldGljLWltYWdl", "capturedAt": "2026-09-02T10:01:30Z", "at": 90000, "caption": "Synthetic dashboard state", "origin": "excerpt", "context": { "eventIds": [], "startAt": 70000, "endAt": 105000 } }
+        ],
+        "notes": {
+          "version": 1,
+          "method": "extractive",
+          "keyPoints": [],
+          "topics": [],
+          "blocks": [
+            { "id": "shot-only-block", "kind": "image", "text": "Synthetic dashboard state", "evidence": [], "at": 90000, "imageId": "shot-only" }
+          ]
+        },
+        "sourceRevision": 0
+      }
+    },
+    {
+      "name": "handwritten-finished",
+      "state": "finished",
+      "meeting": {
+        "id": "fixture-handwritten",
+        "title": "Synthetic handwritten note",
+        "startedAt": "2026-09-03T11:00:00Z",
+        "endedAt": "2026-09-03T11:12:00Z",
+        "processing": "on-device",
+        "events": [{ "id": "hand-1", "sessionId": "fixture-handwritten", "role": "remote", "speakerLabel": "SPEAKER", "text": "Compare the two onboarding paths before the next review.", "isFinal": true, "tArrived": 5000, "tStart": 5, "tEnd": 10 }],
+        "items": [],
+        "notes": {
+          "version": 1,
+          "method": "extractive",
+          "keyPoints": [],
+          "topics": [],
+          "blocks": [{ "id": "handwriting", "kind": "paragraph", "text": "Ask about the first-run screen and the help link.", "evidence": [], "userEdited": true }]
+        },
+        "sourceRevision": 0
+      }
+    },
+    {
+      "name": "corrected-finished",
+      "state": "finished",
+      "meeting": {
+        "id": "fixture-corrected",
+        "title": "Synthetic corrected transcript",
+        "startedAt": "2026-09-04T12:00:00Z",
+        "endedAt": "2026-09-04T12:22:00Z",
+        "processing": "cloud",
+        "events": [{ "id": "corrected-1", "sessionId": "fixture-corrected", "role": "you", "speakerLabel": "YOU", "text": "I will send the plan on Friday.", "isFinal": true, "tArrived": 7000, "tStart": 7, "tEnd": 11, "originalText": "I will send the plan on Thursday.", "corrections": [{ "text": "I will send the plan on Friday.", "correctedAt": "2026-09-04T12:25:00Z" }] }],
+        "items": [{ "id": "corrected-action", "category": "action", "state": "decided", "title": "I will send the plan on Friday.", "evidence": [{ "eventIds": ["corrected-1"], "tArrived": 7000, "quote": "I will send the plan on Friday.", "speakerLabel": "YOU", "tStart": 7 }], "assignee": "you", "due": "2026-09-05", "salience": 0.8, "userEdited": true }],
+        "notes": { "version": 1, "method": "cloud", "keyPoints": [], "topics": [], "blocks": [{ "id": "corrected-note", "kind": "bullet", "text": "Send the plan Friday.", "evidence": [{ "eventIds": ["corrected-1"], "tArrived": 7000, "quote": "I will send the plan on Friday.", "speakerLabel": "YOU", "tStart": 7 }], "userEdited": true }], "generation": { "provider": "openai", "model": "fixture-model", "generatedAt": "2026-09-04T12:23:00Z", "sourceRevision": 2, "style": "balanced" } },
+        "sourceRevision": 2
+      }
+    },
+    {
+      "name": "reviewed-finished",
+      "state": "finished",
+      "meeting": {
+        "id": "fixture-reviewed",
+        "title": "Synthetic review state",
+        "startedAt": "2026-09-05T09:00:00Z",
+        "endedAt": "2026-09-05T09:09:00Z",
+        "processing": "demo",
+        "events": [{ "id": "review-1", "sessionId": "fixture-reviewed", "role": "remote", "speakerLabel": "SPEAKER", "text": "The decision is ready to confirm.", "isFinal": true, "tArrived": 3000 }],
+        "items": [
+          { "id": "confirmed-decision", "category": "decision", "state": "decided", "title": "The decision is ready to confirm.", "evidence": [{ "eventIds": ["review-1"], "tArrived": 3000, "quote": "decision is ready", "speakerLabel": "SPEAKER" }], "assignee": "unassigned", "salience": 0.7, "confirmed": true, "completed": true },
+          { "id": "dismissed-question", "category": "question", "state": "discussed", "title": "A duplicate review question", "evidence": [], "assignee": "unassigned", "salience": 0.2, "dismissed": true, "unrelated": ["confirmed-decision"] }
+        ],
+        "notes": { "version": 1, "method": "extractive", "keyPoints": [], "topics": [], "blocks": [] },
+        "sourceRevision": 0
+      }
+    },
+    {
+      "name": "deleted-blocks-finished",
+      "state": "finished",
+      "meeting": {
+        "id": "fixture-deleted-blocks",
+        "title": "Synthetic deleted content",
+        "startedAt": "2026-09-06T09:00:00Z",
+        "endedAt": "2026-09-06T09:05:00Z",
+        "processing": "on-device",
+        "events": [],
+        "items": [],
+        "notes": { "version": 1, "method": "extractive", "keyPoints": [], "topics": [], "blocks": [], "deletedBlocks": [{ "id": "removed-bullet", "kind": "bullet", "text": "Deliberately removed synthetic wording.", "evidence": [], "userEdited": true }] },
+        "sourceRevision": 1
+      }
+    },
+    {
+      "name": "legacy-sections-finished",
+      "state": "finished",
+      "meeting": {
+        "id": "fixture-legacy-sections",
+        "title": "Synthetic legacy sections",
+        "startedAt": "2025-12-10T09:00:00Z",
+        "endedAt": "2025-12-10T09:15:00Z",
+        "processing": "cloud",
+        "events": [{ "id": "legacy-1", "sessionId": "fixture-legacy-sections", "role": "remote", "speakerLabel": "SPEAKER", "text": "Keep the source sections readable.", "isFinal": true, "tArrived": 6000 }],
+        "items": [],
+        "notes": {
+          "version": 1,
+          "method": "extractive",
+          "keyPoints": [{ "id": "legacy-key", "text": "Keep the source sections readable.", "evidence": [{ "eventIds": ["legacy-1"], "tArrived": 6000, "quote": "source sections", "speakerLabel": "SPEAKER" }] }],
+          "topics": [{ "id": "legacy-topic", "title": "Compatibility", "bullets": [{ "id": "legacy-bullet", "text": "Legacy blocks are absent.", "evidence": [] }] }]
+        }
+      }
+    },
+    {
+      "name": "interrupted-draft",
+      "state": "draft",
+      "meeting": {
+        "id": "fixture-interrupted-draft",
+        "title": "Synthetic interrupted draft",
+        "startedAt": "2026-09-07T13:00:00Z",
+        "processing": "on-device",
+        "events": [{ "id": "draft-1", "sessionId": "fixture-interrupted-draft", "role": "remote", "speakerLabel": "SPEAKER", "text": "This saved sentence should recover after an interruption.", "isFinal": true, "tArrived": 5000, "tStart": 5, "tEnd": 9 }],
+        "items": [],
+        "images": [{ "id": "draft-shot", "dataUrl": "data:image/png;base64,aW50ZXJydXB0ZWQ=", "capturedAt": "2026-09-07T13:00:07Z", "at": 7000, "caption": "Synthetic interruption image", "origin": "paste" }],
+        "notes": { "version": 1, "method": "extractive", "keyPoints": [], "topics": [], "blocks": [{ "id": "draft-writing", "kind": "paragraph", "text": "Keep this unfinished writing.", "evidence": [], "userEdited": true }, { "id": "draft-image", "kind": "image", "text": "Synthetic interruption image", "evidence": [], "at": 7000, "imageId": "draft-shot" }] },
+        "draftRevision": 4,
+        "sourceRevision": 0
+      }
+    }
+  ]
+}

@@ -52,6 +52,13 @@ struct MeetingClock: Sendable, Equatable {
         return (localStart + offset, localEnd + offset)
     }
 
+    /// Screenshot and catch-up positions share the audio clock when it is available.
+    func positionMilliseconds(at moment: Date = Date()) -> Double {
+        guard let origin else { return arrivedMilliseconds(at: moment) }
+        let now = CMClockGetTime(CMClockGetHostTimeClock())
+        return max(0, ((now - origin).seconds - Date().timeIntervalSince(moment)) * 1000)
+    }
+
     /// Milliseconds since the meeting began — the field the website calls `tArrived`.
     /// On macOS this is still arrival time; the audio-aligned answer is `tStart`.
     func arrivedMilliseconds(at moment: Date = Date()) -> Double {

@@ -1,8 +1,9 @@
 import AppKit
 import OSLog
 import WebKit
+import UniformTypeIdentifiers
 
-/// The notes editor: the same React app the website serves, in a window, reading the
+/// The notes editor: the bundled React editor in a window, reading the
 /// Mac's own meetings through `NotesBridge`.
 ///
 /// Reused rather than rebuilt because the editor is where a year of judgement lives —
@@ -32,6 +33,8 @@ final class NotesWindowController: NSWindowController {
 
         super.init(window: window)
         window.contentView = makeWebView()
+        bridge.onMeetingChange = { [weak self] json in self?.receive(meetingJSON: json) }
+        bridge.onDesktopSettingsChange = { [weak self] json in self?.receive(settingsJSON: json) }
     }
 
     @available(*, unavailable)
@@ -59,6 +62,7 @@ final class NotesWindowController: NSWindowController {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")   // the page owns its ground
         webView.allowsBackForwardNavigationGestures = false
         self.webView = webView
@@ -101,10 +105,26 @@ final class NotesWindowController: NSWindowController {
         present()
     }
 
+    /// Pushes settled meeting state into React without reloading the editor or moving
+    /// the person's cursor. JSONEncoder supplies a safe JavaScript string literal.
+    private func receive(meetingJSON: String) {
+        guard webView.url != nil,
+              let data = try? JSONEncoder().encode(meetingJSON),
+              let literal = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("globalThis.__excerptReceiveMeeting?.(\(literal))")
+    }
+
+    private func receive(settingsJSON: String) {
+        guard webView.url != nil,
+              let data = try? JSONEncoder().encode(settingsJSON),
+              let literal = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("globalThis.__excerptReceiveDesktopSettings?.(\(literal))")
+    }
+
     private func presentMissingNotes() {
         let alert = NSAlert()
         alert.messageText = "The notes view is missing from this build."
-        alert.informativeText = "Rebuild it with: pnpm --filter @excerpt/web build:notes"
+        alert.informativeText = "Rebuild it with: pnpm --filter @excerpt/editor build:notes"
         alert.alertStyle = .critical
         alert.runModal()
     }
@@ -127,5 +147,16 @@ extension NotesWindowController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
         Logger(subsystem: "com.excerpt.app", category: "notes")
             .error("notes failed to load: \(error.localizedDescription)")
+    }
+}
+
+extension NotesWindowController: WKUIDelegate {
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.allowedContentTypes = [.png, .jpeg, .webP]
+        panel.begin { response in completionHandler(response == .OK ? panel.urls : nil) }
     }
 }

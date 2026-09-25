@@ -1,80 +1,60 @@
-import { createStore, del, get, keys, set } from 'idb-keyval';
-import type { Meeting } from '@excerpt/types';
-import type { ProcessingMode, TranscriptEvent } from '@excerpt/types';
+import type { Meeting, MeetingImage, MeetingLibraryEntry, MeetingSearchResult, MeetingMutation, MeetingMutationAcknowledgment } from '@excerpt/types';
 import { bridge } from './bridge';
+import { meetingMutation } from './meeting-sync';
 
-/**
- * Local meeting library. IndexedDB, on this device, and nowhere else — there is no
- * backend and no account, so this is the whole persistence story.
- */
-const store = createStore('excerpt', 'meetings');
-const draftStore = createStore('excerpt', 'capture');
-const DRAFT_KEY = 'active';
-
-export interface CaptureDraft {
-  id: string;
-  startedAt: string;
-  elapsed: number;
-  processing: ProcessingMode;
-  events: TranscriptEvent[];
+export class NativeEditorHostError extends Error {
+  constructor() { super('Open this editor from Excerpt for Mac. Browser storage and browser capture are not part of the desktop product.'); }
 }
 
-/**
- * IndexedDB is not always there: private windows, blocked site data, a browser
- * with storage disabled. A rejected read used to leave the UI on "Reading..."
- * forever, so every read degrades to an empty result instead.
- */
-export async function saveMeeting(m: Meeting): Promise<void> {
-  const host = bridge();
-  if (host) return host.saveMeeting(m);
-  await set(m.id, m, store);
+function host() {
+  const value = bridge();
+  if (!value) throw new NativeEditorHostError();
+  return value;
 }
 
-export async function loadMeeting(id: string): Promise<Meeting | undefined> {
-  const host = bridge();
-  if (host) { try { return await host.loadMeeting(id); } catch { return undefined; } }
-  try { return await get<Meeting>(id, store); } catch { return undefined; }
+/** Compatibility convenience for retained document controls; it still emits a typed mutation. */
+export async function saveMeeting(meeting: Meeting): Promise<Meeting | undefined> {
+  const native = host();
+  const current = await native.loadMeeting(meeting.id);
+  const mutation = meetingMutation(current, meeting);
+  if (!mutation) return current;
+  const result = await mutateMeeting(mutation, meeting.images);
+  if (result.status === 'conflict') throw new Error(result.message ?? 'The meeting changed before it could be saved.');
+  return result.meeting;
 }
 
-export async function deleteMeeting(id: string): Promise<void> {
-  const host = bridge();
-  if (host) { try { await host.deleteMeeting(id); } catch { /* nothing to remove */ } return; }
-  try { await del(id, store); } catch { /* nothing to remove */ }
+export async function loadMeeting(id: string): Promise<Meeting | undefined> { return host().loadMeeting(id); }
+export async function deleteMeeting(id: string): Promise<void> { await host().deleteMeeting(id); }
+export async function renameMeeting(id: string, title: string): Promise<MeetingLibraryEntry> {
+  return host().renameMeeting(id, title);
 }
-
-/** Newest first. Meetings are few, so reading them all is fine. */
-export async function listMeetings(): Promise<Meeting[]> {
-  return (await readMeetingLibrary()).meetings;
-}
-
-export async function readMeetingLibrary(): Promise<{ meetings: Meeting[]; available: boolean }> {
-  const host = bridge();
-  if (host) {
-    // The Mac always has a folder. "Unavailable" there would mean a broken app, not
-    // a browser refusing storage, so it is an error to report rather than degrade to.
-    try { return { meetings: await host.listMeetings(), available: true }; }
-    catch { return { meetings: [], available: false }; }
+export async function mutateMeeting(
+  mutation: MeetingMutation, knownImages: MeetingImage[] = [],
+): Promise<MeetingMutationAcknowledgment> {
+  const native = host();
+  const result = await native.mutateMeeting(mutation);
+  if (!result.imageDataOmitted) return result;
+  const known = new Map(knownImages.map((image) => [image.id, image]));
+  if ((result.meeting.images ?? []).every((image) => known.get(image.id)?.dataUrl)) {
+    return {
+      ...result,
+      imageDataOmitted: false,
+      meeting: {
+        ...result.meeting,
+        images: (result.meeting.images ?? []).map((image) => ({ ...image, dataUrl: known.get(image.id)!.dataUrl })),
+      },
+    };
   }
-  try {
-    const ids = await keys(store);
-    const all = await Promise.all(ids.map((k) => get<Meeting>(k as string, store)));
-    return { meetings: all
-      .filter((m): m is Meeting => !!m)
-      .sort((a, b) => b.startedAt.localeCompare(a.startedAt)), available: true };
-  } catch {
-    return { meetings: [], available: false };
+  // A native capture unknown to this editor must never become an empty image.
+  const full = await native.loadMeeting(mutation.meetingId);
+  if (!full || (full.revision ?? full.draftRevision ?? 0) < result.revision) {
+    throw new Error('The saved meeting could not be reloaded with its images.');
   }
+  return { ...result, imageDataOmitted: false, meeting: full };
 }
-
-/** Finalised text only. Interim recognition remains volatile and is never recovered. */
-export async function saveCaptureDraft(draft: CaptureDraft): Promise<void> {
-  await set(DRAFT_KEY, draft, draftStore);
-}
-
-export async function loadCaptureDraft(): Promise<CaptureDraft | undefined> {
-  try { return await get<CaptureDraft>(DRAFT_KEY, draftStore); } catch { return undefined; }
-}
-
-export async function clearCaptureDraft(): Promise<void> {
-  try { await del(DRAFT_KEY, draftStore); } catch { /* already absent */ }
+export async function listMeetings(): Promise<MeetingLibraryEntry[]> { return host().listMeetings(); }
+export async function searchMeetingLibrary(query: string): Promise<MeetingSearchResult[]> { return host().searchMeetings(query); }
+export async function readMeetingLibrary(): Promise<{ meetings: MeetingLibraryEntry[]; available: boolean }> {
+  try { return { meetings: await host().listMeetings(), available: true }; }
+  catch { return { meetings: [], available: false }; }
 }

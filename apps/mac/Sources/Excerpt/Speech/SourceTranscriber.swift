@@ -18,6 +18,11 @@ struct TranscriptStats: Sendable {
     /// be derived from what the analyzer actually reports rather than assumed.
     var samples: [String] = []
     var settleCalls = 0
+    /// Settles that had to cut at an arbitrary instant because the analyzer had
+    /// reported no region boundary to cut on. These are where words go missing.
+    var forcedSettles = 0
+    /// What the analyzer had offered as region boundaries at each settle.
+    var settleSamples: [String] = []
     var finalizedSamples: [String] = []
 }
 
@@ -27,6 +32,20 @@ struct Segment: Sendable, Equatable {
     var start: Double
     var end: Double
     var text: String
+}
+
+/// The session consumes this small async surface rather than a concrete speech
+/// implementation. It keeps live hardware transcription in production while making
+/// lifecycle tests deterministic and isolated from Speech framework availability.
+protocol MeetingTranscribing: Sendable {
+    var kind: SourceKind { get }
+    var segments: AsyncStream<Segment> { get }
+    var live: AsyncStream<SourceTranscriber.LiveEdge> { get }
+    func statistics() async -> TranscriptStats
+    func start() async throws
+    func feed(_ buffer: AVAudioPCMBuffer, at: CMTime) async
+    func stop() async
+    func captureOffsetSeconds() async -> Double
 }
 
 /// One SpeechAnalyzer + SpeechTranscriber for a single audio source.
@@ -43,7 +62,7 @@ struct Segment: Sendable, Equatable {
 /// Reusing them is silent and total: every settled segment is yielded into a finished
 /// stream and dropped, so the meeting saves with an empty transcript and no notes,
 /// while capture, recognition and the caption all look healthy.
-actor SourceTranscriber {
+actor SourceTranscriber: MeetingTranscribing {
     let kind: SourceKind
 
     private var analyzer: SpeechAnalyzer?
@@ -62,6 +81,8 @@ actor SourceTranscriber {
     private var pending: [(start: Double, end: Double, text: String)] = []
     private var startedAt: Date?
     private var resultsTask: Task<Void, Never>?
+    /// Invalidates a start suspended in model/format discovery when Stop arrives.
+    private var lifecycleGeneration = 0
 
     /// Frames handed to the analyzer, counted in the ANALYZER's format.
     ///
@@ -74,14 +95,28 @@ actor SourceTranscriber {
     private var finalizeTask: Task<Void, Never>?
     /// Seconds of trailing audio left volatile, so the overlay still has live text
     /// while everything older is settled.
-    private static let volatileTail: Double = 2.0
+    ///
+    /// A `var` so `SpeechFidelityTests` can sweep it against real audio; nothing in
+    /// the app writes to it. The same goes for `forceSettleAfter` below. Both were
+    /// chosen by measurement, and the measurement has to stay repeatable.
+    nonisolated(unsafe) static var volatileTail: Double = 2.0
     /// Every four seconds, which is what Stage 0 measured and what produced legible
     /// text. Settling at detected pauses instead was tried and reverted: an RMS gate
     /// read ordinary speech as silence about half the time, so the cut landed inside
     /// words rather than between sentences and the transcript came back as
-    /// `"Okay. . let's move the... , to."` The cut has to land somewhere, and
-    /// TranscriptAssembly is what makes the seam not matter.
+    /// `"Okay. . let's move the... , to."`
     private static let settleEvery: Duration = .seconds(4)
+
+    /// The least audio that may accumulate before it is settled. See `settle()` for
+    /// the measurements that chose 15 over the 4 this shipped with.
+    ///
+    /// The timer still ticks every `settleEvery`; this decides when a tick acts, so
+    /// a cut lands as soon as its interval is up rather than on a coarser grid.
+    nonisolated(unsafe) static var minimumSettleInterval: Double = 15.0
+
+    /// Cut where the analyzer says its current region ends, rather than at an
+    /// arbitrary instant inside it.
+    nonisolated(unsafe) static var alignToRegionEnd = true
     private var settledThrough: Double = 0
     private var sourceOffset: CMTime = .zero
     private var haveOffset = false
@@ -109,6 +144,10 @@ actor SourceTranscriber {
     /// without an actor hop back to ask.
     struct LiveEdge: Sendable, Equatable {
         var text: String
+        /// Pending speech only. Catch Up replaces this stable row until it settles;
+        /// it must never be journalled or extracted as final speech.
+        var provisionalText: String
+        var localStart: Double
         var localEnd: Double
         var sourceStart: Double
     }
@@ -125,13 +164,17 @@ actor SourceTranscriber {
     func statistics() -> TranscriptStats { stats }
 
     func start() async throws {
+        lifecycleGeneration += 1
+        let generation = lifecycleGeneration
         let transcriber = SpeechTranscriber(
             locale: Locale(identifier: "en-US"),
             preset: .timeIndexedProgressiveTranscription
         )
         self.transcriber = transcriber
 
-        analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
+        let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
+        guard lifecycleGeneration == generation else { throw CancellationError() }
+        analyzerFormat = format
 
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
         self.continuation = continuation
@@ -195,6 +238,9 @@ actor SourceTranscriber {
             }
             emit.yield(segment)
         }
+        // Promotion changes the pending-only Catch Up row even if no new recognition
+        // result arrives. Publish that removal so settled text is never duplicated.
+        publishLiveEdge()
     }
 
     /// Measured in Stage 0: overlapping promotions produce near-duplicate segments —
@@ -230,11 +276,60 @@ actor SourceTranscriber {
     }
 
     /// Finalize everything except a short trailing window.
+    ///
+    /// **How often this runs is the single biggest lever on transcript quality, and
+    /// it was set seven times too aggressively.** Measured by `SpeechFidelityTests`
+    /// over two clips of clean synthesised narration with no pause in them, three
+    /// trials each — the word error rate is against the script that was spoken:
+    ///
+    /// | settling | clip 1 | clip 2 | words kept | cuts |
+    /// |---|---|---|---|---|
+    /// | any instant, every 4s (was shipped) | 26.6% | 26.5% | 101/134 · 106/127 | 10 |
+    /// | region end, every 4s | 25.9% | — | 99/134 | 9 |
+    /// | any instant, every 15s | 5.0% | — | 128/134 | 2 |
+    /// | **region end, every 15s** | **2.0%** | **15.0%** | 132/134 · 112/127 | 2 |
+    ///
+    /// Every forced `finalize(through:)` truncates the analyzer's context, and the
+    /// words spanning the cut are lost: *"and choose speaker view instead of gallery
+    /// view"* came back as *", you, of Gallery View"*. Ten cuts in 36 seconds cost a
+    /// quarter of everything said — from audio with no noise, no accent and no
+    /// crosstalk in it. This is where `", ........,"` and `"I'm cooking spotlight
+    /// forever"` came from; it was never SODA's accuracy.
+    ///
+    /// Cutting at a boundary the analyzer itself reported is the smaller effect but
+    /// not a free one: at 15 seconds it took clip 1 from 5.0% to 2.0% and, more
+    /// usefully, from 5/1/8 across trials to 2/2/2. Where the cut lands stops being
+    /// luck.
+    ///
+    /// This is not the RMS gate that was tried and reverted. That guessed at silence
+    /// from audio energy and was wrong about half the time; this uses the analyzer's
+    /// own segmentation and guesses at nothing.
+    ///
+    /// The cost is latency: a settled transcript now trails live speech by up to
+    /// `minimumSettleInterval`. Captions do not pay it — they are driven by `live`,
+    /// pushed the instant a result lands — and `stop()` promotes everything, so no
+    /// meeting ends short. A transcript that arrives late is recoverable; a
+    /// transcript missing a quarter of its words is not.
     private func settle() async {
         guard let analyzer else { return }
         let fedSeconds = Double(framesFed) / feedRate
-        let through = fedSeconds - Self.volatileTail
-        guard through > settledThrough + 0.5 else { return }
+        let latest = fedSeconds - Self.volatileTail
+        guard latest > settledThrough + 0.5 else { return }
+
+        guard latest - settledThrough >= Self.minimumSettleInterval else { return }
+
+        let offered = pending.map(\.end).sorted()
+        let atRegionEnd = Self.alignToRegionEnd
+            ? offered.filter { $0 > settledThrough + 0.5 && $0 <= fedSeconds }.max()
+            : nil
+        let through = atRegionEnd ?? latest
+        if atRegionEnd == nil { stats.forcedSettles += 1 }
+        if stats.settleSamples.count < 12 {
+            stats.settleSamples.append(String(format: "fed %.1f settled %.1f | offered %@ -> cut %.1f%@",
+                fedSeconds, settledThrough,
+                offered.map { String(format: "%.1f", $0) }.joined(separator: ","),
+                through, atRegionEnd == nil ? " (arbitrary)" : ""))
+        }
 
         do {
             try await analyzer.finalize(through: CMTime(seconds: through, preferredTimescale: 1000))
@@ -305,7 +400,9 @@ actor SourceTranscriber {
     private func publishLiveEdge() {
         let unsettled = pending.map { Segment(start: $0.start, end: $0.end, text: $0.text) }
         emitLive.yield(LiveEdge(
-            text: CaptionEdge.text(settled: recentlyEmitted, pending: unsettled),
+            text: CaptionEdge.card(settled: recentlyEmitted, pending: unsettled),
+            provisionalText: unsettled.sorted { $0.start < $1.start }.map(\.text).joined(separator: " "),
+            localStart: unsettled.map(\.start).min() ?? stats.lastRangeEnd,
             localEnd: stats.lastRangeEnd,
             sourceStart: haveOffset ? sourceOffset.seconds : 0
         ))
@@ -358,6 +455,7 @@ actor SourceTranscriber {
 
     /// Finalizes cleanly so trailing speech is not lost — gate 12's "no silent loss".
     func stop() async {
+        lifecycleGeneration += 1
         continuation?.finish()
         continuation = nil
 

@@ -1,25 +1,48 @@
-import type { Meeting, Preferences } from '@excerpt/types';
+import type {
+  CaptionSettings, DesktopSettings, ExportOutcome, Meeting, MeetingLibraryEntry, MeetingSearchResult, MeetingMutation, MeetingMutationAcknowledgment,
+  NotesDocument, NotesGenerationRequest, NotesProviderStatus, Preferences,
+} from '@excerpt/types';
 
 /**
- * The seam between the website and the macOS app.
+ * The seam between the desktop editor and the macOS app. Meeting data belongs to
+ * native storage; the editor has no browser persistence fallback.
  *
- * The notes editor is the same React app on both. In a browser it reads IndexedDB;
- * inside Excerpt's window it reads the Mac's own files, because the meetings were
- * written there by the native capture that the browser cannot do. The editor itself
- * knows about neither — it calls the same functions, and this decides where they go.
- *
- * Transcript events never cross this bridge. The webview receives finished meetings;
- * live speech stays native, where the overlay needs it every frame.
+ * The native session remains authoritative while capture is live. Settled transcript
+ * events cross only as meeting snapshots for reading; captions stay native, where a
+ * webview round trip would put them behind the words.
  */
 export interface ExcerptBridge {
-  listMeetings(): Promise<Meeting[]>;
+  /** Starts native capture through the single application coordinator. */
+  startMeeting(): Promise<void>;
+  /** Opens the native live editor for the active meeting, if one exists. */
+  openLiveNotes(): Promise<void>;
+  /** The current position on the active native meeting clock, in milliseconds. */
+  getLiveMeetingTime(meetingId: string): Promise<number>;
+  retryAutomaticNotes(meetingId: string): Promise<Meeting>;
+  /** Reads native-owned caption, microphone, display, and shortcut state. */
+  loadDesktopSettings(): Promise<DesktopSettings>;
+  /** Replaces only native caption preferences; browser storage is never involved. */
+  saveCaptionSettings(settings: Partial<Pick<CaptionSettings, 'preset' | 'size' | 'position' | 'enabled' | 'displayId'>>): Promise<DesktopSettings>;
+  /** Selects a stable native capture-device identifier. */
+  selectMicrophone(deviceId: string): Promise<DesktopSettings>;
+  listMeetings(): Promise<MeetingLibraryEntry[]>;
+  /** Native searches persisted text without sending a whole library into the webview. */
+  searchMeetings(query: string): Promise<MeetingSearchResult[]>;
+  /** Changes only the title; returns a small durable library row. */
+  renameMeeting(id: string, title: string): Promise<MeetingLibraryEntry>;
   loadMeeting(id: string): Promise<Meeting | undefined>;
-  saveMeeting(meeting: Meeting): Promise<void>;
+  /** Resolves only after native storage durably acknowledges the typed operation. */
+  mutateMeeting(mutation: MeetingMutation): Promise<MeetingMutationAcknowledgment>;
   deleteMeeting(id: string): Promise<void>;
   loadPreferences(): Promise<Preferences>;
   savePreferences(preferences: Preferences): Promise<void>;
   /** Hands the Markdown to a real save panel rather than a download the sandbox eats. */
-  exportMarkdown(filename: string, markdown: string): Promise<void>;
+  exportMarkdown(filename: string, markdown: string): Promise<ExportOutcome>;
+  exportHTML?(filename: string, html: string): Promise<ExportOutcome>;
+  summarizeNotes?(meeting: Meeting, request: NotesGenerationRequest): Promise<NotesDocument>;
+  getNotesProviderStatus?(): Promise<NotesProviderStatus>;
+  configureOpenAIKey?(): Promise<NotesProviderStatus>;
+  removeOpenAIKey?(): Promise<void>;
 }
 
 declare global {
@@ -28,8 +51,7 @@ declare global {
 }
 
 /**
- * The host, if there is one. Absent in every browser, which is the point: the website
- * keeps working exactly as before without a single conditional in the views.
+ * The host, if there is one. When absent, the editor shows a desktop-host error.
  */
 export function bridge(): ExcerptBridge | undefined {
   return typeof globalThis !== 'undefined' ? globalThis.__excerptBridge : undefined;
@@ -40,12 +62,7 @@ export function hasBridge(): boolean {
 }
 
 /**
- * Whether this is Excerpt's own window rather than a browser tab.
- *
- * Used only for what the interface says and offers, never for what it computes — the
- * notes are the notes on both. "Stored in this browser" is a true sentence on the
- * website and a false one on a Mac, and a product that gets that wrong is telling the
- * user it does not know where their data is.
+ * Whether this is Excerpt's own window rather than an unsupported browser tab.
  */
 export function isNativeHost(): boolean {
   return hasBridge();

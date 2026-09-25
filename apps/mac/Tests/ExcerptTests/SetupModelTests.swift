@@ -14,6 +14,7 @@ struct SetupModelTests {
         let defaults = UserDefaults(suiteName: "excerpt-tests-\(UUID().uuidString)")!
         return SetupModel(
             overlay: OverlayController(defaults: defaults),
+            microphone: MicrophoneController(defaults: defaults, discovery: EmptyMicrophoneDiscovery()),
             defaults: defaults,
             readPermission: { granted.contains($0) ? .granted : .undetermined },
             requestPermission: { _ in requestResult },
@@ -87,14 +88,16 @@ struct SetupModelTests {
 
         await model.advance()   // preview  -> permissions
         await model.advance()   // permissions -> model
-        await model.advance()   // model -> ready
+        await model.advance()   // model -> input
+        #expect(model.step == .input)
+        await model.advance()   // input -> ready
         #expect(model.step == .ready)
         #expect(model.hasCompletedSetup)
     }
 
-    @Test func `declining is remembered, so it is not asked again tomorrow`() {
+    @Test func `declining is remembered, so it is not asked again tomorrow`() async {
         let model = makeModel()
-        model.dismissForNow()
+        await model.dismissForNow()
         #expect(model.hasCompletedSetup)
     }
 
@@ -113,9 +116,14 @@ struct SetupModelTests {
         #expect(!missingModel.hasCompletedSetup)
     }
 
-    @Test func `Back never falls off the front`() {
+    @Test func `Back never falls off the front`() async {
         let model = makeModel()
-        model.back()
+        await model.back()
         #expect(model.step == .preview)
     }
+}
+
+private struct EmptyMicrophoneDiscovery: MicrophoneDiscovering {
+    func devices() -> [MicrophoneDevice] { [] }
+    func defaultDeviceID() -> String? { nil }
 }

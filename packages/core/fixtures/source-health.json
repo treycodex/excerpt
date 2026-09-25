@@ -1,0 +1,50 @@
+{
+  "comment": "One rule for what a capture source is doing, checked by vitest against healthOf() in packages/core/src/capture/health.ts and by the Swift tests against SourceHealth.of() in apps/mac. The browser hears through Web Speech and the Mac through SpeechAnalyzer; a person must not be told two different things about one meeting.",
+  "cases": [
+    {
+      "name": "before the recogniser has started, nothing else means anything",
+      "signals": { "started": false, "failed": false, "secondsSinceVoiced": 0, "secondsSinceFinal": 0, "voicedSecondsSinceFinal": 0 },
+      "expect": "starting"
+    },
+    {
+      "name": "being spoken into right now",
+      "signals": { "started": true, "failed": false, "secondsSinceVoiced": 0.4, "secondsSinceFinal": 2, "voicedSecondsSinceFinal": 1 },
+      "expect": "hearing"
+    },
+    {
+      "name": "still hearing at the edge of the window",
+      "signals": { "started": true, "failed": false, "secondsSinceVoiced": 4, "secondsSinceFinal": 6, "voicedSecondsSinceFinal": 3 },
+      "expect": "hearing"
+    },
+    {
+      "name": "nobody is speaking into it, which is not a fault",
+      "signals": { "started": true, "failed": false, "secondsSinceVoiced": 45, "secondsSinceFinal": 45, "voicedSecondsSinceFinal": 0 },
+      "expect": "silent"
+    },
+    {
+      "name": "speech is arriving and nothing is coming back",
+      "signals": { "started": true, "failed": false, "secondsSinceVoiced": 0.5, "secondsSinceFinal": 60, "voicedSecondsSinceFinal": 20 },
+      "expect": "stalled"
+    },
+    {
+      "name": "a long sentence waiting on its final is not a stall",
+      "signals": { "started": true, "failed": false, "secondsSinceVoiced": 0.2, "secondsSinceFinal": 12, "voicedSecondsSinceFinal": 11 },
+      "expect": "hearing"
+    },
+    {
+      "name": "a long quiet stretch is not a stall either",
+      "signals": { "started": true, "failed": false, "secondsSinceVoiced": 300, "secondsSinceFinal": 300, "voicedSecondsSinceFinal": 1 },
+      "expect": "silent"
+    },
+    {
+      "name": "a source that stopped working outranks everything else",
+      "signals": { "started": true, "failed": true, "secondsSinceVoiced": 0.1, "secondsSinceFinal": 1, "voicedSecondsSinceFinal": 0 },
+      "expect": "failed"
+    },
+    {
+      "name": "failed before it ever started is still failed",
+      "signals": { "started": false, "failed": true, "secondsSinceVoiced": 0, "secondsSinceFinal": 0, "voicedSecondsSinceFinal": 0 },
+      "expect": "failed"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@excerpt/editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "test": "vitest run",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "build:notes": "vite build --outDir ../mac/Resources/notes --emptyOutDir"
+  },
+  "dependencies": {
+    "@excerpt/core": "workspace:*",
+    "@excerpt/types": "workspace:*",
+    "@excerpt/ui": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/react-test-renderer": "18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "react-test-renderer": "18.3.1",
+    "vite": "^6.0.3"
+  }
+}

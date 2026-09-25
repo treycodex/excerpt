@@ -14,16 +14,17 @@ import Observation
 final class SetupModel {
 
     enum Step: Int, CaseIterable, Identifiable {
-        case preview, permissions, model, ready
+        case preview, permissions, model, input, ready
 
         var id: Int { rawValue }
 
         /// Named for what the person does, not for what the app configures.
         var title: String {
             switch self {
-            case .preview: "Your style"
+            case .preview: "Welcome"
             case .permissions: "Permissions"
             case .model: "Speech model"
+            case .input: "Check inputs"
             case .ready: "Ready to meet"
             }
         }
@@ -56,6 +57,8 @@ final class SetupModel {
     private static let completedKey = "setup.completed"
     private let defaults: UserDefaults
     let overlay: OverlayController
+    let microphone: MicrophoneController
+    let inputCheck: InputCheck
 
     /// Reading a permission and installing a model are the two things this flow does
     /// that reach outside the process. They come in as functions so the decisions
@@ -67,19 +70,23 @@ final class SetupModel {
 
     init(
         overlay: OverlayController,
+        microphone: MicrophoneController,
+        inputCheck: InputCheck? = nil,
         defaults: UserDefaults = .standard,
         readPermission: @escaping @Sendable (Permission) async -> Permission.State = { await Permissions.state(of: $0) },
         requestPermission: @escaping @Sendable (Permission) async -> Permission.State = { await Permissions.request($0) },
         installModel: @escaping @Sendable (@escaping @Sendable (Double) -> Void) async -> ModelState = SetupModel.installSpeechModel
     ) {
         self.overlay = overlay
+        self.microphone = microphone
+        self.inputCheck = inputCheck ?? InputCheck(microphone: microphone)
         self.defaults = defaults
         self.readPermission = readPermission
         self.requestPermission = requestPermission
         self.installModel = installModel
     }
 
-    private static let installSpeechModel: @Sendable (@escaping @Sendable (Double) -> Void) async -> ModelState = { onProgress in
+    nonisolated private static let installSpeechModel: @Sendable (@escaping @Sendable (Double) -> Void) async -> ModelState = { onProgress in
         let report = await ModelProvisioning.install(onProgress: onProgress)
         if let error = report.error { return .failed(error) }
         if report.passes || report.localeInstalled { return .ready }
@@ -173,6 +180,10 @@ final class SetupModel {
             await provisionModel()
         case .model:
             guard modelState == .ready else { return }
+            microphone.refresh()
+            step = .input
+        case .input:
+            await inputCheck.stop()
             step = .ready
             hasCompletedSetup = true
         case .ready:
@@ -184,22 +195,26 @@ final class SetupModel {
     /// it. The permission and model steps do their own work on arrival, exactly as
     /// they would if you had walked there.
     func jump(to step: Step) async {
+        await inputCheck.stop()
         self.step = step
         switch step {
         case .permissions: await refreshPermissions()
         case .model: await provisionModel()
+        case .input: microphone.refresh()
         case .preview, .ready: break
         }
     }
 
-    func back() {
+    func back() async {
+        await inputCheck.stop()
         guard let previous = Step(rawValue: step.rawValue - 1) else { return }
         step = previous
     }
 
     /// Leaving early is allowed and remembered. Someone who does not want to grant
     /// anything today should not be handed this window again tomorrow.
-    func dismissForNow() {
+    func dismissForNow() async {
+        await inputCheck.stop()
         hasCompletedSetup = true
     }
 }

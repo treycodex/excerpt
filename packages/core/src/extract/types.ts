@@ -1,4 +1,4 @@
-import type { TranscriptEvent } from '@excerpt/types';
+import type { Evidence, TranscriptEvent } from '@excerpt/types';
 
 export interface Sentence {
   /** Verbatim. Evidence quotes and titles always come from this. */
@@ -12,5 +12,6 @@ export interface Sentence {
   norm: string;
   event: TranscriptEvent;
   index: number;
+  evidence?: Evidence[];
 }
 export type { Assignee } from '@excerpt/types';

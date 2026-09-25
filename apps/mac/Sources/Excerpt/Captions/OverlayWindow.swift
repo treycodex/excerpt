@@ -72,12 +72,16 @@ final class OverlayWindow: NSWindow {
 final class OverlayController {
     var caption: CaptionLine?
     private(set) var visible = false
+    /// The user's durable choice. `visible` is only the current window state and is
+    /// cleared at the end of every meeting so Dock presence remains truthful.
+    private(set) var captionsEnabled: Bool
     private(set) var screenName = "—"
+    private(set) var selectedDisplayID: String
+    @ObservationIgnored var onSettingsChange: (() -> Void)?
 
-    /// The latest words, held whether or not they are being drawn. Not observed: it is
-    /// the input to `caption`, and re-rendering the overlay on it would defeat the
-    /// point of holding it.
-    @ObservationIgnored private var pendingText: (speaker: String, text: String) = ("", "")
+    /// Recognition revisions remain off screen until the next presentation boundary.
+    @ObservationIgnored private var presentation = SubtitlePresentation()
+    @ObservationIgnored private var presentationTask: Task<Void, Never>?
 
     private(set) var preset: CaptionPreset
     private(set) var size: CaptionSize
@@ -111,18 +115,56 @@ final class OverlayController {
         static let preset = "caption.preset"
         static let size = "caption.size"
         static let position = "caption.position"
+        static let enabled = "caption.enabled"
+        static let display = "caption.display-id"
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard,
+         availableDisplays: @escaping @MainActor () -> [CaptionDisplay] = {
+             NSScreen.screens.map { CaptionDisplay(id: OverlayController.displayID($0), name: $0.localizedName) }
+         },
+         mainDisplayID: @escaping @MainActor () -> String? = { NSScreen.main.map { OverlayController.displayID($0) } }) {
         // A look is a preference, not data: if it fails to load we show the default
         // rather than complaining about it.
         self.defaults = defaults
+        self.availableDisplays = availableDisplays
+        self.mainDisplayID = mainDisplayID
         preset = defaults.string(forKey: Key.preset).flatMap(CaptionPreset.init) ?? .classic
         size = defaults.string(forKey: Key.size).flatMap(CaptionSize.init) ?? .medium
         position = defaults.string(forKey: Key.position).flatMap(CaptionPosition.init) ?? .standard
+        captionsEnabled = defaults.object(forKey: Key.enabled) == nil
+            ? true
+            : defaults.bool(forKey: Key.enabled)
+        selectedDisplayID = defaults.string(forKey: Key.display)
+            ?? mainDisplayID() ?? availableDisplays().first?.id ?? ""
+        if defaults.string(forKey: Key.display) == nil, !selectedDisplayID.isEmpty {
+            defaults.set(selectedDisplayID, forKey: Key.display)
+        }
+        screenObserver = ScreenObserver(forName: NSApplication.didChangeScreenParametersNotification) { [weak self] _ in
+            MainActor.assumeIsolated { self?.displaysDidChange() }
+        }
     }
 
     private let defaults: UserDefaults
+    @ObservationIgnored private let availableDisplays: @MainActor () -> [CaptionDisplay]
+    @ObservationIgnored private let mainDisplayID: @MainActor () -> String?
+
+    var resolvedDisplayID: String? {
+        let connected = displays
+        if connected.contains(where: { $0.id == selectedDisplayID }) { return selectedDisplayID }
+        if let main = mainDisplayID(), connected.contains(where: { $0.id == main }) { return main }
+        return connected.first?.id
+    }
+
+    func displaysDidChange() {
+        if visible {
+            if let target = targetScreen() {
+                window?.reposition(to: target)
+                screenName = target.localizedName
+            } else { hide() }
+        }
+        onSettingsChange?()
+    }
 
     // MARK: - Appearance
 
@@ -132,16 +174,82 @@ final class OverlayController {
     func setPreset(_ value: CaptionPreset) {
         preset = value
         defaults.set(value.rawValue, forKey: Key.preset)
+        onSettingsChange?()
     }
 
     func setSize(_ value: CaptionSize) {
         size = value
         defaults.set(value.rawValue, forKey: Key.size)
+        onSettingsChange?()
     }
 
     func setPosition(_ value: CaptionPosition) {
         position = value
         defaults.set(value.rawValue, forKey: Key.position)
+        onSettingsChange?()
+    }
+
+    func setCaptionsEnabled(_ enabled: Bool) {
+        captionsEnabled = enabled
+        defaults.set(enabled, forKey: Key.enabled)
+        onSettingsChange?()
+    }
+
+    static func displayID(_ screen: NSScreen) -> String {
+        if let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+            return number.stringValue
+        }
+        // The numeric display id is present on supported macOS releases. Keep a
+        // deterministic fallback for tests and unusual virtual displays.
+        return "screen:\(screen.localizedName):\(Int(screen.frame.minX)):\(Int(screen.frame.minY))"
+    }
+
+    var displays: [CaptionDisplay] {
+        availableDisplays().filter(\.connected)
+    }
+
+    var displayMissing: Bool {
+        !selectedDisplayID.isEmpty && !displays.contains { $0.id == selectedDisplayID }
+    }
+
+    func settings() -> CaptionSettings {
+        let connected = displays
+        let chosen = connected.first(where: { $0.id == selectedDisplayID })
+        return CaptionSettings(
+            preset: preset, size: size, position: position, enabled: captionsEnabled,
+            displayId: selectedDisplayID, displays: connected,
+            displayMissing: chosen == nil,
+            displayName: chosen?.name ?? (selectedDisplayID.isEmpty ? "No display" : "Disconnected display"))
+    }
+
+    func apply(_ settings: CaptionSettings) {
+        preset = settings.preset
+        size = settings.size
+        position = settings.position
+        captionsEnabled = settings.enabled
+        selectedDisplayID = settings.displayId
+        defaults.set(preset.rawValue, forKey: Key.preset)
+        defaults.set(size.rawValue, forKey: Key.size)
+        defaults.set(position.rawValue, forKey: Key.position)
+        defaults.set(captionsEnabled, forKey: Key.enabled)
+        defaults.set(selectedDisplayID, forKey: Key.display)
+        if visible {
+            if let target = targetScreen() {
+                window?.reposition(to: target)
+                screenName = target.localizedName
+            } else { hide() }
+        }
+        onSettingsChange?()
+    }
+
+    func setDisplay(_ id: String) {
+        selectedDisplayID = id
+        defaults.set(id, forKey: Key.display)
+        if visible, let target = targetScreen() {
+            window?.reposition(to: target)
+            screenName = target.localizedName
+        }
+        onSettingsChange?()
     }
 
     // MARK: - Window
@@ -177,13 +285,11 @@ final class OverlayController {
         if wasVisible { show() }
     }
 
-    /// The screen to show on, preferring the one the pointer is on — that is the one
-    /// the meeting is on. Returns nil only if the Mac reports no screens at all, which
-    /// happens with the lid shut and no display attached; showing nothing is correct then.
+    /// The configured display is stable across fullscreen and focus changes. If it is
+    /// disconnected we retain the preference but use the main display until it returns.
     private func targetScreen(preferring screen: NSScreen? = nil) -> NSScreen? {
         if let screen { return screen }
-        let pointer = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) }
+        return NSScreen.screens.first { Self.displayID($0) == resolvedDisplayID }
             ?? NSScreen.main
             ?? NSScreen.screens.first
     }
@@ -203,32 +309,16 @@ final class OverlayController {
         visible = true
         screenName = target.localizedName
         DockPresence.shared.overlay(isShowing: true)
-        // Whatever was said while the overlay was down is drawn the moment it comes up,
-        // rather than after the next word.
-        rebreakHeldText()
+        // Resume the presentation clock, discarding speech that expired while hidden.
+        startPresentationClock()
 
-        // Gate 11: follow display changes rather than being stranded on a screen
-        // that no longer exists.
-        if screenObserver == nil {
-            screenObserver = ScreenObserver(
-                forName: NSApplication.didChangeScreenParametersNotification
-            ) { [weak self] _ in
-                // The queue is .main, so this already runs on the main thread. Hopping
-                // through a Task would cost a frame or more before the overlay caught up
-                // with a display that just moved.
-                MainActor.assumeIsolated {
-                    guard let self, let window = self.window,
-                          let screen = self.targetScreen() else { return }
-                    window.reposition(to: screen)
-                    self.screenName = screen.localizedName
-                }
-            }
-        }
     }
 
     func hide() {
         window?.orderOut(nil)
         visible = false
+        presentationTask?.cancel()
+        presentationTask = nil
         DockPresence.shared.overlay(isShowing: false)
     }
 
@@ -238,7 +328,10 @@ final class OverlayController {
 
     /// Move to the screen the pointer is on, so it follows the meeting.
     func followPointer() {
-        guard let screen = targetScreen() else { return }
+        let pointer = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) })
+            ?? NSScreen.main else { return }
+        setDisplay(Self.displayID(screen))
         window?.reposition(to: screen)
         screenName = screen.localizedName
     }
@@ -246,36 +339,50 @@ final class OverlayController {
     func update(speaker: String, text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            pendingText = ("", "")
+            presentation = SubtitlePresentation()
+            presentationTask?.cancel()
+            presentationTask = nil
             if caption != nil { caption = nil }
             return
         }
-        pendingText = (speaker, trimmed)
+        presentation.receive(speaker: speaker, text: trimmed, at: ProcessInfo.processInfo.systemUptime)
 
         // Off screen, the words are worth keeping but breaking them is not: `show()`
         // breaks whatever is held. This is what lets the session push unconditionally
         // and stop caring whether the overlay is up.
         guard visible else { return }
 
-        let next = CaptionLine(speaker: speaker, text: trimmed, lines: breakLines(trimmed))
-        // `@Observable` notifies on assignment, not on change, and the live edge
-        // republishes the same words whenever a result lands without adding any. This
-        // guard is what keeps a push cheaper than the poll it replaced.
-        guard next != caption else { return }
-        caption = next
+        startPresentationClock()
     }
 
-    /// Break what is held, for the overlay coming up on words that were said while it
-    /// was down.
-    ///
-    /// Not needed when the look changes: the budget is `maxCharsPerLine`, a count of
-    /// characters, and every preset and size shares it. The frame a line is drawn in
-    /// changes with the size; where the line breaks does not.
-    private func rebreakHeldText() {
-        let (speaker, text) = pendingText
-        guard visible, !text.isEmpty else { return }
-        let next = CaptionLine(speaker: speaker, text: text, lines: breakLines(text))
-        if next != caption { caption = next }
+    /// Only run while a cue is waiting or visible. The timer updates presentation,
+    /// never the recognition stream or stored transcript.
+    private func startPresentationClock() {
+        guard visible, presentationTask == nil else { return }
+        // Tick immediately on showing the window: expired speech stays expired.
+        presentTick()
+        guard presentation.needsTick else { return }
+        presentationTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+                guard let self, self.visible else { return }
+                self.presentTick()
+                if !self.presentation.needsTick {
+                    self.presentationTask = nil
+                    return
+                }
+            }
+        }
+    }
+
+    private func presentTick() {
+        presentation.tick(at: ProcessInfo.processInfo.systemUptime)
+        guard let cue = presentation.displayed else {
+            if caption != nil { caption = nil }
+            return
+        }
+        guard caption?.speaker != cue.speaker || caption?.text != cue.text else { return }
+        caption = CaptionLine(speaker: cue.speaker, text: cue.text, lines: breakLines(cue.text))
     }
 
     /// At most two lines, keeping the tail, splitting on spaces at the token's budget.

@@ -7,7 +7,12 @@
 # Remove it later from Keychain Access by deleting "Excerpt Dev Local".
 set -euo pipefail
 NAME="Excerpt Dev Local"
+if security find-identity -v -p codesigning | grep -q "\"$NAME\""; then
+  echo "'$NAME' already exists and is valid."
+  exit 0
+fi
 DIR=$(mktemp -d)
+trap 'rm -rf "$DIR"' EXIT
 
 openssl req -x509 -newkey rsa:2048 -keyout "$DIR/key.pem" -out "$DIR/cert.pem" \
   -days 3650 -nodes -subj "/CN=$NAME" \
@@ -24,5 +29,4 @@ security import "$DIR/identity.p12" -k ~/Library/Keychains/login.keychain-db \
 security add-trusted-cert -r trustRoot -p codeSign \
   -k ~/Library/Keychains/login.keychain-db "$DIR/cert.pem"
 
-rm -rf "$DIR"
 security find-identity -v -p codesigning | grep "$NAME"
