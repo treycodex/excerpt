@@ -6,6 +6,7 @@
     "src/App.tsx",
     "src/ErrorBoundary.tsx",
     "src/views/Landing.tsx",
+    "src/views/LandingLegacy.tsx",
     "src/views/Wordmark.tsx",
     "vite.config.ts"
   ]

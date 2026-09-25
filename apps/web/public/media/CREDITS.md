@@ -1,7 +1,24 @@
-# Landing page photography
+# Landing page imagery
 
-`editorial-hero.jpg`: Photograph of Torrey Pines coastline at dusk by Looka Chow.
+Every image on the home page is a screenshot of Excerpt itself. There is no stock
+photography and no mockup.
+
+`campaign-review.png` and `notes.png` are shot from the running app by
+`apps/web/tools/render-product-shot.mjs`, which seeds a sample meeting, pastes the
+two sample screens through the document's own paste handler, places and captions
+them, writes the agreed next action, reloads, and captures the result. Re-run it
+whenever the notes view changes.
+
+The report and the creative inside `campaign-review.png` are drawn by that tool —
+labelled samples with synthetic figures. No real client, campaign, brand or
+reporting data appears anywhere on the site.
+
+The meeting video and its poster are recorded from the product by
+`apps/mac/tools/record-media.sh`.
+
+`editorial-hero.jpg` is no longer the home page's hero. It remains in use as the
+busy scene behind the subtitle-style previews in Preferences and in the Mac setup,
+which is what a subtitle has to stay legible over.
+Photograph of Torrey Pines coastline at dusk by Looka Chow.
 Source: https://unsplash.com/photos/cliffside-view-of-the-ocean-during-a-sunset-qf1px3mslRE
 License: https://unsplash.com/license (free commercial use).
-
-The meeting video and product screenshots are existing Excerpt product assets.

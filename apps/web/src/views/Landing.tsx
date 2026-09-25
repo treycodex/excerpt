@@ -3,63 +3,412 @@ import { Wordmark } from './Wordmark';
 import './landing.css';
 
 const SOURCE = 'https://github.com/treycodex/excerpt';
-const STEPS = [
-  ['01', 'Start your meeting.', 'Choose your microphone, then start from Excerpt’s menu or library.', 'A minute to set up'],
-  ['02', 'Get live subtitles.', 'Excerpt transcribes as people speak and displays the words as cinematic subtitles.', 'Live, as you speak'],
-  ['03', 'Review your notes.', 'End the meeting to review decisions, action items, and deadlines. Check the transcript, edit your notes, and export them.', 'Yours to keep'],
+
+/* ── The page ──────────────────────────────────────────────────────────────────
+   Structured the way a modern product page is structured — a centred hero, one
+   large product frame you can switch, then eyebrow → heading → cards, repeated —
+   because that shape is what a reader arriving from a link already knows how to
+   read. What fills it is ours: the near-black ground, the paper cream, the mono
+   chrome, the serif turn at the end of a sentence, and the four corner brackets
+   that mark the active frame everywhere else in the product.
+
+   Every claim on this page is one the product can keep. The sections that say
+   what Excerpt does *not* do are not hedging; they are the argument. */
+
+const HERO_ALT = 'Excerpt’s notes for a campaign review: a sample paid-social performance report '
+  + 'captured at 0:22 with its client, channel and 1–30 Sep 2026 period visible, the spoken '
+  + 'comparison of Variant B’s click-through rate beneath it, the Variant B creative captured at '
+  + '0:41, and a typed note reading “Agreed: test a clearer opening line on Variant B. Brief before Thursday.”';
+
+const NOTES_ALT = 'Excerpt’s review tab for the same campaign: a decision marked DECIDED with the '
+  + 'verbatim sentence it came from, an action assigned to you with a due date, and a request from '
+  + 'the other side left unassigned under “Who’s doing this?”';
+
+/** The three things the hero can show. Tabs switch the frame, nothing else. */
+type Shot = {
+  id: string; tab: string; chrome: string; caption: string;
+  src?: string; alt?: string; height?: number; video?: boolean;
+};
+
+const SHOTS: readonly [Shot, Shot, Shot] = [
+  {
+    id: 'review',
+    tab: 'The review',
+    chrome: 'CAMPAIGN REVIEW · PAID SOCIAL · 1–30 SEP',
+    caption: 'Captured screens sit on the meeting clock, with the speech from either side of them.',
+    src: '/media/campaign-review.png',
+    alt: HERO_ALT,
+    height: 2128,
+  },
+  {
+    id: 'notes',
+    tab: 'The notes',
+    chrome: 'REVIEW — DECISIONS · ACTIONS · DEADLINES',
+    caption: 'Every item carries the sentence it came from, so you can read it rather than trust it.',
+    src: '/media/notes.png',
+    alt: NOTES_ALT,
+    height: 2682,
+  },
+  {
+    id: 'subtitles',
+    tab: 'The subtitles',
+    chrome: 'LIVE · TWO LINES · BROKEN ON PHRASE',
+    caption: 'Film-style subtitles while the review happens, so you can watch the work.',
+    video: true,
+  },
 ];
 
-export function Landing() {
-  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+/** The job, in the order it happens. */
+const STEPS = [
+  ['01', 'Capture the screen you are reviewing.',
+    'On the Mac, a keyboard shortcut grabs the region on screen — a report, a creative, a deck — and places it on the meeting clock.',
+    'Mac shortcut · local capture'],
+  ['02', 'Keep the discussion beside it.',
+    'Each screen is placed on the meeting clock, so the speech from either side of it sits with the picture. Nearby speech is context, not a claim that those words describe what is on screen.',
+    'Placed on the meeting clock'],
+  ['03', 'Write the next step, and come back to it.',
+    'Add your own note about what was agreed, correct a misheard line, and every extracted item still links to the passage it came from. Export to Markdown, or to a page with the screens in it.',
+    'Yours to keep'],
+] as const;
+
+/** cap-style chip grid: a short label and the one line that earns it. */
+const KEPT = [
+  ['Transcript-linked', 'Every item cites its sentence'],
+  ['Four categories', 'Decisions, actions, deadlines, questions'],
+  ['An editable document', 'Write, reorder, correct, export'],
+  ['Screens on the clock', 'Placed where they happened'],
+  ['Transcript corrections', 'Fix a misheard line, review what moved'],
+  ['Markdown and HTML', 'One self-contained file, offline'],
+] as const;
+
+const WHY = [
+  ['Grammar, not a model.',
+    'Items come from cue patterns and guards. Titles are verbatim spans of what someone said — never generated, never rewritten. That is the whole claim, and it is checkable.'],
+  ['A miss beats a false positive.',
+    '“We’ll discuss October next week” is a decision to talk, not a decision. Negation, conditionals, reported speech and questions are all rejected. Ambiguity resolves toward silence.'],
+  ['It knows you from not-you.',
+    'Two audio streams is the whole of what Excerpt knows about who spoke. A task you took on is yours; “can you send that?” from the far side is left for you to assign.'],
+  ['Everything is correctable.',
+    'Re-categorise, reassign, set a due date, fix the state, or dismiss it. Excerpt is wrong sometimes, so being wrong has to be cheap.'],
+  ['Zero operating cost.',
+    'No account, no backend, no database, no API key required. Nothing about this is free-for-now.'],
+  ['Truly open source.',
+    'MIT. Read how extraction decides what counts as a decision, or build the Mac app yourself from the same source.'],
+] as const;
+
+const NOT_CLAIMED = [
+  ['Not an audio record', 'A transcript is stored, not a recording. You cannot check a note against the original sound.'],
+  ['Timing is approximate', 'Live speech recognition reports evolving segments rather than word-perfect source timestamps, so transcript positions can lag real speech.'],
+  ['It does not read your report', 'A captured screen is kept as a picture. No numbers are read off it, no metric is verified, no ad platform is connected.'],
+  ['It cannot tell who people are', 'Excerpt distinguishes your microphone from meeting audio. It does not identify people by name.'],
+] as const;
+
+const SURFACES = [
+  ['The Mac app', 'Subtitles drawn over the meeting itself — no browser window and no floating control panel. Excerpt lives in the menu bar.',
+    'macOS 26 or later on Apple silicon.', 'Build it from source ↗', SOURCE],
+  ['Local meeting storage', 'Transcripts, captured screens and editable notes stay together in Excerpt’s own folder on your Mac.',
+    'No account, backend or browser storage.', 'Read the architecture ↗', `${SOURCE}#readme`],
+  ['Open source', 'The capture, transcription, extraction and editor code are all available to inspect and build.',
+    'MIT licensed. No subscription.', 'Explore the source ↗', SOURCE],
+] as const;
+
+export function Landing({ onStart }: { onStart: () => void }) {
+  const [shot, setShot] = useState(0);
+  const [stuck, setStuck] = useState(false);
+  useReveal();
+
+  useEffect(() => {
+    const onScroll = () => setStuck(window.scrollY > 12);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+  });
+
+  const active = SHOTS[shot] ?? SHOTS[0];
+
   return (
-    <div className="editorial">
-      <nav className="ed-nav" aria-label="Main">
-        <a className="ed-logo" href="#/" aria-label="Excerpt home"><Wordmark markOnly /></a>
-        <span className="ed-nav-note">Meeting notes.<br />Free and open source.</span>
-        <div className="ed-nav-links"><button onClick={() => jump('the-experience')}>Features</button><a href={SOURCE} target="_blank" rel="noreferrer">Open source ↗</a></div>
-        <a className="ed-nav-start" href={SOURCE} target="_blank" rel="noreferrer">View on GitHub <span>↗</span></a>
+    <div className="lp">
+      <nav className={stuck ? 'lp-nav is-stuck' : 'lp-nav'} aria-label="Main">
+        <a className="lp-nav-mark" href="#/" aria-label="Excerpt home"><Wordmark /></a>
+        <div className="lp-nav-links">
+          <button onClick={() => jump('how-it-works')}>How it works</button>
+          <button onClick={() => jump('what-it-keeps')}>What it keeps</button>
+          <button onClick={() => jump('surfaces')}>How it runs</button>
+          <a href={SOURCE} target="_blank" rel="noreferrer">Open source ↗</a>
+        </div>
+        <div className="lp-nav-actions">
+          <button className="lp-ghost" onClick={onStart}>Watch the demo</button>
+          <a className="lp-solid" href={SOURCE} target="_blank" rel="noreferrer">Use Excerpt</a>
+        </div>
       </nav>
 
-      <header className="ed-masthead">
-        <div className="ed-masthead-meta"><span>FREE, OPEN-SOURCE MEETING NOTES</span><span>CINEMATIC SUBTITLES. CLEAR NOTES.</span></div>
-        <div className="ed-wordmark" aria-label="Excerpt">excerpt<span>✳</span></div>
+      <header className="lp-hero">
+        <a className="lp-pill" href={SOURCE} target="_blank" rel="noreferrer">
+          <span className="lp-pill-new">NEW</span>
+          The Mac app draws subtitles over the meeting itself
+          <span aria-hidden>→</span>
+        </a>
+
+        <p className="lp-eyebrow">Meeting memory for creative and media agencies</p>
+        <h1><span>The screen.</span> <span>The speech.</span><br /><em>The note that links them.</em></h1>
+        <p className="lp-lead">
+          One free, open-source app for campaign reviews, creative feedback and client readouts.
+          Excerpt keeps the screen you were looking at, the speech from either side of it, and notes
+          where every item points back at the sentence it came from — on your own device.
+        </p>
+
+        <div className="lp-cta">
+          <a className="lp-solid lp-lg" href={SOURCE} target="_blank" rel="noreferrer">Use Excerpt free <span aria-hidden>↗</span></a>
+          <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the 102-second demo</button>
+        </div>
+        <p className="lp-fineprint">No account, no subscription. Capture, transcription and meeting files stay on your Mac.</p>
+
+        <div className="lp-also">
+          <span className="lp-label">Built around</span>
+          <span>Menu-bar app</span><i aria-hidden>·</i>
+          <span>On-device speech</span><i aria-hidden>·</i>
+          <span>Local meeting files</span>
+        </div>
       </header>
 
-      <section className="ed-hero" aria-labelledby="ed-title">
-        <img className="ed-hero-image" src="/media/editorial-hero.jpg" alt="A quiet coastline in the last light of the day" fetchPriority="high" />
-        <div className="ed-hero-shade" />
-        <div className="ed-hero-top"><span>MADE FOR YOUR MEETINGS</span><span>FREE TO USE. OPEN SOURCE.</span></div>
-        <div className="ed-hero-bottom">
-          <div><p className="ed-label">MEET EXCERPT</p><h1 id="ed-title">Meeting notes.<br />Cinematic feel.<br /><em>Free. Open source.</em></h1></div>
-          <div className="ed-hero-aside"><p>Live subtitles while you meet.<br />Decisions and action items when you’re done.</p><a className="ed-button" href={SOURCE} target="_blank" rel="noreferrer">View Excerpt on GitHub <span>↗</span></a><button className="ed-text-button" onClick={() => jump('the-experience')}>↓ &nbsp; Explore the experience</button><small>No account. No subscription.</small></div>
+      {/* One frame, three things it can hold. The tabs change the picture and the
+          line under it, and nothing else on the page moves. */}
+      <section className="lp-showcase" aria-label="Excerpt in use">
+        <div className="lp-tabs" role="tablist" aria-label="What to show">
+          {SHOTS.map((s, i) => (
+            <button key={s.id} role="tab" id={`tab-${s.id}`} aria-selected={i === shot}
+              aria-controls="lp-frame" className={i === shot ? 'is-on' : undefined}
+              onClick={() => setShot(i)}>{s.tab}</button>
+          ))}
+        </div>
+
+        <div className="lp-glow" aria-hidden />
+        <figure className="lp-frame" id="lp-frame" role="tabpanel" aria-labelledby={`tab-${active.id}`}>
+          <div className="lp-frame-bar">
+            <span className="lp-frame-mark"><Wordmark markOnly /></span>
+            <span className="lp-label">{active.chrome}</span>
+            <span className="lp-frame-clock">0:41</span>
+          </div>
+          <div className="lp-frame-media">
+            {active.video
+              ? <ProductFilm />
+              : <img key={active.src} src={active.src} alt={active.alt}
+                  width={1648} height={active.height} decoding="async" />}
+            <span className="lp-brackets" aria-hidden><i /><i /><i /><i /></span>
+          </div>
+          <figcaption>{active.caption}</figcaption>
+        </figure>
+      </section>
+
+      <section className="lp-section cs-reveal" id="how-it-works">
+        <div className="lp-head">
+          <span className="lp-label lp-label-ember">[ How it works ]</span>
+          <h2>A review you can <em>open again.</em></h2>
+          <p>Three steps, and the third one is the point: a week later the decision still has the report it was made about sitting next to it.</p>
+        </div>
+        <div className="lp-cards lp-cards-3">
+          {STEPS.map(([n, title, body, meta]) => (
+            <article className="lp-card" key={n}>
+              <span className="lp-step">{n}</span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+              <span className="lp-label lp-card-meta">{meta}</span>
+            </article>
+          ))}
+        </div>
+        <p className="lp-note">
+          A captured report is kept as a picture and the conversation as a transcript. Excerpt does not
+          read the numbers off a report, verify a metric, import spreadsheets or PDFs, or connect to an
+          ad platform.
+        </p>
+      </section>
+
+      <section className="lp-section lp-split cs-reveal" id="what-it-keeps">
+        <div className="lp-split-copy">
+          <span className="lp-label lp-label-ember">[ After the review ]</span>
+          <h2>Notes you can <em>check.</em></h2>
+          <p>
+            Decisions, action items and deadlines come out of what was actually said. Each one links to
+            the passage in your transcript it came from, so you can read the sentence rather than trust
+            a summary.
+          </p>
+          <p>
+            A suggestion is not an approval, and a request from the other side of the call is not your
+            task: anything Excerpt cannot attribute is left for you to assign.
+          </p>
+          <div className="lp-split-actions">
+            <button className="lp-outline" onClick={onStart}>See it in the demo <span aria-hidden>↗</span></button>
+            <a className="lp-text" href={SOURCE} target="_blank" rel="noreferrer">Use Excerpt <span aria-hidden>↗</span></a>
+          </div>
+        </div>
+        <figure className="lp-split-shot">
+          <img src="/media/notes.png" alt={NOTES_ALT} loading="lazy" width={1648} height={2682} />
+        </figure>
+      </section>
+
+      <div className="lp-chips cs-reveal">
+        {KEPT.map(([label, line]) => (
+          <div className="lp-chip" key={label}><strong>{label}</strong><span>{line}</span></div>
+        ))}
+      </div>
+
+      <section className="lp-section lp-centred cs-reveal">
+        <div className="lp-head">
+          <span className="lp-label lp-label-ember">[ Why Excerpt ]</span>
+          <h2>Built to be <em>wrong cheaply.</em></h2>
+          <p>Confident output you cannot verify is the thing this replaces. Every rule below exists so a note you did not write is worth less trust than one you did, and is easy to fix.</p>
+        </div>
+        <div className="lp-cards lp-cards-3">
+          {WHY.map(([title, body]) => (
+            <article className="lp-card lp-card-quiet" key={title}><h3>{title}</h3><p>{body}</p></article>
+          ))}
         </div>
       </section>
-      <div className="ed-film-caption"><span>LIVE SUBTITLES · TRANSCRIPTS · MEETING NOTES</span><span>01 / EXCERPT</span></div>
 
-      <section className="ed-intro" id="the-experience">
-        <span className="ed-label">[ MEETING NOTES, SIMPLIFIED ]</span>
-        <div><h2>Your meeting.<br /><em>Already in notes.</em></h2><div className="ed-intro-bottom"><p>Excerpt is a free, open-source alternative to Granola and Tactiq. It transcribes your meetings and extracts decisions, action items, deadlines, and open questions.</p><button className="ed-link" onClick={() => jump('how-it-works')}>How it works <span>↓</span></button></div></div>
+      <section className="lp-section lp-centred cs-reveal" aria-labelledby="subs-title">
+        <div className="lp-head">
+          <span className="lp-label lp-label-ember">[ During the review ]</span>
+          <h2 id="subs-title">And while it happens, <em>subtitles.</em></h2>
+          <p>Two lines maximum, broken on phrase boundaries rather than width, fading rather than sliding, with the film dash convention when two people overlap. The Mac app draws them over the meeting.</p>
+        </div>
+        <div className="lp-film-wrap">
+          <div className="lp-glow" aria-hidden />
+          <div className="lp-film">
+            <ProductFilm />
+            <span className="lp-brackets" aria-hidden><i /><i /><i /><i /></span>
+          </div>
+          <div className="lp-film-credit">
+            <span className="lp-label">Real product footage · Excerpt in session</span>
+            <button className="lp-text" onClick={onStart}>Try the demo <span aria-hidden>↗</span></button>
+          </div>
+        </div>
       </section>
 
-      <section className="ed-product" aria-labelledby="product-title">
-        <div className="ed-section-line"><span className="ed-label">[ DURING YOUR MEETING ]</span><span className="ed-label">01 — LIVE SUBTITLES</span></div>
-        <div className="ed-section-heading"><h2 id="product-title">Live subtitles.<br /><em>A cinematic touch.</em></h2><p>Follow your meeting with film-style subtitles.<br />Two lines at a time, updated as people speak.</p></div>
-        <ProductFilm />
-        <div className="ed-film-caption"><span>REAL PRODUCT FOOTAGE · EXCERPT IN SESSION</span><a href={SOURCE} target="_blank" rel="noreferrer">Explore the source ↗</a></div>
+      <section className="lp-section lp-centred cs-reveal">
+        <div className="lp-head">
+          <span className="lp-label lp-label-ember">[ What Excerpt does not claim ]</span>
+          <h2>The limits, <em>up front.</em></h2>
+          <p>Stated here rather than discovered later, because a tool whose whole argument is “check it yourself” has to say what cannot be checked.</p>
+        </div>
+        <div className="lp-cards lp-cards-4">
+          {NOT_CLAIMED.map(([title, body]) => (
+            <article className="lp-card lp-card-outline" key={title}><h3>{title}</h3><p>{body}</p></article>
+          ))}
+        </div>
       </section>
 
-      <section className="ed-notes">
-        <div className="ed-notes-copy"><span className="ed-label">[ AFTER YOUR MEETING ]</span><h2>Meeting notes<br /><em>you can check.</em></h2><p>Review decisions, action items, and deadlines. Each note links to the passage in your transcript it came from.</p><p>Check what was said, edit any note, and export to Markdown.</p><a className="ed-link" href={SOURCE} target="_blank" rel="noreferrer">See how the notes work <span>↗</span></a></div>
-        <figure><img src="/media/notes.png" alt="Excerpt's notes workspace: a meeting's decisions, each with the passage it came from" loading="lazy" /><figcaption>02 — NOTES LINKED TO YOUR TRANSCRIPT</figcaption></figure>
+      <section className="lp-paper cs-reveal">
+        <span className="lp-label lp-label-ink">[ Free and open source ]</span>
+        <h2>Your review.<br /><em>Your device.</em></h2>
+        <div className="lp-cards lp-cards-3">
+          <article className="lp-card lp-card-paper">
+            <h3>Free to use.</h3>
+            <p>No account and no subscription. Notes and captured screens stay in the Mac app’s own folder, ready to export.</p>
+          </article>
+          <article className="lp-card lp-card-paper">
+            <h3>Transcription stays local.</h3>
+            <p>Speech is transcribed on your machine. If an on-device model is unavailable, cloud transcription is offered only after you agree to it — never silently.</p>
+          </article>
+          <article className="lp-card lp-card-paper">
+            <h3>Rewriting is optional.</h3>
+            <p>The Mac app can tidy the wording with Apple Intelligence on your Mac, or with your own OpenAI key — which sends transcript text to OpenAI and is billed to you. It never produces items.</p>
+          </article>
+        </div>
+        <div className="lp-trust">
+          <div><span className="lp-label lp-label-ink">MIT licensed</span><p>Every line on GitHub. Fork it, audit it, or build the Mac app yourself.</p></div>
+          <div><span className="lp-label lp-label-ink">On-device speech</span><p>Apple’s speech frameworks transcribe locally in the Mac app.</p></div>
+          <div><span className="lp-label lp-label-ink">No lock-in</span><p>Notes export as Markdown, or as one self-contained HTML page with the screens in it.</p></div>
+          <div><span className="lp-label lp-label-ink">No account</span><p>There is nothing to sign up for, and nothing to cancel.</p></div>
+        </div>
+        <p className="lp-paper-note">Read the code or build Excerpt yourself. <a href={SOURCE} target="_blank" rel="noreferrer">Explore the source ↗</a></p>
       </section>
 
-      <section className="ed-how" id="how-it-works"><div className="ed-section-line"><span className="ed-label">[ HOW IT WORKS ]</span><span className="ed-label">THREE SIMPLE STEPS</span></div><h2>Meeting notes in <em>three steps.</em></h2><div className="ed-steps">{STEPS.map(([n, title, body, meta]) => <article key={n}><span className="ed-step-number">{n}</span><h3>{title}</h3><p>{body}</p><span className="ed-label">{meta}</span></article>)}</div><div className="ed-how-footer"><span>Excerpt is a native Mac app built for local capture, captions, and meeting storage.</span><a className="ed-button" href={SOURCE} target="_blank" rel="noreferrer">View the Mac app <span>↗</span></a></div></section>
+      <section className="lp-section lp-centred cs-reveal" id="surfaces">
+        <div className="lp-head">
+          <span className="lp-label lp-label-ember">[ How it runs ]</span>
+          <h2>Capture, captions, notes — <em>one Mac app.</em></h2>
+          <p>Excerpt hears the meeting through native macOS capture, draws subtitles over it, and keeps the transcript, captured screens and editable notes together locally.</p>
+        </div>
+        <div className="lp-cards lp-cards-3">
+          {SURFACES.map(([title, body, req, cta, href]) => (
+            <article className="lp-card lp-surface" key={title}>
+              <h3>{title}</h3>
+              <p>{body}</p>
+              <span className="lp-label lp-card-meta">{req}</span>
+              {cta && href
+                ? <a className="lp-outline lp-full" href={href} {...(href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>{cta}</a>
+                : <button className="lp-outline lp-full" onClick={onStart}>Watch the demo ↗</button>}
+            </article>
+          ))}
+        </div>
+      </section>
 
-      <section className="ed-manifesto"><span className="ed-label">[ FREE AND OPEN SOURCE ]</span><h2>Beautiful meeting notes.<br /><em>No subscription.</em></h2><div className="ed-principles"><article><h3>Free to use.</h3><p>No account or subscription. Your meetings stay on your Mac, ready to export.</p></article><article><h3>Private by default.</h3><p>Speech and meeting files stay local. Optional AI enhancement is your choice.</p></article><article><h3>Open source.</h3><p>Read the code, build Excerpt yourself, or contribute on GitHub.</p><a href={SOURCE} target="_blank" rel="noreferrer">Explore the source ↗</a></article></div></section>
+      <section className="lp-final cs-reveal">
+        <span className="lp-label lp-label-ember">For your next campaign review</span>
+        <h2>Keep the work, the numbers,<br /><em>and the conversation.</em></h2>
+        <div className="lp-cta lp-cta-centred">
+          <a className="lp-solid lp-lg" href={SOURCE} target="_blank" rel="noreferrer">Use Excerpt free <span aria-hidden>↗</span></a>
+          <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the demo</button>
+        </div>
+        <p className="lp-fineprint">No account. No credit card. No subscription.</p>
+      </section>
 
-      <footer className="ed-footer"><div className="ed-footer-top"><span className="ed-label">TRY EXCERPT FOR YOUR NEXT MEETING.</span><a href={SOURCE} target="_blank" rel="noreferrer">Meeting notes.<br /><em>Start for free.</em> <span>↗</span></a><div><a className="ed-button" href={SOURCE} target="_blank" rel="noreferrer">View Excerpt on GitHub <span>↗</span></a><p>No account. No credit card. No subscription.</p></div></div><div className="ed-footer-bottom"><span>© {new Date().getFullYear()} Excerpt</span><a href={SOURCE} target="_blank" rel="noreferrer">GitHub ↗</a><span>Native Mac app.</span><span>Free and open source.</span></div></footer>
+      <footer className="lp-footer">
+        <div className="lp-footer-cols">
+          <div className="lp-footer-brand">
+            <a href="#/" aria-label="Excerpt home"><Wordmark /></a>
+            <p>Meeting memory for creative and media agencies. Free, open source, and stored on your own device.</p>
+          </div>
+          <div>
+            <span className="lp-label">Product</span>
+            <a href={SOURCE} target="_blank" rel="noreferrer">Get started ↗</a>
+            <a href={`${SOURCE}#readme`} target="_blank" rel="noreferrer">Documentation ↗</a>
+            <button className="lp-text" onClick={onStart}>The demo</button>
+          </div>
+          <div>
+            <span className="lp-label">The page</span>
+            <button className="lp-text" onClick={() => jump('how-it-works')}>How it works</button>
+            <button className="lp-text" onClick={() => jump('what-it-keeps')}>What it keeps</button>
+            <button className="lp-text" onClick={() => jump('surfaces')}>How it runs</button>
+          </div>
+          <div>
+            <span className="lp-label">Source</span>
+            <a href={SOURCE} target="_blank" rel="noreferrer">GitHub ↗</a>
+            <a href={`${SOURCE}/blob/main/LICENSE`} target="_blank" rel="noreferrer">MIT licence ↗</a>
+            <a href={`${SOURCE}#readme`} target="_blank" rel="noreferrer">Read the docs ↗</a>
+          </div>
+        </div>
+        <div className="lp-wordmark" aria-hidden>excerpt<span>✳</span></div>
+        <div className="lp-footer-base">
+          <span>© {new Date().getFullYear()} Excerpt · MIT</span>
+          <span>Built for The Build Games.</span>
+          <span>Free and open source.</span>
+        </div>
+      </footer>
     </div>
   );
+}
+
+/* Sections arrive rather than appear. Reduced motion gets them already arrived —
+   the class is added immediately, so nothing depends on an observer that will
+   never fire. */
+function useReveal() {
+  useEffect(() => {
+    const nodes = Array.from(document.querySelectorAll('.cs-reveal'));
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      nodes.forEach((n) => n.classList.add('is-in'));
+      return;
+    }
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); }
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.06 });
+    nodes.forEach((n) => io.observe(n));
+    return () => io.disconnect();
+  }, []);
 }
 
 function ProductFilm() {
@@ -71,5 +420,19 @@ function ProductFilm() {
     sync(); query.addEventListener('change', sync);
     return () => query.removeEventListener('change', sync);
   }, []);
-  return <div className="ed-product-film"><video ref={video} poster="/media/meeting-poster.jpg" muted loop playsInline preload="metadata" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} aria-label="Excerpt demonstration with live meeting subtitles"><source src="/media/meeting.webm" type="video/webm" /><source src="/media/meeting.mp4" type="video/mp4" /></video><button className="ed-video-toggle" onClick={() => { if (playing) video.current?.pause(); else void video.current?.play().catch(() => {}); }} aria-label={playing ? 'Pause product video' : 'Play product video'}>{playing ? 'Ⅱ Pause' : '▷ Play'}</button></div>;
+  return (
+    <div className="lp-video">
+      <video ref={video} poster="/media/meeting-poster.jpg" muted loop playsInline preload="metadata"
+        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+        aria-label="Excerpt demonstration with live meeting subtitles">
+        <source src="/media/meeting.webm" type="video/webm" />
+        <source src="/media/meeting.mp4" type="video/mp4" />
+      </video>
+      <button className="lp-video-toggle"
+        onClick={() => { if (playing) video.current?.pause(); else void video.current?.play().catch(() => {}); }}
+        aria-label={playing ? 'Pause product video' : 'Play product video'}>
+        {playing ? 'Ⅱ Pause' : '▷ Play'}
+      </button>
+    </div>
+  );
 }
