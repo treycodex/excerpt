@@ -52,7 +52,7 @@ export function App() {
   const openLiveNotes = async () => { await host.openLiveNotes(); };
   let body;
   if (route.name === 'library') {
-    body = <Library onOpen={(id) => go(`/m/${id}`)} onStart={start} onOpenLiveNotes={openLiveNotes} />;
+    body = <Library onOpen={(id) => { setMeeting(null); go(`/m/${id}`); }} onStart={start} onOpenLiveNotes={openLiveNotes} />;
   } else if (route.name === 'preferences') {
     body = <NotesWorkspace><Preferences /></NotesWorkspace>;
   } else if (unavailable) {
@@ -62,7 +62,8 @@ export function App() {
   } else if (!meeting || meeting.id !== route.id) {
     body = <div className="notes"><p className="rubric">Reading…</p></div>;
   } else {
-    body = <Notes key={meeting.id} meeting={prefs ? { ...meeting, items: applyPreferences(meeting.items, prefs) } : meeting} prefs={prefs} />;
+    body = <Notes key={meeting.id} meeting={prefs ? { ...meeting, items: applyPreferences(meeting.items, prefs) } : meeting}
+      prefs={prefs} onSaved={(saved) => setMeeting((current) => current?.id === saved.id ? saved : current)} />;
   }
   return <><button className="skip-link" onClick={() => document.querySelector<HTMLElement>('#main')?.focus()}>Skip to content</button><main id="main" tabIndex={-1}>{body}</main></>;
 }

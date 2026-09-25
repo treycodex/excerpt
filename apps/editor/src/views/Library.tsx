@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { readMeetingLibrary, deleteMeeting, loadMeeting, saveMeeting } from '@excerpt/core';
+import { readMeetingLibrary, deleteMeeting, renameMeeting } from '@excerpt/core';
 import { NotesWorkspace } from './NotesWorkspace';
 import type { MeetingLibraryEntry } from '@excerpt/types';
 
@@ -64,10 +64,8 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
             {renaming === m.id ? (
               <form className="rename" onSubmit={(e) => {
                 e.preventDefault();
-                void loadMeeting(m.id).then((current) => {
-                  if (!current) throw new Error('This meeting is no longer saved on this Mac.');
-                  return saveMeeting({ ...current, title: title.trim() || m.title });
-                }).then(() => { setRenaming(null); setCommandError(''); refresh(); })
+                void renameMeeting(m.id, title.trim() || m.title)
+                  .then(() => { setRenaming(null); setCommandError(''); refresh(); })
                   .catch((error) => setCommandError(error instanceof Error ? error.message : 'Could not rename this meeting. Your title is still here.'));
               }}>
                 <input aria-label="Meeting title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus

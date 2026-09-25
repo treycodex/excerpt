@@ -14,7 +14,7 @@ final class NotesBridge: NSObject {
     /// Names the JavaScript side calls. Matching an unknown one is an error the
     /// webview should see, not a silent undefined.
     private enum Method: String {
-        case startMeeting, openLiveNotes, getLiveMeetingTime, retryAutomaticNotes, listMeetings, searchMeetings, loadMeeting, mutateMeeting, deleteMeeting
+        case startMeeting, openLiveNotes, getLiveMeetingTime, retryAutomaticNotes, listMeetings, searchMeetings, loadMeeting, mutateMeeting, renameMeeting, deleteMeeting
         case loadPreferences, savePreferences, exportMarkdown, exportHTML, summarizeNotes
         case getNotesProviderStatus, configureOpenAIKey, removeOpenAIKey
         case loadDesktopSettings, saveCaptionSettings, selectMicrophone
@@ -48,6 +48,7 @@ final class NotesBridge: NSObject {
     private let selectMicrophoneAction: (String) throws -> Void
     private let exporter: any NotesExporting
     private let log = Logger(subsystem: "com.excerpt.app", category: "bridge")
+    private var suppressEditorEcho = false
     var onMeetingChange: ((String) -> Void)?
 
     init(store: MeetingStore, preferences: PreferencesStore,
@@ -85,6 +86,7 @@ final class NotesBridge: NSObject {
     }
 
     func publish(_ meeting: Meeting) {
+        guard !suppressEditorEcho else { return }
         guard let encoded = try? json(meeting) else { return }
         onMeetingChange?(encoded)
     }
@@ -120,6 +122,7 @@ final class NotesBridge: NSObject {
         selectMicrophone: (deviceId)  => send('selectMicrophone', [deviceId]),
         listMeetings:    ()          => send('listMeetings', []),
         searchMeetings:  (query)     => send('searchMeetings', [query]),
+        renameMeeting:  (id, title) => send('renameMeeting', [id, title]),
         loadMeeting:     (id)        => send('loadMeeting', [id]),
         mutateMeeting:   (mutation)  => send('mutateMeeting', [JSON.stringify(mutation)]),
         deleteMeeting:   (id)        => send('deleteMeeting', [id]),
@@ -247,23 +250,48 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
             try OpenAIKeyStore.remove()
             return nil
         case .listMeetings:
-            return try json(orderedMeetings().map(MeetingLibraryEntry.init))
+            return try json(orderedLibraryRecords().map(\.entry))
 
         case .searchMeetings:
             guard let query = arguments.first as? String else { throw Failure.badArguments("searchMeetings") }
-            return try json(MeetingLibrarySearch.search(orderedMeetings(), query: query))
+            return try json(MeetingLibrarySearch.searchRecords(orderedLibraryRecords(), query: query))
 
         case .loadMeeting:
             guard let id = arguments.first as? String else { throw Failure.badArguments("loadMeeting") }
             if let active = activeMeeting(id) { return try json(active) }
-            return (try? store.load(id: id)).flatMap { try? json($0) }
+            guard store.contains(id: id) else { return nil }
+            return try json(store.load(id: id))
 
         case .mutateMeeting:
             guard let body = arguments.first as? String,
                   let mutation = try? decode(MeetingMutation.self, from: body) else {
                 throw Failure.badArguments("mutateMeeting")
             }
-            return try json(applyMutation(mutation))
+            var acknowledgment = try applyMutation(mutation, publishChange: false)
+            if acknowledgment.status == .applied, let images = acknowledgment.meeting.images,
+               !images.isEmpty {
+                acknowledgment.imageDataOmitted = true
+                acknowledgment.meeting.images = images.map { image in
+                    var compact = image
+                    compact.dataUrl = ""
+                    return compact
+                }
+            }
+            return try json(acknowledgment)
+
+        case .renameMeeting:
+            guard arguments.count == 2, let id = arguments[0] as? String,
+                  let title = arguments[1] as? String else {
+                throw Failure.badArguments("renameMeeting")
+            }
+            let current = try activeMeeting(id) ?? store.load(id: id)
+            let mutation = MeetingMutation(operationId: UUID().uuidString, meetingId: id,
+                baseRevision: current.revision ?? current.draftRevision ?? 0,
+                baseDocumentRevision: current.documentRevision ?? current.draftRevision ?? 0,
+                baseSourceRevision: current.sourceRevision ?? 0,
+                changes: [.setTitle(title: title)])
+            let acknowledged = try applyMutation(mutation, publishChange: false)
+            return try json(MeetingLibraryEntry(acknowledged.meeting))
 
         case .deleteMeeting:
             guard let id = arguments.first as? String else { throw Failure.badArguments("deleteMeeting") }
@@ -294,21 +322,24 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
         }
     }
 
-    private func orderedMeetings() -> [Meeting] {
-        var meetings = store.list()
+    private func orderedLibraryRecords() -> [MeetingLibraryRecord] {
+        var meetings = store.libraryRecords()
         if let active = activeMeeting(nil) {
-            meetings.removeAll { $0.id == active.id }
-            meetings.insert(active, at: 0)
+            meetings.removeAll { $0.entry.id == active.id }
+            meetings.insert(MeetingLibraryRecord(active), at: 0)
         }
         return meetings
     }
 
     @discardableResult
-    func applyMutation(_ mutation: MeetingMutation) throws -> MeetingMutationAcknowledgment {
+    func applyMutation(_ mutation: MeetingMutation, publishChange: Bool = true) throws -> MeetingMutationAcknowledgment {
+        let priorSuppression = suppressEditorEcho
+        if !publishChange { suppressEditorEcho = true }
+        defer { suppressEditorEcho = priorSuppression }
         let acknowledgment: MeetingMutationAcknowledgment
         if let live = try mutateLiveMeeting(mutation) { acknowledgment = live }
         else { acknowledgment = try store.apply(mutation) }
-        if acknowledgment.status != .conflict { publish(acknowledgment.meeting) }
+        if publishChange && acknowledgment.status != .conflict { publish(acknowledgment.meeting) }
         return acknowledgment
     }
 

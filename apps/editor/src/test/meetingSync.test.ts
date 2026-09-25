@@ -57,6 +57,43 @@ describe('native editor revision synchronization', () => {
     expect(acceptsAcknowledgment(acknowledgment, newest)).toBe(false);
   });
 
+  it('rehydrates compact native acknowledgments from known images', async () => {
+    const image = { id: 'known', dataUrl: 'data:image/png;base64,c3ludGhldGlj',
+      capturedAt: '2026-09-22T01:10:00Z', at: 1_000, caption: 'Old caption' };
+    const original: Meeting = { ...base, images: [image] };
+    const host = createFakeNativeHost({ meetings: [original] });
+    const native = host.mutateMeeting.bind(host);
+    host.mutateMeeting = async (mutation) => {
+      const acknowledged = await native(mutation);
+      return { ...acknowledged, imageDataOmitted: true, meeting: { ...acknowledged.meeting,
+        images: (acknowledged.meeting.images ?? []).map((value) => ({ ...value, dataUrl: '' })) } };
+    };
+    restore = installFakeNativeHost(host);
+    const next = { ...original, title: 'Renamed' };
+    const mutation = meetingMutation(original, next)!;
+    const hydrated = await mutateMeeting(mutation, original.images);
+    expect(hydrated.meeting.images?.[0]?.dataUrl).toBe(image.dataUrl);
+    expect(hydrated.meeting.title).toBe('Renamed');
+    expect(host.calls).not.toContain(`loadMeeting:${base.id}`);
+  });
+
+  it('reloads instead of accepting an empty image when a compact reply has an unknown capture', async () => {
+    const image = { id: 'unknown', dataUrl: 'data:image/png;base64,c3ludGhldGlj',
+      capturedAt: '2026-09-22T01:10:00Z', at: 1_000, caption: 'Native capture' };
+    const original: Meeting = { ...base, images: [image] };
+    const host = createFakeNativeHost({ meetings: [original] });
+    const native = host.mutateMeeting.bind(host);
+    host.mutateMeeting = async (mutation) => {
+      const acknowledged = await native(mutation);
+      return { ...acknowledged, imageDataOmitted: true, meeting: { ...acknowledged.meeting,
+        images: (acknowledged.meeting.images ?? []).map((value) => ({ ...value, dataUrl: '' })) } };
+    };
+    restore = installFakeNativeHost(host);
+    const result = await mutateMeeting(meetingMutation(original, { ...original, title: 'Renamed' })!);
+    expect(result.meeting.images?.[0]?.dataUrl).toBe(image.dataUrl);
+    expect(host.calls).toContain(`loadMeeting:${base.id}`);
+  });
+
   it('uses typed bridge operations for corrections review images captions and deleted blocks', async () => {
     const host = createFakeNativeHost({ meetings: [base] });
     restore = installFakeNativeHost(host);
@@ -87,6 +124,22 @@ describe('native editor revision synchronization', () => {
     expect(acknowledgment.meeting.items[0]?.confirmed).toBe(true);
     expect(acknowledgment.meeting.images?.[0]?.dataUrl).toBe(image.dataUrl);
     expect(acknowledgment.meeting.notes?.deletedBlocks?.[0]?.id).toBe('removed');
+  });
+
+  it('corrects transcript text without retransmitting an unchanged screenshot', async () => {
+    const image = { id: 'existing', dataUrl: 'data:image/png;base64,c3ludGhldGlj',
+      capturedAt: '2026-09-22T01:10:00Z', at: 600_000, caption: 'Screen' };
+    const original: Meeting = { ...base, images: [image] };
+    const corrected: Meeting = { ...original, sourceRevision: 1,
+      events: [{ id: 'speech', sessionId: base.id, role: 'remote', speakerLabel: 'SPEAKER',
+        text: 'Corrected words', isFinal: true, tArrived: 1000 }] };
+    const mutation = meetingMutation(original, corrected)!;
+    expect(mutation.changes[0]?.type).toBe('correctTranscript');
+    expect(JSON.stringify(mutation)).not.toContain(image.dataUrl);
+    const host = createFakeNativeHost({ meetings: [original] });
+    restore = installFakeNativeHost(host);
+    const reply = await mutateMeeting(mutation);
+    expect(reply.meeting.images?.[0]?.dataUrl).toBe(image.dataUrl);
   });
 
   it('saves image placement and caption alongside image bytes', async () => {

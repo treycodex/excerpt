@@ -27,10 +27,15 @@ export function meetingMutation(before: Meeting | undefined, after: Meeting): Me
   const sourceChanged = !equal(before.events, after.events)
     || sourceRevision(before) !== sourceRevision(after);
   if (sourceChanged) {
+    const previousImages = new Map((before.images ?? []).map((image) => [image.id, image]));
     changes.push({
       type: 'correctTranscript', events: after.events, items: after.items,
       document: after.notes ?? null, suggestedNotes: after.suggestedNotes ?? null,
-      images: after.images ?? [], sourceRevision: sourceRevision(after),
+      // Native already holds unchanged raster bytes. Keep corrected caption,
+      // placement, and context metadata without serializing every screenshot.
+      images: (after.images ?? []).map((image) => previousImages.get(image.id)?.dataUrl === image.dataUrl
+        ? { ...image, dataUrl: '' } : image),
+      sourceRevision: sourceRevision(after),
     });
   } else {
     const beforeImages = new Map((before.images ?? []).map((image) => [image.id, image]));

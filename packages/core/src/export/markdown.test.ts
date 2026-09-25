@@ -54,4 +54,24 @@ describe('Markdown export', () => {
     expect(toMarkdown(meeting)).toContain('Time unknown · Screenshot');
     expect(toHTML(meeting)).toContain('Time unknown · Slide');
   });
+
+  it('keeps every captured image and edited caption in one offline HTML file', () => {
+    const png = 'data:image/png;base64,aGVsbG8=';
+    const images = Array.from({ length: 30 }, (_, index) => ({
+      id: `shot-${index}`, at: index * 180_000, capturedAt: '2026-09-10T00:00:00Z',
+      caption: `Edited <caption> ${index}`, dataUrl: png,
+    }));
+    const meeting: Meeting = {
+      id: 'heavy', title: 'Image-heavy meeting', startedAt: '2026-09-10T00:00:00Z',
+      processing: 'on-device', events: [], items: [], images,
+      notes: { version: 1, method: 'extractive', keyPoints: [], topics: [], blocks:
+        images.map((image) => ({ id: `block-${image.id}`, kind: 'image', text: image.caption,
+          imageId: image.id, evidence: [], at: image.at })) },
+    };
+    const html = toHTML(meeting);
+    expect((html.match(/<img src="data:image\/png;base64,/g) ?? [])).toHaveLength(30);
+    expect(html).toContain('Edited &lt;caption&gt; 29');
+    expect(html).not.toContain('excerpt-asset:v1:');
+    expect(html).toContain("img-src data:");
+  });
 });

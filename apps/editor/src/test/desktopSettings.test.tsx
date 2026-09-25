@@ -133,7 +133,7 @@ describe('library native actions', () => {
     host.meetings.set('rename-fixture', { id: 'rename-fixture', title: 'Original', startedAt: '2026-09-01T09:00:00Z', processing: 'on-device', events: [], items: [] });
     await act(async () => { renderer.unmount(); renderer = create(<Library onOpen={() => {}} onStart={host.startMeeting} onOpenLiveNotes={host.openLiveNotes} />); });
     await act(async () => { renderer.root.findAllByType('button').find((node) => node.children.includes('Rename'))!.props.onClick(); });
-    host.mutateMeeting = async () => { throw new Error('Rename write refused'); };
+    host.renameMeeting = async () => { throw new Error('Rename write refused'); };
     await act(async () => { renderer.root.findByProps({ 'aria-label': 'Meeting title' }).props.onChange({ target: { value: 'New title' } }); });
     await act(async () => { renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }); });
     expect(text()).toContain('Rename write refused');

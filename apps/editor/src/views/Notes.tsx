@@ -88,8 +88,8 @@ const HEADING: Record<Category, string> = {
 const ORDER: Category[] = ['decision', 'action', 'deadline', 'question'];
 type ItemPatch = Omit<Partial<Item>, 'due'> & { due?: string | undefined };
 
-export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
-  { meeting: Meeting; prefs?: Prefs | null; initialSaveFailed?: boolean }) {
+export function Notes({ meeting: initial, prefs, initialSaveFailed = false, onSaved }:
+  { meeting: Meeting; prefs?: Prefs | null; initialSaveFailed?: boolean; onSaved?: (meeting: Meeting) => void }) {
   const [meeting, setMeeting] = useState(initial);
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [focusedEvent, setFocusedEvent] = useState<string | null>(null);
@@ -171,7 +171,7 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
     const send = async (desired: Meeting, base: Meeting, attempts = 0): Promise<Meeting> => {
       const mutation = meetingMutation(base, desired);
       if (!mutation) return base;
-      const acknowledgment = await mutateMeeting(mutation);
+      const acknowledgment = await mutateMeeting(mutation, [...(base.images ?? []), ...(desired.images ?? [])]);
       if (acknowledgment.status === 'conflict') {
         if (attempts >= 2) throw new Error(acknowledgment.message ?? 'The meeting changed while saving.');
         if (version !== saveVersion.current) return acknowledgment.meeting;
@@ -197,6 +197,7 @@ export function Notes({ meeting: initial, prefs, initialSaveFailed = false }:
       if (accepted) {
         latestMeeting.current = authoritative;
         setMeeting(authoritative);
+        onSaved?.(authoritative);
       }
       setSaveState('saved');
     }).catch(() => {
@@ -902,7 +903,7 @@ function MomentViewer({ image, caption, passage, expanded, duration, onCaption, 
 }) {
   const [timeInput, setTimeInput] = useState(image.timeKnown === false ? '' : clock(meetingImageTime(image)));
   const [timeError, setTimeError] = useState('');
-  const origin = image.origin === 'excerpt' ? 'Excerpt capture' : image.origin === 'drop' ? 'Dropped image' : image.origin === 'paste' ? 'Pasted image' : image.origin === 'import' ? 'Imported image' : 'Captured image';
+  const origin = image.origin === 'excerpt' ? 'Excerpt capture' : image.origin === 'system-screenshot' ? 'macOS screenshot' : image.origin === 'drop' ? 'Dropped image' : image.origin === 'paste' ? 'Pasted image' : image.origin === 'import' ? 'Imported image' : 'Captured image';
   return <aside id="selected-moment" className="moment-viewer" ref={panelRef} tabIndex={-1}
     onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onClose(); } }} aria-label={image.timeKnown === false ? 'Captured moment with unknown meeting time' : `Captured moment at ${clock(meetingImageTime(image))}`}>
     <header><div><span>Captured moment</span><strong>{image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image))}</strong></div><button aria-label="Close captured moment" onClick={onClose}>×</button></header>

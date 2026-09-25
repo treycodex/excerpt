@@ -99,11 +99,23 @@ enum MeetingMutationReducer {
                 meeting.items = items
             case .correctTranscript(let events, let items, let document, let suggestedNotes,
                                     let images, let sourceRevision):
+                let existingImages = Dictionary(
+                    (meeting.images ?? []).map { ($0.id, $0) },
+                    uniquingKeysWith: { first, _ in first })
+                let hydratedImages = try images.map { image -> MeetingImage in
+                    guard image.dataUrl.isEmpty else { return image }
+                    guard let prior = existingImages[image.id] else {
+                        throw MeetingMutationFailure.missingImage(image.id)
+                    }
+                    var restored = image
+                    restored.dataUrl = prior.dataUrl
+                    return restored
+                }
                 meeting.events = events
                 meeting.items = items
                 meeting.notes = document
                 meeting.suggestedNotes = suggestedNotes
-                meeting.images = images
+                meeting.images = hydratedImages
                 meeting.sourceRevision = sourceRevision
                 changedDocument = true
                 changedSource = true

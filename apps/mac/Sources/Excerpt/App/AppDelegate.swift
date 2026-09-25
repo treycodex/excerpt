@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let catchUp = CatchUpWindowController()
     private let captureReceipt = CaptureReceiptController()
     private let screenshotCapture = MeetingScreenshotCoordinator()
+    private let screenshotWindowHandoff = MeetingScreenshotWindowHandoff()
+    private let systemScreenshots = SystemScreenshotImporter()
     private let termination = ApplicationTerminationCoordinator()
     private var screenshotItem: NSMenuItem?
     private var catchUpItem: NSMenuItem?
@@ -69,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         do {
-            let store = try MeetingStore()
+            let store = try MeetingStore(root: Self.phase7FixtureRoot())
             let engine = try CoreEngine()
             self.store = store
             self.engine = engine
@@ -90,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             session.onStateChange = { [weak self] in
                 guard let self else { return }
                 self.microphone.selectionLocked = self.session?.state.isActive == true
+                self.syncSystemScreenshots()
                 self.refresh()
                 self.bridge?.publishDesktopSettings()
             }
@@ -118,6 +121,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 },
                 stop: { [weak self, weak session] in
                     self?.screenshotCapture.cancel()
+                    self?.screenshotWindowHandoff.restore()
+                    if self?.systemScreenshots.isWatching == true {
+                        self?.systemScreenshots.scan()
+                        try? await Task.sleep(for: .milliseconds(250))
+                        self?.systemScreenshots.scan()
+                        self?.systemScreenshots.stop()
+                    }
                     self?.catchUp.close()
                     await session?.stop()
                     self?.refresh()
@@ -161,6 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.notes?.navigate(toMeeting: meeting.id)
             }
             screenshotCapture.onChange = { [weak self] in self?.refresh() }
+            systemScreenshots.onAvailabilityChange = { [weak self] in self?.refresh() }
             session.resumePendingEnhancements()
             offerRecovery(store: store)
             shortcuts.registerCore()
@@ -196,6 +207,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let id = CommandLine.arguments.dropFirst(index + 1).first
             notes?.show(meeting: id?.hasPrefix("--") == false ? id : nil)
         }
+        if Bundle.main.bundleIdentifier?.hasPrefix("com.excerpt.phase7fixture.") == true {
+            notes?.show()
+        }
         if CommandLine.arguments.contains("--captions") { overlay.show() }
         if let index = CommandLine.arguments.firstIndex(of: "--diagnose") {
             let arguments = Array(CommandLine.arguments.dropFirst(index + 1))
@@ -207,6 +221,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await runDiagnosis(seconds: seconds, runs: max(1, runs)) }
         }
         refresh()
+    }
+
+    /// A debug-only UI fixture must never fall through to the real meeting store.
+    /// The separate fixture app bundle also gives it its own UserDefaults/TCC identity.
+    private static func phase7FixtureRoot() throws -> URL? {
+        let isFixtureBundle = Bundle.main.bundleIdentifier?.hasPrefix("com.excerpt.phase7fixture.") == true
+        guard isFixtureBundle else { return nil }
+#if DEBUG
+        guard let path = Bundle.main.object(forInfoDictionaryKey: "ExcerptPhase7FixtureRoot") as? String,
+              path.hasPrefix("/private/tmp/excerpt-phase7-ui-"),
+              !path.contains("/../") else {
+            throw MeetingStore.Failure.directoryUnavailable("Invalid Phase 7 fixture root")
+        }
+        let root = URL(fileURLWithPath: path, isDirectory: true).resolvingSymlinksInPath()
+        let marker = try? String(contentsOf: root.appending(path: ".excerpt-phase7-fixture"),
+                                 encoding: .utf8)
+        guard ["/private/tmp", "/tmp"].contains(root.deletingLastPathComponent().path),
+              root.lastPathComponent.hasPrefix("excerpt-phase7-ui-"),
+              marker == "synthetic-only\n" else {
+            throw MeetingStore.Failure.directoryUnavailable("Unmarked Phase 7 fixture root")
+        }
+        return root
+#else
+        throw MeetingStore.Failure.directoryUnavailable("Phase 7 fixture root requires a debug build")
+#endif
     }
 
     // MARK: - Menu bar
@@ -430,6 +469,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let restoreCaptions = overlay.visible
         overlay.hide()
         catchUp.close()
+        // The system region picker captures what is on screen. A visible notes
+        // window would cover the app the person was looking at when they pressed
+        // the global shortcut, so get all of Excerpt's windows out of its way.
+        screenshotWindowHandoff.begin()
         screenshotCapture.start(
             meetingID: id,
             onCapture: { [weak self, weak session] meetingID, capture in
@@ -445,9 +488,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.present(title: "Screenshot wasn't added", body: error.localizedDescription, style: .warning)
             },
             onComplete: { [weak self, weak session] in
+                self?.screenshotWindowHandoff.restore()
                 guard let self, let session, restoreCaptions,
                       session.canCaptureImage, self.overlay.captionsEnabled else { return }
                 self.overlay.show()
+            }
+        )
+    }
+
+    private func syncSystemScreenshots() {
+        guard let session, session.canCaptureImage else {
+            systemScreenshots.stop()
+            return
+        }
+        systemScreenshots.start(
+            meetingID: session.meetingId,
+            onCapture: { [weak self, weak session] meetingID, capture in
+                guard let self, let session else { return }
+                do {
+                    let image = try session.addScreenshot(capture, for: meetingID)
+                    self.captureReceipt.show(image)
+                } catch {
+                    self.present(title: "Screenshot wasn't added", body: error.localizedDescription, style: .warning)
+                }
+            },
+            onFailure: { [weak self] error in
+                self?.present(title: "Screenshot wasn't added", body: error.localizedDescription, style: .warning)
             }
         )
     }
@@ -733,6 +799,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !wantsShortcuts {
             catchUp.close()
             if screenshotCapture.isCapturing { screenshotCapture.cancel() }
+            screenshotWindowHandoff.restore()
         }
         screenshotItem?.isEnabled = session?.canCaptureImage == true && !screenshotCapture.isCapturing
         catchUpItem?.isEnabled = session?.canCaptureImage == true
@@ -741,7 +808,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem?.button?.image = Self.symbol(
             listening ? "captions.bubble.fill" : "captions.bubble", "Excerpt")
-        statusLine?.title = session?.status ?? "Not listening"
+        let screenshotIssue = wantsShortcuts ? systemScreenshots.unavailableReason : nil
+        statusLine?.title = (session?.status ?? "Not listening")
+            + (screenshotIssue == nil ? "" : " · screenshot import unavailable")
+        statusLine?.toolTip = screenshotIssue
         listenItem?.title = listening ? "End meeting" : "Start meeting"
         listenItem?.image = Self.symbol(listening ? "stop.circle" : "record.circle",
                                         listening ? "End meeting" : "Start meeting")
@@ -776,6 +846,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requiresCleanup: requiresCleanup,
             cancelPendingUI: { [weak self] in
                 self?.screenshotCapture.cancel()
+                self?.screenshotWindowHandoff.restore()
                 self?.catchUp.close()
             },
             cleanup: { [weak self] in
@@ -795,6 +866,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         shortcuts.unregister()
         screenshotCapture.cancel()
+        systemScreenshots.stop()
     }
 }
 

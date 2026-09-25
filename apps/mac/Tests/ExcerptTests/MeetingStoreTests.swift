@@ -86,7 +86,7 @@ struct MeetingStoreTests {
             capturedAt: "2026-09-10T15:20:30Z", at: 30000, caption: "Launch plan")
         try store.checkpointImages([image], id: "m-1")
         #expect(store.recoverable() == ["m-1"])
-        #expect(store.recoverImages(id: "m-1") == [image])
+        #expect(try store.recoverImages(id: "m-1") == [image])
         var original = meeting()
         original.images = [image]
         original.events[0].originalText = "Original speech"
@@ -97,8 +97,100 @@ struct MeetingStoreTests {
         try store.save(original)
         store.discardJournal(id: "m-1")
         #expect(store.recoverable().isEmpty)
-        #expect(store.recoverImages(id: "m-1").isEmpty)
+        #expect(try store.recoverImages(id: "m-1").isEmpty)
         #expect(try store.load(id: "m-1") == original.revisioned())
+    }
+
+    @Test func `legacy inline images migrate only on save and reopen byte for byte`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = MeetingImage(id: "shot", dataUrl: "data:image/png;base64,aGVsbG8=",
+            capturedAt: "2026-09-10T15:20:30Z", at: 30_000, caption: "Launch plan")
+        var legacy = meeting()
+        legacy.images = [image]
+        let file = root.appending(path: "meetings/m-1.json")
+        try JSONEncoder.excerpt.encode(legacy).write(to: file, options: .atomic)
+        #expect(try String(contentsOf: file, encoding: .utf8).contains(image.dataUrl))
+        #expect(try store.load(id: legacy.id).images == [image])
+
+        legacy.title = "Renamed without rewriting image bytes"
+        try store.save(legacy)
+        let compact = try String(contentsOf: file, encoding: .utf8)
+        #expect(!compact.contains(image.dataUrl))
+        #expect(compact.contains("excerpt-asset:v1:"))
+        let reopened = try MeetingStore(root: root)
+        #expect(try reopened.load(id: legacy.id) == legacy.revisioned())
+        try reopened.checkpointDraft(legacy)
+        #expect(try MeetingStore(root: root).recoverDraft(id: legacy.id) == legacy.revisioned())
+        try reopened.delete(id: legacy.id)
+        #expect(!FileManager.default.fileExists(atPath: root.appending(path: "meeting-assets/m-1").path()))
+    }
+
+    @Test func `failed metadata write leaves legacy inline image readable`() throws {
+        let root = URL(filePath: NSTemporaryDirectory()).appending(path: "excerpt-asset-fault-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = try MeetingStore(root: root)
+        var legacy = meeting()
+        legacy.images = [MeetingImage(id: "shot", dataUrl: "data:image/png;base64,aGVsbG8=",
+            capturedAt: "2026-09-10T15:20:30Z", at: 30_000, caption: "Original")]
+        let file = root.appending(path: "meetings/m-1.json")
+        try JSONEncoder.excerpt.encode(legacy).write(to: file, options: .atomic)
+        var faults = MeetingStore.Faults()
+        faults.beforeWrite = { _ in throw CocoaError(.fileWriteNoPermission) }
+        let failing = try MeetingStore(root: root, faults: faults)
+        legacy.title = "Unsaved title"
+        #expect(throws: CocoaError.self) { try failing.save(legacy) }
+        #expect(try first.load(id: legacy.id).title == "Meeting · test")
+        #expect(try first.load(id: legacy.id).images == legacy.images)
+        #expect(try String(contentsOf: file, encoding: .utf8).contains(legacy.images![0].dataUrl))
+    }
+
+    @Test func `a missing extracted image fails a cold meeting read instead of disappearing`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var original = meeting()
+        original.images = [MeetingImage(id: "shot", dataUrl: "data:image/png;base64,aGVsbG8=",
+            capturedAt: "2026-09-10T15:20:30Z", at: 30_000, caption: "Original")]
+        try store.save(original)
+        let directory = root.appending(path: "meeting-assets/m-1")
+        let asset = try #require(FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil).first)
+        try FileManager.default.removeItem(at: asset)
+        let reopened = try MeetingStore(root: root)
+        #expect(throws: Error.self) { try reopened.load(id: original.id) }
+    }
+
+    @Test func `unreadable recovery assets keep the journal available for retry`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = MeetingImage(id: "shot", dataUrl: "data:image/png;base64,aGVsbG8=",
+            capturedAt: "2026-09-10T15:20:30Z", at: 30_000, caption: "Original")
+        try store.checkpointImages([image], id: "m-1")
+        var draft = meeting()
+        draft.images = [image]
+        try store.checkpointDraft(draft)
+        let asset = try #require(FileManager.default.contentsOfDirectory(
+            at: root.appending(path: "meeting-assets/m-1"), includingPropertiesForKeys: nil).first)
+        try FileManager.default.removeItem(at: asset)
+        let reopened = try MeetingStore(root: root)
+        #expect(throws: Error.self) { try reopened.recoverImages(id: "m-1") }
+        #expect(throws: Error.self) { try reopened.recoverDraft(id: "m-1") }
+        #expect(reopened.recoverable() == ["m-1"])
+    }
+
+    @Test func `full image cache stays bounded across meetings`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        for index in 0..<5 {
+            var saved = meeting(id: "meeting-\(index)")
+            saved.images = [MeetingImage(id: "shot", dataUrl: "data:image/png;base64,aGVsbG8=",
+                capturedAt: "2026-09-10T15:20:30Z", at: 30_000, caption: "Screen")]
+            try store.save(saved)
+            #expect(store.cachedFullMeetingCount <= 2)
+        }
+        #expect(try store.load(id: "meeting-0").images?.first?.dataUrl == "data:image/png;base64,aGVsbG8=")
+        #expect(store.cachedFullMeetingCount <= 2)
+        #expect(store.cachedLibraryRecordCount <= 128)
     }
 
     @Test func `writing makes a live draft recoverable before speech`() throws {
@@ -115,7 +207,7 @@ struct MeetingStoreTests {
         try store.checkpointDraft(draft)
 
         #expect(store.recoverable() == ["m-writing"])
-        #expect(store.recoverDraft(id: "m-writing") == draft.revisioned())
+        #expect(try store.recoverDraft(id: "m-writing") == draft.revisioned())
         store.discardJournal(id: "m-writing")
         #expect(store.recoverable().isEmpty)
     }

@@ -271,6 +271,23 @@ describe('storage failures never strand the reader', () => {
 });
 
 describe('the lightweight library', () => {
+  it('renames a meeting without loading its image-heavy record into the editor', async () => {
+    const host = createFakeNativeHost({ meetings: [fixture()] });
+    restore = installFakeNativeHost(host);
+    await act(async () => { renderer = create(<Library onOpen={() => {}} onStart={async () => {}} onOpenLiveNotes={async () => {}} />); });
+    await click('Rename “Launch sync”');
+    await act(async () => {
+      renderer.root.findByProps({ 'aria-label': 'Meeting title' }).props.onChange({ target: { value: 'New title' } });
+    });
+    await act(async () => {
+      renderer.root.findByProps({ className: 'rename' }).props.onSubmit({ preventDefault() {} });
+    });
+    expect(host.calls).toContain('renameMeeting:journey');
+    expect(host.calls).not.toContain('loadMeeting:journey');
+    expect(host.meetings.get('journey')?.images?.[0]?.dataUrl).toBe(png);
+    expect(text()).toContain('New title');
+  });
+
   it('searches persisted transcript text through native without listing image bytes', async () => {
     const host = createFakeNativeHost({ meetings: [fixture()] });
     restore = installFakeNativeHost(host);

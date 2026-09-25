@@ -82,6 +82,14 @@ export function createFakeNativeHost(input: { meetings?: Meeting[]; preferences?
         clone({ ...match, meeting: meetingLibraryEntry(meeting) }));
     },
     async loadMeeting(id) { calls.push(`loadMeeting:${id}`); return meetings.has(id) ? clone(meetings.get(id)!) : undefined; },
+    async renameMeeting(id, title) {
+      calls.push(`renameMeeting:${id}`);
+      const current = meetings.get(id);
+      if (!current) throw new Error('Meeting missing');
+      const renamed = { ...current, title, revision: (current.revision ?? current.draftRevision ?? 0) + 1 };
+      meetings.set(id, clone(renamed));
+      return clone(meetingLibraryEntry(renamed));
+    },
     async mutateMeeting(mutation) {
       calls.push(`mutateMeeting:${mutation.meetingId}`);
       const result = applyMutation(meetings.get(mutation.meetingId), mutation);
@@ -120,10 +128,17 @@ function applyMutation(current: Meeting | undefined, mutation: MeetingMutation):
     }
     if (change.type === 'setReviewItems') meeting.items = clone(change.items);
     if (change.type === 'correctTranscript') {
+      const previous = new Map((meeting.images ?? []).map((image) => [image.id, image]));
       meeting.events = clone(change.events); meeting.items = clone(change.items);
       if (change.document) meeting.notes = change.document; else delete meeting.notes;
       if (change.suggestedNotes) meeting.suggestedNotes = change.suggestedNotes; else delete meeting.suggestedNotes;
-      meeting.images = clone(change.images); meeting.sourceRevision = change.sourceRevision; changedDocument = true;
+      meeting.images = clone(change.images.map((image) => {
+        if (image.dataUrl) return image;
+        const prior = previous.get(image.id);
+        if (!prior) throw new Error(`Missing image ${image.id}`);
+        return { ...image, dataUrl: prior.dataUrl };
+      }));
+      meeting.sourceRevision = change.sourceRevision; changedDocument = true;
     }
     if (change.type === 'addImages') {
       const known = new Set((meeting.images ?? []).map((image) => image.id));

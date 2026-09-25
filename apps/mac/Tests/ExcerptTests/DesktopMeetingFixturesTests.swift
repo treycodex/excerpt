@@ -60,7 +60,7 @@ struct DesktopMeetingFixturesTests {
         for fixture in fixtures.meetings {
             if fixture.state == "draft" {
                 try store.checkpointDraft(fixture.meeting)
-                #expect(store.recoverDraft(id: fixture.meeting.id) == fixture.meeting.revisioned())
+                #expect(try store.recoverDraft(id: fixture.meeting.id) == fixture.meeting.revisioned())
             } else {
                 try store.save(fixture.meeting)
                 #expect(try store.load(id: fixture.meeting.id) == fixture.meeting.revisioned())

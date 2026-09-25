@@ -45,6 +45,27 @@ struct MeetingSearchHit: Codable, Sendable, Equatable {
     var eventId: String? = nil
 }
 
+/// Persisted separately from the meeting. Only searchable wording crosses this
+/// boundary; an index can always be rebuilt from the authoritative meeting file.
+struct MeetingLibraryRecord: Codable, Sendable, Equatable {
+    struct EventText: Codable, Sendable, Equatable {
+        var id: String
+        var text: String
+    }
+
+    var entry: MeetingLibraryEntry
+    var notes: [String]
+    var captions: [String]
+    var events: [EventText]
+
+    init(_ meeting: Meeting) {
+        entry = MeetingLibraryEntry(meeting)
+        notes = MeetingLibrarySearch.noteTexts(meeting)
+        captions = (meeting.images ?? []).map(\.caption)
+        events = meeting.events.filter(\.isFinal).map { EventText(id: $0.id, text: $0.text) }
+    }
+}
+
 enum MeetingLibrarySearch {
     private static let context = 42
 
@@ -59,26 +80,29 @@ enum MeetingLibrarySearch {
     /// Search only saved wording and captions. The result crosses the bridge, but
     /// no matching operation transfers screenshots or the whole transcript.
     static func search(_ meetings: [Meeting], query: String) -> [MeetingSearchHit] {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return [] }
-        return meetings.compactMap { bestMatch($0, needle: needle) }
+        searchRecords(meetings.map(MeetingLibraryRecord.init), query: query)
     }
 
-    private static func bestMatch(_ meeting: Meeting, needle: String) -> MeetingSearchHit? {
-        let entry = MeetingLibraryEntry(meeting)
+    static func searchRecords(_ records: [MeetingLibraryRecord], query: String) -> [MeetingSearchHit] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return [] }
+        return records.compactMap { bestMatch($0, needle: needle) }
+    }
+
+    private static func bestMatch(_ record: MeetingLibraryRecord, needle: String) -> MeetingSearchHit? {
         func found(_ text: String, kind: String, eventId: String? = nil) -> MeetingSearchHit? {
             guard let match = snippet(text, needle: needle) else { return nil }
-            return MeetingSearchHit(meeting: entry, kind: kind, snippet: match.text,
+            return MeetingSearchHit(meeting: record.entry, kind: kind, snippet: match.text,
                 offset: match.offset, length: match.length, eventId: eventId)
         }
-        if let hit = found(meeting.title, kind: "title") { return hit }
-        for text in noteTexts(meeting) {
+        if let hit = found(record.entry.title, kind: "title") { return hit }
+        for text in record.notes {
             if let hit = found(text, kind: "note") { return hit }
         }
-        for image in meeting.images ?? [] {
-            if let hit = found(image.caption, kind: "moment") { return hit }
+        for caption in record.captions {
+            if let hit = found(caption, kind: "moment") { return hit }
         }
-        for event in meeting.events where event.isFinal {
+        for event in record.events {
             if let hit = found(event.text, kind: "transcript", eventId: event.id) { return hit }
         }
         return nil

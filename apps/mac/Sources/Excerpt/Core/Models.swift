@@ -250,6 +250,9 @@ struct MeetingMutationAcknowledgment: Codable, Sendable, Equatable {
     var sourceRevision: Int
     var meeting: Meeting
     var message: String? = nil
+    /// Bridge-only optimization. A caller must restore these bytes from images it
+    /// already holds or reload the full meeting before treating this as a snapshot.
+    var imageDataOmitted: Bool? = nil
 }
 
 enum ExportOutcome: String, Codable, Sendable { case saved, cancelled }

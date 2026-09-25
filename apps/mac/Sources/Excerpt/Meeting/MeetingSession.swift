@@ -947,10 +947,17 @@ final class MeetingSession {
     func recover(id: String) -> Meeting? {
         // The same assembly the live path uses, so a recovered meeting reads like one
         // that ended normally rather than like a pile of fragments.
-        let draft = store.recoverDraft(id: id)
+        let draft: Meeting?
+        let sidecarImages: [MeetingImage]
+        do {
+            draft = try store.recoverDraft(id: id)
+            sidecarImages = try store.recoverImages(id: id)
+        } catch {
+            status = "Could not read recovered notes — their recovery files were kept"
+            return nil
+        }
         let journalEvents = store.replayJournal(id: id)
         let recovered = TranscriptAssembly.assemble(journalEvents.isEmpty ? (draft?.events ?? []) : journalEvents)
-        let sidecarImages = store.recoverImages(id: id)
         let recoveredImages = sidecarImages.isEmpty ? (draft?.images ?? []) : sidecarImages
         let recoveredWriting = hasWriting(draft?.notes)
         guard !recovered.isEmpty || !recoveredImages.isEmpty || recoveredWriting else {

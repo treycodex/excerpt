@@ -1,8 +1,9 @@
 # Desktop implementation handoff — Phase 7 in progress
 
-Updated September 23, 2026. Branch: `note-and-transcript-quality`. Phase 6 and its
+Updated September 25, 2026. Branch: `note-and-transcript-quality`. Phase 6 and its
 post-review fixes are pushed in `9115b32`. Phase 7's measured first pass is
-uncommitted on top of that checkpoint. Preserve this work, later local changes,
+committed locally as `892a6c6` (not pushed). The second-pass indexing, asset,
+bridge, regression, and measurement work is uncommitted on top. Preserve this work, later local changes,
 checkpoint history, synthetic fixtures, and unrelated files.
 Do not read or alter production meeting data, signing settings, or permissions.
 
@@ -54,43 +55,86 @@ the migration.
 - **Accessibility:** muted text colours now compute to ≥4.5:1 on both paper
   tones. Save state stays visible at narrow widths. Reduced motion disables
   notebook transitions and smooth scrolling.
-- **Not performed (Phase 8):** the real WKWebView app UI, VoiceOver/Full Keyboard
-  Access, real keyboard text entry in the notes editor, native save panels, and
-  hardware capture. The synthetic check ran in Chromium only.
+- **Still pending (Phase 8):** VoiceOver/Full Keyboard Access and hardware
+  capture. The Phase 6 synthetic layout check ran in Chromium; a later Phase 7
+  fixture run exercised real WKWebView title/note/caption edits and an HTML save
+  panel, but not full accessibility or hardware acceptance.
 - **Next:** Continue Phase 7's measured storage work below. Carry the Phase 6
   real-app UI/accessibility checks above into Phase 8 acceptance.
 
-## Phase 7 first pass and exact next step
+## Phase 7 second pass and exact next step
 
-- An opt-in Swift benchmark uses an isolated temporary store, a synthetic
-  90-minute meeting with 30 valid 2560×1440 PNGs, and 99 additional meetings.
-  On this M2 MacBook Air, the heavy JSON was 29.6 MB and the old full-library
-  bridge response 30.5 MB. The new native library projection returns 19 KB;
-  broad search returns only snippets, 33 KB for 100 matches. See
-  `DESKTOP-PHASE-7-MEASUREMENTS.md` for method, timings, memory, caveats, and
-  the reproducible command.
-- `NotesBridge.listMeetings` now sends only IDs, titles, dates, processing and
-  counts. Native search covers titles, written notes, image captions, and final
-  transcript speech without sending the full library into WKWebView. Editor
-  search is asynchronous, deferred and debounced; failed searches are distinct
-  from zero matches. Renaming a row still loads that one full meeting before
-  saving, so its images remain intact.
-- Document-wording edits retain unchanged image object identities, and typed
-  mutation comparison skips serializing unchanged image data URLs.
-- **Still unresolved:** native listing/search decode full image-heavy JSON on
-  every call (about 43 ms in this fixture), a title edit still rewrites the
-  29.6 MB file, and ordinary mutation acknowledgments still send full meetings.
-  End-to-end typing/caption latency, repeated-search memory, real-app warm
-  library display, and image-heavy capture/export have not been measured.
-  Next, measure those paths and test bounded native indexing/save coalescing
-  before deciding whether versioned image assets are necessary. Never report
-  an edit as saved before its durable write or rewrite the user's library at
-  launch.
+- The first-pass projection/search/debounce and comparison fast path are in
+  `892a6c6`, one local commit ahead of origin. Its full inline meeting was about
+  29.6 MB and the old full-library bridge response about 30.5 MB; the projected
+  library response remains 19 KB.
+- The second pass persists compact validated library/search sidecars and
+  content-addressed versioned image assets. It reads legacy inline data URLs,
+  extracts only when an individual meeting is saved, verifies assets before
+  atomic metadata replacement, and keeps recoverable draft/image checkpoints.
+  Missing assets fail reads and retain recovery journals, not silently omit
+  images. Full meeting and index
+  caches are bounded. No whole-library migration runs at launch.
+- Applied editor mutations now return a compact acknowledgment after durability;
+  known images are rehydrated in the editor, with a full reload fallback for an
+  unknown image. No duplicate editor-origin meeting event is published. Library
+  rename returns only a small row, with no full meeting crossing the bridge.
+- In the isolated benchmark, warm native library response was about 6.7 ms,
+  native search 7.8 ms, and title/caption/note mutations about 8 ms. A title
+  edit atomically replaced 163 KB instead of 29.6 MB. Twenty sequential title
+  mutations averaged 8.0 ms (max 8.7 ms). With 30 distinct valid PNGs, initial
+  extraction took 68.3 ms and the next title edit 5.8 ms. Details, repeated
+  search RSS samples, the command, and limitations are in
+  `DESKTOP-PHASE-7-MEASUREMENTS.md`.
+- **September 25 live fixture smoke:** a separately identified debug app opened
+  the 100-meeting synthetic library in WKWebView, searched an edited caption,
+  edited title/note/caption, showed saved feedback, reopened with all edits, and
+  used the native save panel to write a 28 MB HTML export containing 30 embedded
+  images. The fixture root and app are under `/private/tmp` and remain available;
+  exact paths and limitations are in `DESKTOP-PHASE-7-MEASUREMENTS.md`. The normal
+  Excerpt store, settings, and signing were not touched.
+- **September 25 public-video capture smoke:** after the user enabled Screen &
+  System Audio Recording for the separate fixture app and it was relaunched, a
+  short public YouTube meeting played in Arc. The live transcript populated;
+  quitting finalized a 4m16s meeting with 14 final transcript events, and the
+  saved meeting reopened from the isolated library. On-device note generation
+  subsequently reached `ready`. Three events were marked `you`; microphone
+  attribution was not validated. The floating caption overlay was not
+  independently checked. See the measurement note for evidence and limits.
+- **September 25 full-journey fixture run:** Preferences, live note entry and
+  saved feedback, live image import/caption, normal End shortcut, saved-meeting
+  reopen after cold relaunch, caption search, transcript correction, extracted
+  next-step editing/completion, source passage, and native HTML export rendered
+  from a local `file:` page were exercised. A **blocking persistence defect**
+  remains: one manually entered live paragraph was duplicated at finish with
+  the same block ID in both saved JSON and exported HTML. The microphone warned
+  about speaker playback bleed, so this run is not evidence of transcript
+  quality. Native region capture also failed its UX check: with Arc focused on
+  the local test page, ⌘⇧S brought Excerpt in front of the region selector;
+  the user cancelled rather than capture the wrong window. An earlier picker
+  cancellation correctly added no image. Since that run, the implementation
+  has been changed to hide Excerpt's windows during its own picker and restore
+  prior focus afterward; visual re-verification is still pending. The user also
+  clarified that the desired normal flow is macOS's ⌘⇧4/⌘⇧5 shortcuts, so
+  Excerpt now imports newly saved, screenshot-marked files from the configured
+  screenshot folder while a meeting is live. Clipboard-only captures are not
+  imported. See the
+  measurement note for IDs, evidence, and limits.
+- **Still unresolved:** fix and rerun the live-paragraph duplication case;
+  visually verify both native screenshot routes with a stable fixture identity;
+  keystroke-to-paint, caption presentation, confirmed-save
+  latency, warm library paint, and repeated-meeting memory under GUI load need
+  actual instrumentation. Computer-use call durations are not app timings. A
+  short public-video capture now works, but network-isolated browser rendering and
+  longer capture under hardware load are untested. Next, instrument the
+  running isolated fixture for Phase 7 targets, then address any misses. Phase 8
+  hardware/accessibility/signing remains separate; do not mark Phase 7 complete.
 
 ## Working tree
 
-The Phase 7 projection, bridge, editor search, comparison fast path, regressions,
-measurements, and planning updates are uncommitted on `9115b32`. Generated
+The first pass is local commit `892a6c6` and has not been pushed. Second-pass
+storage, bridge, editor, tests, fixture-launch support, measurements, and planning updates are uncommitted
+on top of it. Generated
 engine/editor resources were rebuilt from this source and remain ignored outputs.
 Check `git status` before continuing; later edits belong to their author.
 
@@ -154,6 +198,19 @@ Check `git status` before continuing; later edits belong to their author.
   Native tests verify the small library/search bridge payload and full-image
   reopen; editor tests verify search, failures, rename preservation, and that
   unchanged data URLs are not serialized for document-only mutation comparison.
+- After the Phase 7 second pass (September 23, 2026): `pnpm exec turbo test
+  --force` passed **217 core + 43 editor**; `pnpm typecheck`, engine/editor
+  resource builds, and full `swift test` passed **186 tests in 27 suites**.
+  The opt-in 30-distinct-PNG measurement passed separately. Caption-token sync,
+  `git diff --check`, and the desktop-boundary audit passed; the latter found
+  only retained explanatory comments and test-host wording.
+- After the September 25 fixture-launch addition: the opt-in Phase 7 metrics
+  test seeded the persistent synthetic-only root and passed; fresh engine/editor
+  resources built; full `swift test` passed **186 tests in 27 suites** (conditional
+  real-speech/model tests skipped); the debug fixture bundle was ad-hoc signed
+  under a separate ID, verified, launched, and exercised in real WKWebView.
+  `git diff --check` passed. These checks do not establish the Phase 7 latency
+  targets or Phase 8 hardware acceptance.
 
 The native lifecycle test ends a synthetic meeting with two images, then checks the
 durable document before optional enhancement finishes. Shared tests cover text-only,
@@ -164,8 +221,10 @@ tests cover later enhancement retaining captures, source correction cancelling
 stale work, and duplicate job coalescing. The editor bridge test checks durable
 image bytes, caption, anchor, and document order.
 
-No real meeting data, browser databases, Keychain entries, permissions, signing
-identity, or external hosting were touched. The app was not launched against user
-storage. Generated resources are ignored outputs and must be rebuilt after source
-changes. The stable signing identity remains unavailable, so signed packaging is
-still a Phase 8 constraint.
+No browser databases, Keychain entries, production Excerpt
+permissions, signing identity, or external hosting were touched. The user enabled
+recording permission for the separate fixture app; the app was not launched
+against user storage. Its public-video captures remain under the marked
+`/private/tmp` fixture root. Generated resources are ignored outputs and must be
+rebuilt after source changes. The stable signing identity remains unavailable,
+so signed packaging is still a Phase 8 constraint.

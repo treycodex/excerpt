@@ -1,5 +1,7 @@
 import AVFoundation
+import AppKit
 import CoreMedia
+import Darwin
 import Foundation
 import Testing
 @testable import Excerpt
@@ -95,6 +97,152 @@ struct Phase2LifecycleTests {
         #expect(saved.suggestedNotes == nil)
         #expect(saved.title.contains("onboarding"))
         await gate.open()
+    }
+
+    @Test func `a chosen native screenshot is added to the live meeting and survives End`() async throws {
+        let directory = root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try MeetingStore(root: directory)
+        let factory = TranscriberFactory()
+        let session = try session(store: store, capture: LifecycleCapture()) { factory.make() }
+        await session.start()
+
+        let id = session.meetingId
+        let screenshots = MeetingScreenshotCoordinator()
+        var captureError: Error?
+        let capturedAt = Date()
+        screenshots.start(
+            meetingID: id,
+            capture: {
+                MeetingScreenshot.Capture(
+                    dataURL: "data:image/png;base64,c3ludGhldGlj",
+                    capturedAt: capturedAt, origin: "excerpt")
+            },
+            onCapture: { meetingID, screenshot in
+                do { try session.addScreenshot(screenshot, for: meetingID) }
+                catch { captureError = error }
+            },
+            onFailure: { captureError = $0 })
+
+        #expect(await waitUntil { !screenshots.isCapturing })
+        #expect(captureError == nil)
+        let liveImage = try #require(session.images.first)
+        #expect(session.images.count == 1)
+        #expect(liveImage.origin == "excerpt")
+        #expect(liveImage.capturedAt == ISO8601DateFormatter().string(from: capturedAt))
+        #expect(liveImage.at >= 0)
+
+        await session.stop()
+        let saved = try store.load(id: id)
+        #expect(saved.images?.map(\.id) == [liveImage.id])
+        #expect(saved.notes?.blocks?.filter { $0.kind == "image" }.count == 1)
+    }
+
+    @Test func `system screenshots import once during a meeting without sweeping other files`() async throws {
+        let directory = root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let screenshotFolder = directory.appending(path: "screenshots", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: screenshotFolder, withIntermediateDirectories: true)
+        let store = try MeetingStore(root: directory.appending(path: "meetings", directoryHint: .isDirectory))
+        let factory = TranscriberFactory()
+        let session = try session(store: store, capture: LifecycleCapture()) { factory.make() }
+
+        func writeImage(_ name: String, marked: Bool) throws -> URL {
+            let bitmap = try #require(NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                isPlanar: false, colorSpaceName: .deviceRGB,
+                bytesPerRow: 0, bitsPerPixel: 0))
+            let data = try #require(bitmap.representation(using: .png, properties: [:]))
+            let url = screenshotFolder.appending(path: name)
+            try data.write(to: url)
+            if marked {
+                let result = url.path.withCString { path in
+                    "com.apple.metadata:kMDItemIsScreenCapture".withCString { key in
+                        "1".withCString { value in setxattr(path, key, value, 1, 0, 0) }
+                    }
+                }
+                #expect(result == 0)
+            }
+            return url
+        }
+
+        _ = try writeImage("before.png", marked: true)
+        await session.start()
+        let id = session.meetingId
+        var importError: Error?
+        let importer = SystemScreenshotImporter(
+            directory: { screenshotFolder }, pollInterval: .seconds(3600))
+        importer.start(meetingID: id, onCapture: { meetingID, capture in
+            do { try session.addScreenshot(capture, for: meetingID) }
+            catch { importError = error }
+        }, onFailure: { importError = $0 })
+
+        _ = try writeImage("unrelated.png", marked: false)
+        _ = try writeImage("Screenshot during meeting.png", marked: true)
+        importer.scan() // Wait until the file size and modification date stabilize.
+        #expect(session.images.isEmpty)
+        importer.scan()
+        importer.scan()
+        #expect(importError == nil)
+        #expect(session.images.count == 1)
+        #expect(session.images.first?.origin == "system-screenshot")
+
+        importer.stop()
+        _ = try writeImage("after-stop.png", marked: true)
+        importer.scan()
+        #expect(session.images.count == 1)
+
+        await session.stop()
+        let saved = try store.load(id: id)
+        #expect(saved.images?.count == 1)
+        #expect(saved.notes?.blocks?.filter { $0.kind == "image" }.count == 1)
+    }
+
+    @Test func `system screenshot importer reports a non-file destination without watching`() {
+        let importer = SystemScreenshotImporter(directory: { nil })
+        importer.start(meetingID: "synthetic", onCapture: { _, _ in }, onFailure: { _ in })
+        #expect(!importer.isWatching)
+        #expect(importer.unavailableReason?.contains("save to a folder") == true)
+        importer.stop()
+        #expect(importer.unavailableReason == nil)
+    }
+
+    @Test func `region picker hides notes then restores without stealing another app's focus`() {
+        var hidden = false
+        var actions: [String] = []
+        let handoff = MeetingScreenshotWindowHandoff(
+            isHidden: { hidden }, isActive: { false },
+            hide: { hidden = true; actions.append("hide") },
+            unhide: { hidden = false; actions.append("activate") },
+            unhideWithoutActivation: { hidden = false; actions.append("restore") })
+
+        handoff.begin()
+        handoff.begin()
+        #expect(hidden)
+        #expect(actions == ["hide"])
+        handoff.restore()
+        handoff.restore()
+        #expect(!hidden)
+        #expect(actions == ["hide", "restore"])
+    }
+
+    @Test func `region picker restores prior Excerpt focus but never reveals an already hidden app`() {
+        var hidden = false
+        var actions: [String] = []
+        let handoff = MeetingScreenshotWindowHandoff(
+            isHidden: { hidden }, isActive: { true },
+            hide: { hidden = true; actions.append("hide") },
+            unhide: { hidden = false; actions.append("activate") },
+            unhideWithoutActivation: { hidden = false; actions.append("restore") })
+
+        handoff.begin()
+        handoff.restore()
+        #expect(actions == ["hide", "activate"])
+        hidden = true
+        handoff.begin()
+        handoff.restore()
+        #expect(actions == ["hide", "activate"])
     }
 
     @Test func `selected input loss interrupts and preserves the partial meeting`() async throws {

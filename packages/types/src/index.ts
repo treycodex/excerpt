@@ -185,7 +185,7 @@ export interface MeetingImage {
   timeKnown?: boolean;
   caption: string;
   /** How the image entered the meeting. Missing means a legacy capture. */
-  origin?: 'excerpt' | 'paste' | 'drop' | 'import';
+  origin?: 'excerpt' | 'system-screenshot' | 'paste' | 'drop' | 'import';
   /**
    * Stable source anchors around the capture. The window begins 20 seconds before
    * and ends 15 seconds after; event ids are reconciled as final speech arrives.
@@ -361,6 +361,8 @@ export interface MeetingMutationAcknowledgment {
   sourceRevision: number;
   meeting: Meeting;
   message?: string;
+  /** Native may omit unchanged image bytes from an applied acknowledgment. */
+  imageDataOmitted?: boolean;
 }
 
 export type ExportOutcome = 'saved' | 'cancelled';

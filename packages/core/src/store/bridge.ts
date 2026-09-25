@@ -28,6 +28,8 @@ export interface ExcerptBridge {
   listMeetings(): Promise<MeetingLibraryEntry[]>;
   /** Native searches persisted text without sending a whole library into the webview. */
   searchMeetings(query: string): Promise<MeetingSearchResult[]>;
+  /** Changes only the title; returns a small durable library row. */
+  renameMeeting(id: string, title: string): Promise<MeetingLibraryEntry>;
   loadMeeting(id: string): Promise<Meeting | undefined>;
   /** Resolves only after native storage durably acknowledges the typed operation. */
   mutateMeeting(mutation: MeetingMutation): Promise<MeetingMutationAcknowledgment>;
