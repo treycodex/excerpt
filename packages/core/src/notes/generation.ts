@@ -122,6 +122,12 @@ const overlap = (a: Set<string>, b: Set<string>) => {
  * their text tells them apart. Zero means "not a counterpart at all".
  */
 function affinity(block: NoteBlock, incoming: NoteBlock): number {
+  // A block id is the durable identity shared by the editor, native store and
+  // exports. In particular, the native fallback can hand composeVisualNotes an
+  // already-composed document. Its handwritten blocks have no evidence, so an
+  // evidence-only match treats the same block as unrelated and appends it again.
+  // Match identity before sources so composing an existing document is idempotent.
+  if (block.id === incoming.id) return 1_000_000;
   const here = new Set(block.evidence.flatMap((e) => e.eventIds));
   const there = new Set(incoming.evidence.flatMap((e) => e.eventIds));
   const sources = overlap(here, there);
@@ -209,6 +215,17 @@ export function withoutDeletedBlocks(current: NotesDocument, generated: NotesDoc
   return { ...generated, blocks: incoming.filter((block) => !removed.has(block)), deletedBlocks: boundTombstones(current.deletedBlocks) };
 }
 
+/** Block ids are durable document identities; retain their first saved position. */
+export function uniqueNoteBlocks(blocks: NoteBlock[]): NoteBlock[] {
+  const seen = new Set<string>();
+  const unique = blocks.filter((block) => {
+    if (seen.has(block.id)) return false;
+    seen.add(block.id);
+    return true;
+  });
+  return unique.length === blocks.length ? blocks : unique;
+}
+
 export function mergeGeneratedNotes(current: NotesDocument, generated: NotesDocument): NotesDocument {
   const currentBlocks = current.blocks ?? [];
   const incoming = withoutDeletedBlocks(current, generated).blocks ?? [];
@@ -225,7 +242,11 @@ export function mergeGeneratedNotes(current: NotesDocument, generated: NotesDocu
     return block.evidence.length ? [] : [block];
   });
   blocks.push(...incoming.filter((_, i) => !taken.has(i)));
-  return { ...generated, blocks, deletedBlocks: boundTombstones(current.deletedBlocks) };
+  // Block ids are unique document identities. Keep the first occurrence from the
+  // reader's current order, both as a final invariant and to repair documents made
+  // by the former double-composition bug on their next reconciliation.
+  const unique = uniqueNoteBlocks(blocks);
+  return { ...generated, blocks: unique, deletedBlocks: boundTombstones(current.deletedBlocks) };
 }
 
 const collapse = (text: string) => text.replace(/\s+/g, ' ').trim();

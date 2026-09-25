@@ -91,4 +91,11 @@ describe('what the sidebar calls a note', () => {
       blocks: [{ id: '1', kind: 'paragraph', text: '   ', evidence: [] }] } });
     expect(meetingNoteCount(m)).toBe(0);
   });
+
+  it('counts a repeated durable block identity once', () => {
+    const block = { id: 'same', kind: 'paragraph' as const, text: 'One saved note', evidence: [] };
+    const m = meeting({ notes: { version: 1, method: 'extractive', keyPoints: [], topics: [],
+      blocks: [block, { ...block }] } });
+    expect(meetingNoteCount(m)).toBe(1);
+  });
 });

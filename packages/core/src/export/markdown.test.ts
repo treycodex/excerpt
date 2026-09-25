@@ -55,6 +55,18 @@ describe('Markdown export', () => {
     expect(toHTML(meeting)).toContain('Time unknown · Slide');
   });
 
+  it('exports a previously duplicated durable block only once', () => {
+    const text = 'Follow up on refinement planning.';
+    const block = { id: 'written', kind: 'paragraph' as const, text, evidence: [], userEdited: true };
+    const meeting: Meeting = {
+      id: 'm1', title: 'Review', startedAt: '2026-09-10T00:00:00.000Z',
+      processing: 'on-device', events: [], items: [],
+      notes: { version: 1, method: 'extractive', keyPoints: [], topics: [], blocks: [block, { ...block }] },
+    };
+    expect(toMarkdown(meeting).split(text)).toHaveLength(2);
+    expect(toHTML(meeting).split(text)).toHaveLength(2);
+  });
+
   it('keeps every captured image and edited caption in one offline HTML file', () => {
     const png = 'data:image/png;base64,aGVsbG8=';
     const images = Array.from({ length: 30 }, (_, index) => ({

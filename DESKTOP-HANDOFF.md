@@ -105,11 +105,14 @@ the migration.
   saved feedback, live image import/caption, normal End shortcut, saved-meeting
   reopen after cold relaunch, caption search, transcript correction, extracted
   next-step editing/completion, source passage, and native HTML export rendered
-  from a local `file:` page were exercised. A **blocking persistence defect**
-  remains: one manually entered live paragraph was duplicated at finish with
-  the same block ID in both saved JSON and exported HTML. The microphone warned
-  about speaker playback bleed, so this run is not evidence of transcript
-  quality. Native region capture also failed its UX check: with Arc focused on
+  from a local `file:` page were exercised. That run found a **blocking persistence
+  defect**: one manually entered live paragraph was duplicated at finish with the
+  same block ID in both saved JSON and exported HTML. The current worktree fixes
+  the double-composition cause by reconciling durable block identity before source
+  evidence and enforcing unique output IDs; focused TypeScript and native
+  provider-failure regressions pass. The live fixture retest is still pending.
+  The microphone warned about speaker playback bleed, so this run is not evidence
+  of transcript quality. Native region capture also failed its UX check: with Arc focused on
   the local test page, ⌘⇧S brought Excerpt in front of the region selector;
   the user cancelled rather than capture the wrong window. An earlier picker
   cancellation correctly added no image. Since that run, the implementation
@@ -120,7 +123,7 @@ the migration.
   screenshot folder while a meeting is live. Clipboard-only captures are not
   imported. See the
   measurement note for IDs, evidence, and limits.
-- **Still unresolved:** fix and rerun the live-paragraph duplication case;
+- **Still unresolved:** rerun the fixed live-paragraph case in the signed fixture;
   visually verify both native screenshot routes with a stable fixture identity;
   keystroke-to-paint, caption presentation, confirmed-save
   latency, warm library paint, and repeated-meeting memory under GUI load need
@@ -132,9 +135,9 @@ the migration.
 
 ## Working tree
 
-The first pass is local commit `892a6c6` and has not been pushed. Second-pass
-storage, bridge, editor, tests, fixture-launch support, measurements, and planning updates are uncommitted
-on top of it. Generated
+Baseline `1512caf` is pushed to `origin/note-and-transcript-quality`. The current
+working tree contains the live-paragraph identity fix, its TypeScript/native
+regressions, and these handoff updates. Generated
 engine/editor resources were rebuilt from this source and remain ignored outputs.
 Check `git status` before continuing; later edits belong to their author.
 

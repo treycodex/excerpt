@@ -32,6 +32,12 @@ describe('editable notes and meeting screenshots', () => {
     input.notes!.blocks = [];
     expect(editableDocument(input).blocks).toEqual([]);
   });
+  it('shows a previously duplicated durable block only once', () => {
+    const input = base();
+    const written = { id: 'written', kind: 'paragraph' as const, text: 'My note', evidence: [], userEdited: true };
+    input.notes = { ...input.notes!, blocks: [written, { ...written }] };
+    expect(editableDocument(input).blocks).toEqual([written]);
+  });
   it('never inserts the same capture twice', () => {
     const input = insertMeetingImage(base(), shot('s', 30000));
     expect(insertMeetingImage(input, shot('s', 30000))).toBe(input);

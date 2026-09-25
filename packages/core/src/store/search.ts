@@ -1,4 +1,5 @@
 import type { Meeting, MeetingLibraryEntry } from '@excerpt/types';
+import { uniqueNoteBlocks } from '../notes/generation';
 
 /**
  * Finding a meeting again, without remembering what it was called.
@@ -55,7 +56,7 @@ function windowed(text: string, at: number, length: number): MeetingMatch {
 function noteTexts(meeting: Meeting): string[] {
   const notes = meeting.notes;
   if (!notes) return [];
-  if (notes.blocks?.length) return notes.blocks.filter((b) => b.kind !== 'image').map((b) => b.text);
+  if (notes.blocks?.length) return uniqueNoteBlocks(notes.blocks).filter((b) => b.kind !== 'image').map((b) => b.text);
   return [...notes.keyPoints.map((b) => b.text), ...notes.topics.flatMap((t) => t.bullets.map((b) => b.text))];
 }
 
@@ -124,7 +125,7 @@ export function searchMeetings(meetings: Meeting[], query: string): MeetingMatch
 export function meetingNoteCount(meeting: Meeting): number {
   const notes = meeting.notes;
   const written = notes?.blocks?.length
-    ? notes.blocks.filter((b) => b.kind === 'image' || b.text.trim()).length
+    ? uniqueNoteBlocks(notes.blocks).filter((b) => b.kind === 'image' || b.text.trim()).length
     : noteTexts(meeting).filter((t) => t.trim()).length;
   return written || meeting.items.filter((i) => !i.dismissed).length;
 }

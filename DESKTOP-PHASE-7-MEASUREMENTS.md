@@ -156,16 +156,20 @@ Arc opened that local `file:` page and rendered the image and caption. The
 browser was not disconnected from the network, so this demonstrates a
 self-contained local export, not an air-gapped offline test.
 
-**Confirmed defect:** the manually typed live paragraph appeared once before
+**Confirmed defect from the September 25 fixture:** the manually typed live paragraph appeared once before
 End but twice in the finished meeting. The saved JSON contains two paragraph
 blocks with identical text *and the same block ID*
 `985e8995-ac72-4cb3-bcd2-d18ce8baffcb`. Both copies remained after a cold
 relaunch and appeared in the exported HTML. This is persisted document
-duplication, not merely a transient UI render; the trigger within the
-finish/enhancement path has not yet been isolated. The isolated record is
+duplication, not merely a transient UI render. The isolated record is
 `m-1790305186995-5183793c-54f5-4e1f-815e-f3d910904330` under the marked
-temporary fixture root. This defect blocks calling the full user journey
-verified.
+temporary fixture root. The root cause was the enhancement failure path composing
+an already-composed extractive fallback a second time: handwritten blocks have no
+source evidence, so the reconciliation treated the same durable block ID as new
+wording and appended it. The current fix matches block identity before evidence,
+enforces unique block IDs at reconciliation, and has TypeScript plus native
+provider-failure regressions. The original live journey still needs to be rerun,
+so the full user journey is not yet called verified.
 
 The native Capture moment shortcut opened macOS's region selector during a
 third short fixture meeting. Cancelling it with Escape correctly left that
@@ -194,8 +198,9 @@ repeated-session memory remain unverified.
   no longer transfer them. The UI export save path worked with synthetic data;
   two short public-video captures worked in the isolated fixture. A local HTML
   browser render worked; network-isolated rendering and repeated meetings under
-  hardware/GUI load still require acceptance testing. Fix and rerun the
-  live-paragraph duplication case before passing the user-journey gate.
+  hardware/GUI load still require acceptance testing. The live-paragraph fix passes
+  the exact native fallback regression; rerun that case in the signed fixture before
+  passing the user-journey gate.
 - Asset files made orphaned by an interrupted migration are harmless but are
   not yet reclaimed automatically. Do not introduce eager whole-library cleanup.
 
@@ -219,7 +224,8 @@ fixture executable invalidated its Screen & System Audio Recording grant, and
 the rebuilt fixture still reported denied after a restart. Do not ask the user
 to repeat permission toggles for each build; package a final test build with a
 stable local signing identity before another live fixture pass. The prior
-duplicate-live-paragraph defect remains separate and unfixed.
+duplicate-live-paragraph defect now has an automated fix; its live retest remains
+separate and pending.
 
 The user clarified that their intended capture flow is macOS's ordinary
 ⌘⇧4/⌘⇧5 shortcuts. The native app now watches the system screenshot save
@@ -232,7 +238,7 @@ during a meeting is supported; clipboard-only and Preview/Mail destinations
 are not file imports. The focused synthetic test verifies one import survives
 End while old, unrelated, duplicate, and post-stop files are ignored. A live
 ⌘⇧4/⌘⇧5 fixture pass remains pending with a stable test-app identity.
-After this follow-up, full native `swift test` passed **191 tests in 27
-suites**; core/editor JavaScript tests passed **217 + 43**, typechecks and the
-editor resource build passed, and `git diff --check` passed. These automated
+After the duplication follow-up, full native `swift test` passed **192 tests in 27
+suites**; core/editor JavaScript tests passed **222 + 43**, typechecks and the
+engine/editor resource builds passed, and `git diff --check` passed. These automated
 checks do not substitute for the pending live screenshot/focus pass.

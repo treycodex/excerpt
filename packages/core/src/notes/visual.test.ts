@@ -63,6 +63,23 @@ describe('automatic visual notes', () => {
     expect(blocks.filter((block) => block.imageId === 'deleted')).toEqual([]);
   });
 
+  it('does not duplicate handwritten blocks when an already composed fallback is composed again', () => {
+    const handwritten: NoteBlock = {
+      id: 'handwritten', kind: 'paragraph', text: 'Follow up on refinement planning.',
+      evidence: [], userEdited: true,
+    };
+    const meeting = { ...base(), notes: { ...empty, blocks: [handwritten] } };
+
+    // This is the native fallback path: engine.notes first produces a complete
+    // extractive document, then MeetingEnhancer passes that result through the
+    // visual composer once more before saving it.
+    const fallback = composeVisualNotes(meeting, wording);
+    const saved = composeVisualNotes({ ...meeting, notes: fallback }, fallback);
+
+    expect(saved.blocks!.filter((block) => block.id === handwritten.id)).toEqual([handwritten]);
+    expect(new Set(saved.blocks!.map((block) => block.id)).size).toBe(saved.blocks!.length);
+  });
+
   it('keeps screenshot-only meetings useful and does not duplicate images on recomposition', () => {
     const meeting = insertMeetingImage({ ...base(), events: [] }, image('only', 30_000));
     const first = composeVisualNotes(meeting, empty);

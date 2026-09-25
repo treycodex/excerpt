@@ -344,6 +344,43 @@ struct Phase1PersistenceTests {
         #expect(saved.suggestedNotes == nil)
     }
 
+    @Test func `extractive fallback does not duplicate handwritten blocks at finish`() async throws {
+        struct ProviderFailure: Error {}
+        let directory = root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try MeetingStore(root: directory)
+        let engine = try engine()
+        let handwritten = NoteBlock(
+            id: "handwritten", kind: "paragraph",
+            text: "Follow up on refinement planning.", evidence: [], userEdited: true)
+        var source = meeting(id: "fallback-writing")
+        source.notes = NotesDocument(
+            method: "extractive", keyPoints: [], topics: [], blocks: [handwritten])
+
+        // MeetingSession writes useful extractive notes before optional enhancement.
+        // If the provider then fails, the fallback is itself a complete composed
+        // document and is passed through the visual composer once more.
+        source.notes = try engine.notes(for: source)
+        source.generationStatus = NotesGenerationStatus(
+            state: .queued, generationId: "generation-fallback", sourceRevision: 0,
+            inputFingerprint: MeetingEnhancer.inputFingerprint(source))
+        try store.save(source)
+
+        let enhancer = MeetingEnhancer(
+            store: store,
+            preferences: PreferencesStore(defaults: UserDefaults(suiteName: UUID().uuidString)!),
+            summarize: { _, _, _ in throw ProviderFailure() },
+            fallback: { try engine.notes(for: $0) },
+            shapeNotice: { _ in "" },
+            compose: { try engine.composeNotes(for: $0, wording: $1) })
+        _ = await enhancer.start(source: source) { _ in }.value
+
+        let saved = try store.load(id: source.id)
+        #expect(saved.generationStatus?.state == .ready)
+        #expect(saved.notes?.blocks?.filter { $0.id == handwritten.id } == [handwritten])
+        #expect(Set(saved.notes?.blocks?.map(\.id) ?? []).count == saved.notes?.blocks?.count)
+    }
+
     @Test func `a transcript correction cancels stale automatic wording`() async throws {
         let directory = root()
         defer { try? FileManager.default.removeItem(at: directory) }

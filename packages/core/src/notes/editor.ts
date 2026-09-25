@@ -1,6 +1,6 @@
 import type { Meeting, MeetingImage, NoteBlock, NoteBullet, NotesDocument, Evidence } from '@excerpt/types';
 import { buildNotesDocument, refreshMeetingNotes } from './summary';
-import { withoutDeletedBlocks } from './generation';
+import { uniqueNoteBlocks, withoutDeletedBlocks } from './generation';
 
 export const evidenceTime = (e: Evidence) => e.tStart !== undefined ? e.tStart * 1000 : e.tArrived;
 /** The identity used when a key point is already represented by a topic bullet. */
@@ -43,7 +43,10 @@ export function reconcileMeetingImageContexts(meeting: Meeting): Meeting {
 /** Upgrade only when needed. An existing document's order (including an empty one) is authoritative. */
 export function editableDocument(meeting: Meeting): NotesDocument {
   const notes = meeting.notes ?? buildNotesDocument(meeting);
-  if (notes.blocks) return notes;
+  if (notes.blocks) {
+    const blocks = uniqueNoteBlocks(notes.blocks);
+    return blocks === notes.blocks ? notes : { ...notes, blocks };
+  }
   const seen = new Set<string>();
   const blocks: NoteBlock[] = [];
   const sections = notes.topics.length ? notes.topics : [{ id: 'points', title: '', bullets: notes.keyPoints }];

@@ -40,21 +40,22 @@ function renderItem(item: Item): string {
 export function toMarkdown(meeting: Meeting): string {
   const out: string[] = [];
   const live = meeting.items.filter((i) => !i.dismissed);
+  const notesDocument = meeting.notes ? editableDocument(meeting) : undefined;
 
   out.push(`# ${meeting.title}`, '');
   out.push(`${new Date(meeting.startedAt).toLocaleString()}`);
   const decided = live.filter((i) => i.category === 'decision' && i.state === 'decided').length;
   out.push(`${live.length} items · ${decided} decided · transcription: ${meeting.processing}`, '');
 
-  const summary = meeting.notes ? documentSummary(editableDocument(meeting)) : [];
+  const summary = notesDocument ? documentSummary(notesDocument) : [];
   if (summary.length) {
     out.push('## Summary', '');
     for (const line of summary) out.push(`- ${line.text}`);
     out.push('');
   }
 
-  if (meeting.notes?.blocks) {
-    for (const block of meeting.notes.blocks) {
+  if (notesDocument?.blocks) {
+    for (const block of notesDocument.blocks) {
       if (block.kind === 'image') {
         const image = meeting.images?.find((i) => i.id === block.imageId);
         if (image && safeImageUrl(image.dataUrl)) out.push(`![${block.text.replace(/[\[\]\n]/g, ' ') || 'Meeting screenshot'}](${image.dataUrl})`, `_${image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image))} · Screenshot_`, '');

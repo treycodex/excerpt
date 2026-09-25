@@ -140,6 +140,15 @@ describe('whether a finished result changed anything', () => {
 });
 
 describe('what a candidate may not touch', () => {
+  it('repairs repeated block identities while preserving the first saved copy', () => {
+    const first = { id: 'mine', kind: 'paragraph' as const, text: 'My saved writing.', evidence: [], userEdited: true };
+    const duplicate = { ...first, text: 'A later corrupt duplicate.' };
+    const current = { version: 1 as const, method: 'extractive' as const, keyPoints: [], topics: [], blocks: [first, duplicate] };
+    const generated = { ...current, blocks: [] };
+
+    expect(mergeGeneratedNotes(current, generated).blocks).toEqual([first]);
+  });
+
   it('keeps handwritten text, edited generated blocks, images and image positions', () => {
     const meeting = insertMeetingImage(base(), shot('s', 30000));
     const current = editableDocument(meeting);
