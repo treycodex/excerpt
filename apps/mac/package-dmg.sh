@@ -19,12 +19,16 @@ EXCERPT — FREE, OPEN-SOURCE MEETING NOTES
 Requires Apple silicon and macOS 26 or later.
 
 1. Drag Excerpt into Applications.
-2. Open Excerpt from Applications.
-3. Choose your subtitle style and follow the permission and speech-model setup.
-4. Use the Excerpt icon in the menu bar to start listening.
+2. Open Excerpt from Applications. macOS says Apple could not verify that
+   Excerpt is free of malware. Choose Done (not Move to Trash).
+3. Open System Settings > Privacy & Security, scroll to Security, and click
+   Open Anyway beside "Excerpt" was blocked to protect your Mac. Confirm
+   with your password.
+4. Choose your subtitle style and follow the permission and speech-model setup.
+5. Use the Excerpt icon in the menu bar to start listening.
 
-This preview build is locally signed, not Apple-notarized. macOS may block first
-launch. See the installation guide before proceeding:
+Excerpt is locally signed, not notarized by Apple, which is why step 3 is
+needed. Right-click > Open no longer skips it on current macOS. More help:
 https://github.com/treycodex/excerpt#the-app-is-unsigned
 
 Your notes stay on this Mac. There is no account or subscription.

@@ -39,11 +39,13 @@ grammar. Sentence splitting is ASCII-terminator only, dates go through
 chrono-node's English parser, and caption breaking and `substance()` carry English
 word lists. A second language means writing its grammar. It is not a setting.
 
-## 4. There is still no Mac download
+## 4. ~~There is still no Mac download~~ — done
 
-The landing page sends people to the source. What is needed is a tested prebuilt
-`.app` on GitHub Releases, linked from the page. No Apple Developer certificate,
-per the standing decision, so the page has to explain the right-click-Open step.
+Since 28 September 2026 the landing page and README link to `Excerpt.dmg` on the
+latest GitHub release, and all three install surfaces (page, README, the DMG's
+`Read me.txt`) explain **Open Anyway** in Privacy & Security — right-click Open no
+longer bypasses Gatekeeper. Still unsigned by Apple, per the standing decision;
+Developer ID and notarization would remove the step. See `apps/mac/DISTRIBUTION.md`.
 
 ## 5. Extracted items outlive the screen that showed them
 

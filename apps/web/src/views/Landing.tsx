@@ -3,6 +3,19 @@ import { Wordmark } from './Wordmark';
 import './landing.css';
 
 const SOURCE = 'https://github.com/treycodex/excerpt';
+/** Always the newest release's disk image; the file keeps one name across releases. */
+const DOWNLOAD = `${SOURCE}/releases/latest/download/Excerpt.dmg`;
+const REQUIRES = 'macOS 26 or later on Apple silicon';
+
+/** Excerpt is not notarized, so the first open goes through Privacy & Security. */
+const INSTALL = [
+  ['01', 'Drag it into Applications.',
+    'Open Excerpt.dmg and drag Excerpt onto the Applications folder beside it.'],
+  ['02', 'Open it once, and choose Done.',
+    'macOS says Apple could not verify that Excerpt is free of malware, and does not open it. Choose Done, not Move to Trash.'],
+  ['03', 'Choose Open Anyway.',
+    'In System Settings → Privacy & Security, scroll to Security. Beside “Excerpt” was blocked to protect your Mac, click Open Anyway and confirm with your password. After that it opens normally.'],
+] as const;
 
 /* ── The page ──────────────────────────────────────────────────────────────────
    Structured the way a modern product page is structured — a centred hero, one
@@ -84,7 +97,7 @@ const NOT_CLAIMED = [
 
 const SURFACES = [
   ['The Mac app', 'Subtitles drawn over the meeting itself — no browser window and no floating control panel. Excerpt lives in the menu bar.',
-    'macOS 26 or later on Apple silicon.', 'Build it from source ↗', SOURCE],
+    `${REQUIRES}.`, 'Download for Mac ↓', DOWNLOAD],
   ['Local meeting storage', 'Transcripts, captured screens and editable notes stay together in Excerpt’s own folder on your Mac.',
     'No account, backend or browser storage.', 'Read the architecture ↗', `${SOURCE}#readme`],
   ['Open source', 'The capture, transcription, extraction and editor code are all available to inspect and build.',
@@ -135,19 +148,20 @@ export function Landing({ onStart }: { onStart: () => void }) {
           <button onClick={() => jump('how-it-works')}>How it works</button>
           <button onClick={() => jump('what-it-keeps')}>What it keeps</button>
           <button onClick={() => jump('surfaces')}>How it runs</button>
+          <button onClick={() => jump('install')}>Install</button>
           <a href={SOURCE} target="_blank" rel="noreferrer">Open source ↗</a>
         </div>
         <div className="lp-nav-actions">
           <button className="lp-ghost" onClick={onStart}>Watch the demo</button>
-          <a className="lp-solid" href={SOURCE} target="_blank" rel="noreferrer">Use Excerpt</a>
+          <a className="lp-solid" href={DOWNLOAD}>Download</a>
         </div>
       </nav>
 
       <header className="lp-hero">
-        <a className="lp-pill" href={SOURCE} target="_blank" rel="noreferrer">
+        <a className="lp-pill" href={DOWNLOAD}>
           <span className="lp-pill-new">NEW</span>
-          The Mac app draws subtitles over the meeting itself
-          <span aria-hidden>→</span>
+          Excerpt for Mac is ready to download, free
+          <span aria-hidden>↓</span>
         </a>
 
         <p className="lp-eyebrow">Meeting memory for creative and media agencies</p>
@@ -159,9 +173,10 @@ export function Landing({ onStart }: { onStart: () => void }) {
         </p>
 
         <div className="lp-cta">
-          <a className="lp-solid lp-lg" href={SOURCE} target="_blank" rel="noreferrer">Build for Mac <span aria-hidden>↗</span></a>
+          <a className="lp-solid lp-lg" href={DOWNLOAD}>Download for Mac <span aria-hidden>↓</span></a>
           <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the captions demo</button>
         </div>
+        <p className="lp-fineprint">Free. Requires {REQUIRES}. The first time you open it, macOS asks you to allow it — <button className="lp-text lp-inline" onClick={() => jump('install')}>here is how</button>.</p>
         <p className="lp-fineprint">No account, no subscription. Capture, transcription and meeting files stay on your Mac.</p>
 
         <div className="lp-also">
@@ -237,7 +252,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
           </p>
           <div className="lp-split-actions">
             <button className="lp-outline" onClick={onStart}>See it in the demo <span aria-hidden>↗</span></button>
-            <a className="lp-text" href={SOURCE} target="_blank" rel="noreferrer">Use Excerpt <span aria-hidden>↗</span></a>
+            <a className="lp-text" href={DOWNLOAD}>Download for Mac <span aria-hidden>↓</span></a>
           </div>
         </div>
         <figure className="lp-split-shot">
@@ -335,10 +350,34 @@ export function Landing({ onStart }: { onStart: () => void }) {
               <p>{body}</p>
               <span className="lp-label lp-card-meta">{req}</span>
               {cta && href
-                ? <a className="lp-outline lp-full" href={href} {...(href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>{cta}</a>
+                ? <a className="lp-outline lp-full" href={href} {...(href.startsWith('http') && href !== DOWNLOAD ? { target: '_blank', rel: 'noreferrer' } : {})}>{cta}</a>
                 : <button className="lp-outline lp-full" onClick={onStart}>Watch the demo ↗</button>}
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="lp-section lp-centred cs-reveal" id="install">
+        <div className="lp-head">
+          <span className="lp-label lp-label-ember">[ Install ]</span>
+          <h2>Opening it <em>the first time.</em></h2>
+          <p>Excerpt is signed but not notarized by Apple, which costs a paid developer account, so macOS stops the first launch with a malware warning. The code is open for anyone to check. Allowing it takes three steps, once.</p>
+        </div>
+        <div className="lp-cards lp-cards-3">
+          {INSTALL.map(([n, title, body]) => (
+            <article className="lp-card lp-card-outline" key={n}>
+              <span className="lp-step">{n}</span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+        <p className="lp-note">
+          Open Anyway appears for about an hour after step 2; if it is gone, open Excerpt again. Right-clicking and
+          choosing Open no longer skips this check on current macOS. Would rather not? <a className="lp-link" href={SOURCE} target="_blank" rel="noreferrer">Build it from source ↗</a>
+        </p>
+        <div className="lp-cta lp-cta-centred">
+          <a className="lp-solid lp-lg" href={DOWNLOAD}>Download for Mac <span aria-hidden>↓</span></a>
         </div>
       </section>
 
@@ -346,10 +385,10 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <span className="lp-label lp-label-ember">For your next campaign review</span>
         <h2>Keep the work, the numbers,<br /><em>and the conversation.</em></h2>
         <div className="lp-cta lp-cta-centred">
-          <a className="lp-solid lp-lg" href={SOURCE} target="_blank" rel="noreferrer">Build for Mac <span aria-hidden>↗</span></a>
+          <a className="lp-solid lp-lg" href={DOWNLOAD}>Download for Mac <span aria-hidden>↓</span></a>
           <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the demo</button>
         </div>
-        <p className="lp-fineprint">No account. No credit card. No subscription.</p>
+        <p className="lp-fineprint">No account. No credit card. No subscription. {REQUIRES}.</p>
       </section>
 
       <footer className="lp-footer">
@@ -360,7 +399,8 @@ export function Landing({ onStart }: { onStart: () => void }) {
           </div>
           <div>
             <span className="lp-label">Product</span>
-            <a href={SOURCE} target="_blank" rel="noreferrer">Get started ↗</a>
+            <a href={DOWNLOAD}>Download for Mac ↓</a>
+            <button className="lp-text" onClick={() => jump('install')}>Install</button>
             <a href={`${SOURCE}#readme`} target="_blank" rel="noreferrer">Documentation ↗</a>
             <button className="lp-text" onClick={onStart}>The demo</button>
           </div>
