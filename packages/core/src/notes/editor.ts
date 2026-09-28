@@ -9,6 +9,17 @@ export const noteDedupeKey = (bullet: Pick<NoteBullet, 'text' | 'evidence'>) =>
 const timeOf = (evidence: Evidence[]) => evidence.length ? Math.min(...evidence.map(evidenceTime)) : undefined;
 export const transcriptEventTime = (event: Meeting['events'][number]) => event.tStart !== undefined ? event.tStart * 1000 : event.tArrived;
 export const meetingImageTime = (image: MeetingImage) => image.anchorAt ?? image.at;
+
+/** An image-only capture draft is still a transcript, not written notes. */
+export function hasSmartNotes(meeting: Meeting): boolean {
+  if (meeting.generationStatus?.state === 'ready') return true;
+  const notes = meeting.notes;
+  return !!notes && (
+    !!notes.blocks?.some((block) => block.kind !== 'image' && (block.userEdited || !!block.text.trim()))
+    || notes.keyPoints.some((point) => !!point.text.trim())
+    || notes.topics.some((topic) => topic.bullets.some((point) => !!point.text.trim()))
+  );
+}
 const transcriptEventEnd = (event: Meeting['events'][number]) => event.tEnd !== undefined ? event.tEnd * 1000 : transcriptEventTime(event);
 
 export const MOMENT_CONTEXT_BEFORE = 20_000;
@@ -136,6 +147,15 @@ export function previewTranscriptCorrection(meeting: Meeting, eventId: string, t
     corrections: [...(event.corrections ?? []), { text: text.trim(), correctedAt }] };
   const events = meeting.events.map((e) => e.id === eventId ? updated : e);
   const sourceRevision = (meeting.sourceRevision ?? 0) + 1;
+  const onlyHandwriting = !meeting.notes || (meeting.notes.method === 'extractive'
+    && !meeting.notes.keyPoints.length && !meeting.notes.topics.length
+    && !(meeting.notes.blocks ?? []).some((block) => block.kind !== 'image' && !block.userEdited));
+  if (meeting.items.length === 0 && (!hasSmartNotes(meeting) || onlyHandwriting)) {
+    const images = meeting.images?.map((image) => image.context?.eventIds.includes(eventId)
+      ? { ...image, needsReview: true } : image);
+    return { meeting: { ...meeting, events, sourceRevision, ...(images ? { images } : {}) },
+      changes: [] as { before: string; after: string }[] };
+  }
   const rebuilt = refreshMeetingNotes({ ...meeting, events, sourceRevision, items: meeting.items.filter((i) => !uses(i.evidence, eventId)) });
   const oldDocument = editableDocument(meeting);
   const fresh = withoutDeletedBlocks(oldDocument, editableDocument({ ...rebuilt, notes: buildNotesDocument(rebuilt), images: [] }));

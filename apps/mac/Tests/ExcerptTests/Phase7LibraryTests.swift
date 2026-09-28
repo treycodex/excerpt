@@ -35,7 +35,7 @@ struct Phase7LibraryTests {
         let listJSON = try #require(try await bridge.dispatch("listMeetings") as? String)
         let entries = try JSONDecoder.excerpt.decode([MeetingLibraryEntry].self, from: Data(listJSON.utf8))
         #expect(entries.count == 1)
-        #expect(entries[0].noteCount == 2)
+        #expect(entries[0].noteCount == 1)
         #expect(entries[0].decidedCount == 1)
         #expect(entries[0].mineCount == 1)
         #expect(!listJSON.contains("data:image"))

@@ -1,12 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DesktopPreferences } from './DesktopPreferences';
-import { DEFAULT_PREFERENCES, bridge, deriveBoosts, loadMeeting, loadPreferences, savePreferences } from '@excerpt/core';
-import type { Category, Preferences as Prefs } from '@excerpt/types';
-
-const LABEL: Record<Category, string> = {
-  decision: 'Decisions', action: 'Action items',
-  deadline: 'Deadlines', question: 'Open questions',
-};
+import { DEFAULT_PREFERENCES, bridge, loadMeeting, loadPreferences, savePreferences } from '@excerpt/core';
+import type { Preferences as Prefs } from '@excerpt/types';
 
 /**
  * The meeting this visit came from, if it came from one.
@@ -66,18 +61,6 @@ export function Preferences() {
       .catch(() => { clearTimeout(clearNotice.current); setUnsaved(next); setSaved('failed'); });
   };
 
-  const move = (index: number, by: number) => {
-    const order = [...prefs.order];
-    const target = index + by;
-    if (target < 0 || target >= order.length) return;
-    const a = order[index]!; const b = order[target]!;
-    order[index] = b; order[target] = a;
-    commit({ ...prefs, order });
-  };
-
-  const setInstruction = (instruction: string) =>
-    commit({ ...prefs, instruction, boosts: deriveBoosts(instruction) });
-
   const configureKey = async () => {
     if (!bridge()?.configureOpenAIKey) return;
     setKeyState('saving');
@@ -101,21 +84,20 @@ export function Preferences() {
     <div className="notes">
       <header className="masthead">
         <div className="eyebrow">Excerpt</div>
-        {returnTo && <a className="preferences-return" href={`#/m/${returnTo}`}>← Back to your notes</a>}
+        {returnTo && <a className="preferences-return" href={`#/m/${returnTo}`}>← Back to your meeting</a>}
         <h1>Settings</h1>
         <p className="rubric">
-          Stored on this device. Preferences change the order of your notes, never what
-          appears in them — a decision you forgot to prioritise is still a decision.
+          Choose how you capture meetings and write optional notes. Changes are saved on this Mac.
         </p>
       </header>
 
       <DesktopPreferences />
 
-      <section className="notes-provider-settings">
-        <h2>Note enhancement</h2>
-        <p className="rubric">Transcription stays on this Mac. The selected provider may enhance notes automatically after a meeting and is also used for manual rewrites. With OpenAI selected, Excerpt sends transcript text and screenshot captions to OpenAI; screenshot pixels stay on this Mac.</p>
+      <section className="notes-provider-settings" aria-label="Writing notes">
+        <h2>Writing notes</h2>
+        <p className="rubric">Transcription stays on this Mac. The selected provider writes Smart notes only after you press Write notes, and can also rewrite existing notes. With OpenAI selected, Excerpt sends transcript text and screenshot captions to OpenAI when you request notes; screenshot pixels stay on this Mac.</p>
         <label className="provider-choice"><input type="radio" name="notes-provider" checked={(prefs.notesProvider ?? 'apple') === 'apple'} onChange={() => commit({ ...prefs, notesProvider: 'apple' })} /><span><b>On this Mac</b><small>Apple Intelligence, when available</small></span></label>
-        <label className="provider-choice"><input type="radio" name="notes-provider" checked={prefs.notesProvider === 'openai'} onChange={() => commit({ ...prefs, notesProvider: 'openai' })} /><span><b>OpenAI with your key</b><small>Used for automatic and manual note enhancement</small></span></label>
+        <label className="provider-choice"><input type="radio" name="notes-provider" checked={prefs.notesProvider === 'openai'} onChange={() => commit({ ...prefs, notesProvider: 'openai' })} /><span><b>OpenAI with your key</b><small>Used only when you request notes or a rewrite</small></span></label>
         <div className="api-key-setting">
           <p>{keyConfigured ? 'An API key is stored in macOS Keychain.' : 'Add an API key to use OpenAI for note wording.'}</p>
           <button disabled={keyState === 'saving'} onClick={() => { void configureKey(); }}>{keyState === 'saving' ? 'Opening Keychain…' : keyConfigured ? 'Replace key…' : 'Add key…'}</button>
@@ -123,55 +105,7 @@ export function Preferences() {
           <span className="rubric" role="status">{keyState === 'saved' ? 'Saved in Keychain' : keyState === 'failed' ? 'Could not update Keychain' : ''}</span>
         </div>
       </section>
-      <details className="advanced-preferences"><summary>Advanced · extraction priorities</summary><section>
-        <h2>Order</h2>
-        <p className="rubric">Most important first.</p>
-        <ol className="pref-order">
-          {prefs.order.map((c, i) => (
-            <li key={c}>
-              <span className="rank">{String(i + 1).padStart(2, '0')}</span>
-              <span className="cat">{LABEL[c]}</span>
-              <span className="move">
-                <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${LABEL[c]} up`}>↑</button>
-                <button onClick={() => move(i, 1)} disabled={i === prefs.order.length - 1} aria-label={`Move ${LABEL[c]} down`}>↓</button>
-              </span>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section>
-        <h2>In your words</h2>
-        <p className="rubric">
-          These visible terms change the order of review items, here and on the Mac.
-          They do not filter items or instruct the notes summarizer.
-        </p>
-        <textarea
-          aria-label="What matters to you in meetings"
-          className="instruction"
-          rows={4}
-          value={prefs.instruction}
-          placeholder="I work at an agency. Prioritise client feedback, deadlines, campaign decisions, deliverables, and anything assigned to me. Ignore small talk."
-          onChange={(e) => setInstruction(e.target.value)}
-        />
-
-        <div className="boosts">
-          <span className="boost-label">Listening out for</span>
-          {prefs.boosts.length === 0 && <span className="rubric">nothing yet</span>}
-          {prefs.boosts.map((b) => (
-            <button
-              key={b}
-              className="chip"
-              onClick={() => commit({ ...prefs, boosts: prefs.boosts.filter((x) => x !== b) })}
-              title="Remove this term"
-            >
-              {b} <span aria-hidden>×</span>
-            </button>
-          ))}
-        </div>
-
         <div className="actions">
-          <button onClick={() => commit({ ...DEFAULT_PREFERENCES })}>Reset</button>
           <span className="rubric" role="status">
             {saved === 'saving' ? 'Saving…' : saved === 'saved' ? 'Saved' : saved === 'failed' ? 'Could not save on this Mac. Your notes are unaffected.' : ''}
           </span>
@@ -183,7 +117,7 @@ export function Preferences() {
             <button onClick={() => { if (saved_.current) setPrefs(saved_.current); setUnsaved(null); setSaved('idle'); }}>Cancel</button>
           </>}
         </div>
-      </section></details>
+
     </div>
   );
 }

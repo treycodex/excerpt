@@ -125,9 +125,9 @@ export function searchMeetings(meetings: Meeting[], query: string): MeetingMatch
 export function meetingNoteCount(meeting: Meeting): number {
   const notes = meeting.notes;
   const written = notes?.blocks?.length
-    ? uniqueNoteBlocks(notes.blocks).filter((b) => b.kind === 'image' || b.text.trim()).length
+    ? uniqueNoteBlocks(notes.blocks).filter((b) => b.kind !== 'image' && b.text.trim()).length
     : noteTexts(meeting).filter((t) => t.trim()).length;
-  return written || meeting.items.filter((i) => !i.dismissed).length;
+  return written;
 }
 
 /** Mirror the small native library projection in synthetic editor tests. */

@@ -36,6 +36,12 @@ struct DesktopSettings: Codable, Equatable, Sendable {
     var captions: CaptionSettings
     var microphone: MicrophoneSettings
     var shortcuts: [MeetingShortcutStatus]
+    var screenshotImport = ScreenshotImportSettings(enabled: false, folderName: nil)
+}
+
+struct ScreenshotImportSettings: Codable, Equatable, Sendable {
+    var enabled: Bool
+    var folderName: String?
 }
 
 struct CaptionSettingsPatch: Codable, Sendable {

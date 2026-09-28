@@ -9,7 +9,7 @@ const item = (patch: Partial<Item>): Item => ({
 });
 
 describe('Markdown export', () => {
-  it('keeps UI order, decision counts, and edit provenance consistent', () => {
+  it('exports the transcript without inventing a notes document from legacy items', () => {
     const meeting: Meeting = {
       id: 'm1', title: 'Review', startedAt: '2026-09-10T00:00:00.000Z',
       processing: 'demo',
@@ -21,9 +21,24 @@ describe('Markdown export', () => {
     };
 
     const output = toMarkdown(meeting);
-    expect(output).toContain('2 items · 0 decided');
-    expect(output.indexOf('## Action items')).toBeLessThan(output.indexOf('## Decisions'));
-    expect(output).toContain('_(edited)_');
+    expect(output).toContain('## Transcript');
+    expect(output).toContain('I will send it.');
+    expect(output).not.toContain('## Notes');
+    expect(output).not.toContain('We could wait.');
+  });
+
+  it('attributes note sources with the same names as the transcript', () => {
+    const meeting: Meeting = {
+      id: 'm1', title: 'Review', startedAt: '2026-09-10T00:00:00.000Z', processing: 'on-device', items: [],
+      events: [{ id: 'e1', sessionId: 's', role: 'remote', speakerLabel: 'SPEAKER', text: 'Ship Friday.', isFinal: true, tArrived: 1000 }],
+      notes: { version: 1, method: 'on-device', keyPoints: [], topics: [], blocks: [
+        { id: 'b1', kind: 'bullet', text: 'Shipping Friday.', evidence: [{ eventIds: ['e1'], tArrived: 1000, quote: 'Ship Friday.', speakerLabel: 'SPEAKER' }] },
+      ] },
+    };
+    const output = toMarkdown(meeting);
+    expect(output).toContain('### Meeting audio · ~0:01');
+    expect(output).toContain('> — Meeting audio, ~0:01');
+    expect(output).not.toContain('SPEAKER');
   });
 
   it('exports the original wording and every correction in plain and rich copies', () => {
@@ -37,7 +52,7 @@ describe('Markdown export', () => {
     };
     expect(toMarkdown(meeting)).toContain('Original: Ship Thursday.');
     expect(toMarkdown(meeting)).toContain('Corrected 2026-09-10T01:05:00Z: Ship Friday.');
-    expect(toHTML(meeting)).toContain('Transcript and correction history');
+    expect(toHTML(meeting)).toContain('Correction history');
     expect(toHTML(meeting)).toContain('Original: Ship Thursday.');
   });
 
@@ -52,7 +67,7 @@ describe('Markdown export', () => {
       ] },
     };
     expect(toMarkdown(meeting)).toContain('Time unknown · Screenshot');
-    expect(toHTML(meeting)).toContain('Time unknown · Slide');
+    expect(toHTML(meeting)).toContain('Time unknown · Screenshot · Slide');
   });
 
   it('exports a previously duplicated durable block only once', () => {

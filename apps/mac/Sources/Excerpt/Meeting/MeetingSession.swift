@@ -482,7 +482,7 @@ final class MeetingSession {
         log.error("capture lost: \(message)")
         captureFailure = message
         requestedFinishReason = .interrupted
-        status = "Stopped hearing the meeting — saving your notes so far…"
+        status = "Stopped hearing the meeting — saving your transcript…"
         Task { await stop(reason: .interrupted) }
     }
 
@@ -616,8 +616,8 @@ final class MeetingSession {
         }
         let initialReason = requestedFinishReason ?? .stopped
         status = initialReason == .interrupted
-            ? "The meeting was interrupted — saving your notes so far…"
-            : "Writing your notes…"
+            ? "The meeting was interrupted — saving your transcript…"
+            : "Saving your meeting…"
         state = .finishing(initialReason)
 
         healthWatch?.cancel()
@@ -655,7 +655,7 @@ final class MeetingSession {
             // The journal is still on disk, so nothing is lost — say that rather than
             // implying the meeting is gone.
             status = "Could not save — but your transcript is still on this Mac"
-            state = .failed("Could not write the notes file.")
+            state = .failed("Could not save the meeting.")
             log.error("save failed: \(error)")
         }
         finishTask = nil
@@ -679,27 +679,26 @@ final class MeetingSession {
         pendingSave = nil
         lastSaved = meeting
         if meeting.finishReason == .interrupted {
-            let message = "The meeting was interrupted — your notes so far were saved"
+            let message = "The meeting was interrupted — your transcript and captures were saved"
             status = message
             state = .interrupted(id: meeting.id, message: message)
         } else {
-            status = summary(of: meeting) + " · organizing notes"
+            status = meeting.events.isEmpty ? "Meeting saved · no transcript captured" : "Transcript saved"
             state = .completed(id: meeting.id)
         }
         onMeetingChange?(meeting)
         onMeetingFinished?(meeting)
-        startEnhancement(for: meeting)
     }
 
     private func startEnhancement(for meeting: Meeting) {
-        // Saving and opening the meeting must not wait on a model. Its result is
-        // merged with whatever is on disk later and offered as a reviewable
-        // suggestion when the person already wrote something.
+        // Started only after Write notes. Its result is merged with whatever the
+        // person wrote while the provider was running.
         enhancer.start(source: meeting) { [weak self] updated in
             guard let self else { return }
             if self.lastSaved?.id == updated.id { self.lastSaved = updated }
             if case .completed(let id) = self.state, id == updated.id {
-                self.status = self.summary(of: updated)
+                self.status = updated.generationStatus?.state == .ready
+                    ? "Smart notes ready" : "Transcript saved"
             }
             self.onMeetingChange?(updated)
         }
@@ -716,9 +715,17 @@ final class MeetingSession {
 
     func retryAutomaticNotes(id: String) throws -> Meeting {
         let source = try store.update(id: id) { meeting in
+            guard meeting.events.contains(where: { $0.isFinal && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+                throw NSError(domain: "Excerpt", code: 1, userInfo: [NSLocalizedDescriptionKey: "This meeting has no transcript to turn into notes."])
+            }
             guard meeting.endedAt != nil,
-                  meeting.generationStatus?.state == .failed || meeting.generationStatus?.state == .cancelled else {
-                throw NSError(domain: "Excerpt", code: 1, userInfo: [NSLocalizedDescriptionKey: "These notes are not waiting for a retry."])
+                  meeting.generationStatus == nil || meeting.generationStatus?.state == .failed
+                    || meeting.generationStatus?.state == .cancelled else {
+                throw NSError(domain: "Excerpt", code: 1, userInfo: [NSLocalizedDescriptionKey: "Notes are already being written or are ready to read."])
+            }
+            if meeting.items.isEmpty,
+               let started = ISO8601DateFormatter().date(from: meeting.startedAt) {
+                meeting.items = (try? engine.extract(events: meeting.events, reference: started)) ?? []
             }
             meeting.generationStatus = NotesGenerationStatus(
                 state: .queued, generationId: UUID().uuidString,
@@ -735,13 +742,6 @@ final class MeetingSession {
         // transcript is. Assembly joins the first and resolves the far side's echo.
         let finals = TranscriptAssembly.assemble(events.filter(\.isFinal))
         suppressedEchoes = events.count - finals.count
-        // The meeting's own start decides what "Thursday" meant, not today's date.
-        let items = (try? engine.extract(events: finals, reference: clock.startedAt)) ?? []
-        if items.isEmpty, !finals.isEmpty {
-            log.info("no items extracted from \(finals.count) events — silence is the designed answer when nothing qualifies")
-        }
-
-        let generationID = UUID().uuidString
         var meeting = Meeting(
             id: meetingId,
             title: draftTitle,
@@ -749,7 +749,7 @@ final class MeetingSession {
             endedAt: ISO8601DateFormatter().string(from: Date()),
             processing: .onDevice,
             events: finals,
-            items: items,
+            items: draftItems,
             notes: draftNotes,
             images: MeetingMoments.reconcile(images, events: finals),
             draftRevision: nil,
@@ -758,24 +758,13 @@ final class MeetingSession {
             revision: meetingRevision + 1,
             documentRevision: documentRevision,
             appliedOperationIds: appliedOperationIds,
-            generationStatus: NotesGenerationStatus(
-                state: .queued, generationId: generationID, sourceRevision: sourceRevision,
-                inputFingerprint: nil),
             finishReason: reason,
             captureError: captureError
         )
-        // The first durable finished file already contains useful transcript-based
-        // notes and captures. Provider work only improves wording later.
         if draftTitle == Self.title(for: clock.startedAt),
            let suggested = try? engine.suggestedTitle(for: meeting), !suggested.isEmpty {
             meeting.title = suggested
         }
-        if let immediate = try? engine.notes(for: meeting) {
-            meeting.notes = immediate
-            meeting.documentRevision = (meeting.documentRevision ?? 0) + 1
-        }
-        let inputFingerprint = MeetingEnhancer.inputFingerprint(meeting)
-        meeting.generationStatus?.inputFingerprint = inputFingerprint
         return meeting
     }
 
@@ -953,7 +942,7 @@ final class MeetingSession {
             draft = try store.recoverDraft(id: id)
             sidecarImages = try store.recoverImages(id: id)
         } catch {
-            status = "Could not read recovered notes — their recovery files were kept"
+            status = "Could not read the recovered meeting — their recovery files were kept"
             return nil
         }
         let journalEvents = store.replayJournal(id: id)
@@ -967,15 +956,14 @@ final class MeetingSession {
         // The id carries the start time, which matters: re-extracting a recovered
         // meeting against today's date would reinterpret every "Thursday" in it.
         let started = Self.startTime(fromMeetingId: id) ?? Date()
-        let items = (try? engine.extract(events: recovered, reference: started)) ?? []
-        var meeting = Meeting(
+        let meeting = Meeting(
             id: id,
             title: "\(draft?.title ?? Self.title(for: started)) (recovered)",
             startedAt: draft?.startedAt ?? ISO8601DateFormatter().string(from: started),
             endedAt: ISO8601DateFormatter().string(from: Date()),
             processing: .onDevice,
             events: recovered,
-            items: items,
+            items: draft?.items ?? [],
             notes: draft?.notes,
             images: MeetingMoments.reconcile(recoveredImages, events: recovered),
             sourceRevision: draft?.sourceRevision ?? 0,
@@ -985,16 +973,12 @@ final class MeetingSession {
             appliedOperationIds: draft?.appliedOperationIds,
             finishReason: .recovered
         )
-        // A recovered meeting used to arrive with no notes at all. The summary is not
-        // re-run here — recovery is meant to be immediate — but the extractive document
-        // costs nothing and is what the notes window expects to open onto.
-        if !recoveredWriting { meeting.notes = try? engine.notes(for: meeting) }
         do {
             try store.save(meeting)
             store.discardJournal(id: id)
             return meeting
         } catch {
-            status = "Could not save recovered notes — the transcript and screenshots are still recoverable"
+            status = "Could not save the recovered meeting — the transcript and screenshots are still recoverable"
             return nil
         }
     }

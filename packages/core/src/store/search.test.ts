@@ -77,13 +77,13 @@ describe('what the sidebar calls a note', () => {
         { id: '2', kind: 'bullet', text: 'The second cut runs long.', evidence: [] },
         { id: '3', kind: 'image', text: '', evidence: [], imageId: 'i1' },
       ] } });
-    expect(meetingNoteCount(m)).toBe(3);
+    expect(meetingNoteCount(m)).toBe(2);
   });
 
-  it('falls back to extracted items when nothing has been written yet', () => {
+  it('does not advertise hidden legacy review items as notes', () => {
     const m = meeting({ items: [{ id: 'i', category: 'decision', state: 'decided', title: 'x',
       evidence: [], assignee: 'unassigned', salience: 2 }] });
-    expect(meetingNoteCount(m)).toBe(1);
+    expect(meetingNoteCount(m)).toBe(0);
   });
 
   it('does not count an empty block as writing', () => {

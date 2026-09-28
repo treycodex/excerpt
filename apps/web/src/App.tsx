@@ -19,6 +19,6 @@ export function App() {
   };
 
   return <main id="main" tabIndex={-1}>
-    {legacy ? <LandingLegacy onStart={showDemo} /> : <Landing onStart={showDemo} />}
+    {legacy ? <><p className="legacy-notice">Archived landing-page design. <a href="#/">See the current transcript-first product →</a></p><LandingLegacy onStart={showDemo} /></> : <Landing onStart={showDemo} />}
   </main>;
 }

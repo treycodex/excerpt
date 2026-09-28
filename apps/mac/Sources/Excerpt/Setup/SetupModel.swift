@@ -41,6 +41,8 @@ final class SetupModel {
     private(set) var step: Step = .preview
     private(set) var permissions: [Permission: Permission.State] = [:]
     private(set) var modelState: ModelState = .unknown
+    private(set) var screenshotImportEnabled = false
+    private(set) var screenshotImportError: String?
 
     /// macOS applies a screen-recording grant only after the app restarts — measured
     /// in Stage 0, and an app that does not say so looks broken to someone who has
@@ -67,6 +69,10 @@ final class SetupModel {
     private let readPermission: @Sendable (Permission) async -> Permission.State
     private let requestPermission: @Sendable (Permission) async -> Permission.State
     private let installModel: @Sendable (@escaping @Sendable (Double) -> Void) async -> ModelState
+    private let requestScreenshotAccess: () throws -> Void
+    private let screenshotFolderNameAction: () -> String?
+
+    var screenshotFolderName: String? { screenshotFolderNameAction() }
 
     init(
         overlay: OverlayController,
@@ -75,7 +81,9 @@ final class SetupModel {
         defaults: UserDefaults = .standard,
         readPermission: @escaping @Sendable (Permission) async -> Permission.State = { await Permissions.state(of: $0) },
         requestPermission: @escaping @Sendable (Permission) async -> Permission.State = { await Permissions.request($0) },
-        installModel: @escaping @Sendable (@escaping @Sendable (Double) -> Void) async -> ModelState = SetupModel.installSpeechModel
+        installModel: @escaping @Sendable (@escaping @Sendable (Double) -> Void) async -> ModelState = SetupModel.installSpeechModel,
+        requestScreenshotAccess: @escaping () throws -> Void = {},
+        screenshotFolderName: @escaping () -> String? = { nil }
     ) {
         self.overlay = overlay
         self.microphone = microphone
@@ -84,6 +92,9 @@ final class SetupModel {
         self.readPermission = readPermission
         self.requestPermission = requestPermission
         self.installModel = installModel
+        self.requestScreenshotAccess = requestScreenshotAccess
+        self.screenshotFolderNameAction = screenshotFolderName
+        self.screenshotImportEnabled = defaults.bool(forKey: SystemScreenshotImporter.preferenceKey)
     }
 
     nonisolated private static let installSpeechModel: @Sendable (@escaping @Sendable (Double) -> Void) async -> ModelState = { onProgress in
@@ -161,6 +172,20 @@ final class SetupModel {
 
         guard provisioning == attempt else { return }   // a newer attempt owns the state
         modelState = result
+    }
+
+    func enableScreenshotImport() {
+        screenshotImportError = nil
+        do {
+            try requestScreenshotAccess()
+            screenshotImportEnabled = true
+        } catch {
+            screenshotImportError = error.localizedDescription
+        }
+    }
+
+    func refreshScreenshotImport() {
+        screenshotImportEnabled = defaults.bool(forKey: SystemScreenshotImporter.preferenceKey)
     }
 
     /// Distinguishes one attempt from the next, so a late progress callback from an

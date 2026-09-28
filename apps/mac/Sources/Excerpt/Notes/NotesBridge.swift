@@ -17,7 +17,7 @@ final class NotesBridge: NSObject {
         case startMeeting, openLiveNotes, getLiveMeetingTime, retryAutomaticNotes, listMeetings, searchMeetings, loadMeeting, mutateMeeting, renameMeeting, deleteMeeting
         case loadPreferences, savePreferences, exportMarkdown, exportHTML, summarizeNotes
         case getNotesProviderStatus, configureOpenAIKey, removeOpenAIKey
-        case loadDesktopSettings, saveCaptionSettings, selectMicrophone
+        case loadDesktopSettings, saveCaptionSettings, selectMicrophone, setScreenshotImportEnabled
     }
 
     private enum Failure: Error, LocalizedError {
@@ -46,6 +46,7 @@ final class NotesBridge: NSObject {
     private let desktopSettings: () -> DesktopSettings
     private let saveCaptionSettingsAction: (CaptionSettingsPatch) throws -> Void
     private let selectMicrophoneAction: (String) throws -> Void
+    private let setScreenshotImportEnabledAction: (Bool) throws -> Void
     private let exporter: any NotesExporting
     private let log = Logger(subsystem: "com.excerpt.app", category: "bridge")
     private var suppressEditorEcho = false
@@ -69,6 +70,7 @@ final class NotesBridge: NSObject {
          },
          saveCaptionSettings: @escaping (CaptionSettingsPatch) throws -> Void = { _ in },
          selectMicrophone: @escaping (String) throws -> Void = { _ in },
+         setScreenshotImportEnabled: @escaping (Bool) throws -> Void = { _ in },
          exporter: (any NotesExporting)? = nil) {
         self.store = store
         self.preferences = preferences
@@ -82,6 +84,7 @@ final class NotesBridge: NSObject {
         self.desktopSettings = desktopSettings
         self.saveCaptionSettingsAction = saveCaptionSettings
         self.selectMicrophoneAction = selectMicrophone
+        self.setScreenshotImportEnabledAction = setScreenshotImportEnabled
         self.exporter = exporter ?? NativeNotesExporter()
     }
 
@@ -120,6 +123,7 @@ final class NotesBridge: NSObject {
         loadDesktopSettings: ()       => send('loadDesktopSettings', []),
         saveCaptionSettings: (value)  => send('saveCaptionSettings', [JSON.stringify(value)]),
         selectMicrophone: (deviceId)  => send('selectMicrophone', [deviceId]),
+        setScreenshotImportEnabled: (enabled) => send('setScreenshotImportEnabled', [enabled]),
         listMeetings:    ()          => send('listMeetings', []),
         searchMeetings:  (query)     => send('searchMeetings', [query]),
         renameMeeting:  (id, title) => send('renameMeeting', [id, title]),
@@ -234,6 +238,14 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
                 throw Failure.badArguments("selectMicrophone")
             }
             try selectMicrophoneAction(id)
+            let snapshot = desktopSettings()
+            publishDesktopSettings()
+            return try json(snapshot)
+        case .setScreenshotImportEnabled:
+            guard let enabled = arguments.first as? Bool else {
+                throw Failure.badArguments("setScreenshotImportEnabled")
+            }
+            try setScreenshotImportEnabledAction(enabled)
             let snapshot = desktopSettings()
             publishDesktopSettings()
             return try json(snapshot)

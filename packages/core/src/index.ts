@@ -1,5 +1,6 @@
 export { splitIntoSubtitleLines, dashDialogue } from './caption/lines';
 export { toTurns } from './transcript/turns';
+export { transcriptTimeline } from './transcript/timeline';
 export type { Turn } from './transcript/turns';
 export { healthOf, sourceConcern } from './capture/health';
 export type { SourceHealth, SourceSignals } from './capture/health';
@@ -29,7 +30,7 @@ export { loadPreferences, savePreferences } from './store/preferences';
 export { notesCapability, mergeGeneratedNotes, compareNotesDocuments, notesMetadataDifference, boundTombstones } from './notes/generation';
 export type { NotesCapability, NotesEnhancement } from './notes/generation';
 export {
-  editableDocument, insertMeetingImage, previewTranscriptCorrection, preserveDocument,
+  editableDocument, hasSmartNotes, insertMeetingImage, previewTranscriptCorrection, preserveDocument,
   safeImageUrl, meetingImageContext, reconcileMeetingImageContexts, meetingImagePassage,
   transcriptEventTime, meetingImageTime, MOMENT_CONTEXT_BEFORE, MOMENT_CONTEXT_AFTER,
 } from './notes/editor';

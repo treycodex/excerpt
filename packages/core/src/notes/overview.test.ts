@@ -59,8 +59,8 @@ describe('document summary', () => {
 
     const edited: NotesDocument = { ...document, blocks: [{ ...document.blocks![0]!, text: 'We approved the October launch plan.', userEdited: true }] };
     expect(documentSummary(edited).map((line) => line.text)).toEqual(['We approved the October launch plan.']);
-    expect(toMarkdown({ ...meeting, notes: edited })).toContain('## Summary\n\n- We approved the October launch plan.');
-    expect(toHTML({ ...meeting, notes: edited })).toContain('<h2>Summary</h2><ul><li>We approved the October launch plan.</li></ul>');
+    expect(toMarkdown({ ...meeting, notes: edited })).toContain('## Notes\n\n- We approved the October launch plan.');
+    expect(toHTML({ ...meeting, notes: edited })).toContain('<p class="bullet" style="margin-left:0px">We approved the October launch plan.</p>');
 
     const removed: NotesDocument = { ...edited, blocks: [], deletedBlocks: [...edited.blocks!] };
     expect(documentSummary(removed)).toEqual([]);
@@ -96,13 +96,13 @@ describe('exports reflect the document overview', () => {
       blocks: [{ id: 'k', kind: 'bullet', text: 'We approved the launch plan.', evidence: evidence('e1', 1000) }] },
   };
 
-  it('puts the supported summary first and records completion in both formats', () => {
+  it('exports the visible notes after the transcript without the retired overview', () => {
     const markdown = toMarkdown(meeting);
-    expect(markdown.indexOf('## Summary')).toBeGreaterThan(-1);
-    expect(markdown.indexOf('## Summary')).toBeLessThan(markdown.indexOf('## Action items'));
-    expect(markdown).toContain('- [x] **Send the revised deck.**');
+    expect(markdown.indexOf('## Transcript')).toBeLessThan(markdown.indexOf('## Notes'));
+    expect(markdown).not.toContain('## Action items');
     const html = toHTML(meeting);
-    expect(html).toContain('<h2>Summary</h2>');
-    expect(html).toContain('Send the revised deck. · Assigned to you · Done');
+    expect(html).toContain('<h2 id="notes">Notes</h2>');
+    expect(html).toContain('href="#passage-e1"');
+    expect(html).not.toContain('Assigned to you');
   });
 });

@@ -13,8 +13,7 @@ private enum Palette {
     static let bad = Color(red: 0.98, green: 0.40, blue: 0.32)
 }
 
-/// The guided setup. Five steps, in the order a person experiences the product:
-/// see it, let it listen, get ready, done.
+/// The guided setup follows the order a person experiences the product.
 struct SetupView: View {
     @Bindable var model: SetupModel
     var onFinish: () -> Void
@@ -46,7 +45,10 @@ struct SetupView: View {
         }
         .background(Palette.ground)
         .preferredColorScheme(.dark)
-        .task { await model.refreshPermissions() }
+        .task {
+            model.refreshScreenshotImport()
+            await model.refreshPermissions()
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.refreshPermissions() }
         }
@@ -126,7 +128,7 @@ struct SetupView: View {
             heading(
                 "WELCOME TO EXCERPT",
                 "Remember the screen, and the conversation.",
-                "Capture the report or creative on screen, keep the discussion beside it, and read editable notes afterwards. Cinema captions follow the conversation while you watch the work. You can adjust their look later in Settings."
+                "Capture the report or creative on screen and keep it beside the transcript. Read the conversation afterwards, then write notes when you want them. Cinema captions follow the conversation while you watch the work. You can adjust their look later in Settings."
             )
 
             subtitlePreview
@@ -337,8 +339,8 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 26) {
             heading(
                 "YOU’RE READY",
-                "Your next meeting, in notes.",
-                "Look for the caption icon in your menu bar. Start listening when your meeting begins, then stop to open your notes."
+                "Your meeting, ready to revisit.",
+                "Look for the caption icon in your menu bar. Start listening when your meeting begins, then stop to read the transcript. Open the Notes tab to generate a summary or write your own."
             )
 
             VStack(alignment: .leading, spacing: 14) {
@@ -347,10 +349,12 @@ struct SetupView: View {
                 Row(symbol: "captions.bubble", tint: Palette.dim,
                     text: "Show captions over my meeting — ⌘⇧C")
                 Row(symbol: "doc.text", tint: Palette.dim,
-                    text: "Open live notes from the menu. Saved notes open when a meeting ends.")
+                    text: "Open the live transcript from the menu. The saved transcript opens when a meeting ends.")
                 Row(symbol: "folder", tint: Palette.dim,
-                    text: "Find your saved notes in the Excerpt folder")
+                    text: "Find transcripts, screenshots and notes in the Excerpt folder")
             }
+
+            screenshotChoice
 
             Text("If a shortcut is unavailable, use the menu. Settings shows shortcut conflicts.")
                 .font(.system(size: 12)).foregroundStyle(Palette.faint)
@@ -361,6 +365,33 @@ struct SetupView: View {
                 .frame(maxWidth: 520, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var screenshotChoice: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("OPTIONAL · MACOS SCREENSHOTS")
+                .font(.system(size: 10, design: .monospaced))
+                .tracking(2).foregroundStyle(Palette.faint)
+            Text("Use ⌘⇧4 or ⌘⇧5 during a meeting to place new screenshots in your transcript automatically. Excerpt needs access to the folder where macOS saves them\(model.screenshotFolderName.map { " (\($0))" } ?? "").")
+                .font(.system(size: 13)).foregroundStyle(Palette.dim)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Capture moment in the menu works without folder access.")
+                .font(.system(size: 12)).foregroundStyle(Palette.faint)
+            if model.screenshotImportEnabled {
+                Row(symbol: "checkmark.circle.fill", tint: Palette.ember,
+                    text: "Automatic import is on. You can turn it off in Settings.")
+            } else {
+                Button("Enable automatic import…") { model.enableScreenshotImport() }
+                    .buttonStyle(SecondaryButton())
+            }
+            if let error = model.screenshotImportError {
+                Callout(tone: .warn, title: "Screenshot import is off", message: error)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: 540, alignment: .leading)
+        .background(Palette.raise)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: - Footer

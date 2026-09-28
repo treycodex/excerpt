@@ -8,6 +8,7 @@ import Foundation
 /// distinguishes a user-taken capture from an arbitrary image saved there.
 @MainActor
 final class SystemScreenshotImporter {
+    static let preferenceKey = "excerpt.importSystemScreenshots"
     typealias Directory = @MainActor () -> URL?
     typealias IsScreenshot = @MainActor (URL) -> Bool
 
@@ -38,6 +39,7 @@ final class SystemScreenshotImporter {
     }
 
     var isWatching: Bool { observation != nil }
+    var destinationName: String? { directory()?.lastPathComponent }
 
     init(
         directory: @escaping Directory = { SystemScreenshotImporter.systemScreenshotDirectory() },
@@ -47,6 +49,16 @@ final class SystemScreenshotImporter {
         self.directory = directory
         self.isScreenshot = isScreenshot
         self.pollInterval = pollInterval
+    }
+
+    /// Called only after the person chooses automatic import in Settings. Reading
+    /// this folder is what causes macOS to ask for Desktop access when applicable.
+    func requestFolderAccess() throws {
+        guard let folder = directory()?.standardizedFileURL else {
+            throw Failure.noSavedFolder
+        }
+        do { _ = try imageFiles(in: folder) }
+        catch { throw Failure.folderAccessDenied }
     }
 
     func start(
@@ -166,8 +178,17 @@ final class SystemScreenshotImporter {
 
     enum Failure: LocalizedError {
         case unreadable
+        case noSavedFolder
+        case folderAccessDenied
         var errorDescription: String? {
-            "The saved macOS screenshot could not be read. Check its file and try another screenshot."
+            switch self {
+            case .unreadable:
+                "The saved macOS screenshot could not be read. Check its file and try another screenshot."
+            case .noSavedFolder:
+                "Set macOS Screenshot to save to a folder in ⌘⇧5 → Options, then try again."
+            case .folderAccessDenied:
+                "Excerpt cannot read the screenshot folder. Allow folder access in System Settings → Privacy & Security → Files & Folders, then try again."
+            }
         }
     }
 }

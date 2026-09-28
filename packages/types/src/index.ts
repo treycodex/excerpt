@@ -278,6 +278,7 @@ export interface DesktopSettings {
   captions: CaptionSettings;
   microphone: MicrophoneSettings;
   shortcuts: MeetingShortcutStatus[];
+  screenshotImport: { enabled: boolean; folderName: string | null };
 }
 
 export interface Meeting {

@@ -64,7 +64,8 @@ describe('readable meeting notes', () => {
     const next = refreshMeetingNotes(input);
     expect(next.notes!.keyPoints[0]!.text).toBe('My edited point');
     expect(next.items[0]!.completed).toBe(true);
-    expect(toMarkdown(next)).toContain('- [x] **Send final deck**');
+    expect(next.items[0]!.title).toBe('Send final deck');
+    expect(toMarkdown(next)).not.toContain('## Action items');
     expect(toMarkdown(next)).toContain('My edited point');
   });
   it('retains edits even when a new summary no longer selects their source', () => {

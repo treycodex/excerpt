@@ -25,13 +25,13 @@ struct MeetingLibraryEntry: Codable, Sendable, Equatable {
         mineCount = live.filter { $0.assignee == .you }.count
         let written: Int
         if let blocks = meeting.notes?.blocks, !blocks.isEmpty {
-            written = blocks.filter { $0.kind == "image" || !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+            written = blocks.filter { $0.kind != "image" && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
         } else {
             written = MeetingLibrarySearch.noteTexts(meeting).filter {
                 !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }.count
         }
-        noteCount = written == 0 ? live.count : written
+        noteCount = written
     }
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { applyPreferences, bridge, isNativeHost, loadMeeting, loadPreferences } from '@excerpt/core';
+import { bridge, isNativeHost, loadMeeting, loadPreferences } from '@excerpt/core';
 import type { Meeting, Preferences as Prefs } from '@excerpt/types';
 import { Notes } from './views/Notes';
 import { Library } from './views/Library';
@@ -62,7 +62,7 @@ export function App() {
   } else if (!meeting || meeting.id !== route.id) {
     body = <div className="notes"><p className="rubric">Reading…</p></div>;
   } else {
-    body = <Notes key={meeting.id} meeting={prefs ? { ...meeting, items: applyPreferences(meeting.items, prefs) } : meeting}
+    body = <Notes key={meeting.id} meeting={meeting}
       prefs={prefs} onSaved={(saved) => setMeeting((current) => current?.id === saved.id ? saved : current)} />;
   }
   return <><button className="skip-link" onClick={() => document.querySelector<HTMLElement>('#main')?.focus()}>Skip to content</button><main id="main" tabIndex={-1}>{body}</main></>;

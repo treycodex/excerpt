@@ -80,6 +80,8 @@ final class MeetingStore {
     }
 
     private struct LibraryIndex: Codable {
+        // Version 2 counts written text, excluding transcript captures and hidden review items.
+        var version: Int = 2
         var stamp: FileStamp
         var record: MeetingLibraryRecord
     }
@@ -182,7 +184,7 @@ final class MeetingStore {
             }
             if let data = try? Data(contentsOf: libraryIndexURL(id)),
                let index = try? JSONDecoder.excerpt.decode(LibraryIndex.self, from: data),
-               index.stamp == stamp, index.record.entry.id == id {
+               index.version == 2, index.stamp == stamp, index.record.entry.id == id {
                 touchLibraryCache(id)
                 libraryCache[id] = index
                 return index.record

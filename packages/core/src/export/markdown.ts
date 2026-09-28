@@ -1,128 +1,83 @@
-import type { Category, Item, Meeting } from '@excerpt/types';
-import { noteTitle } from '../notes/summary';
-import { editableDocument, meetingImageTime, safeImageUrl } from '../notes/editor';
-import { documentSummary } from '../notes/overview';
-
-const HEADING: Record<Category, string> = {
-  decision: 'Decisions',
-  action: 'Action items',
-  deadline: 'Deadlines',
-  question: 'Open questions',
-};
+import type { Meeting } from '@excerpt/types';
+import { editableDocument, hasSmartNotes, meetingImageTime, safeImageUrl } from '../notes/editor';
+import { transcriptTimeline } from '../transcript/timeline';
 
 function clock(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
+const stamp = (event: Meeting['events'][number]) => event.tStart !== undefined
+  ? clock(event.tStart * 1000) : `~${clock(event.tArrived)}`;
+const speaker = (event: Meeting['events'][number]) => event.role === 'you' ? 'You'
+  : event.speakerLabel === 'SPEAKER' ? 'Meeting audio' : event.speakerLabel;
+const writtenBlocks = (meeting: Meeting) => hasSmartNotes(meeting)
+  ? (editableDocument(meeting).blocks ?? []).filter((block) => block.kind !== 'image' && block.text.trim()) : [];
+const escape = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+const passageId = (id: string) => `passage-${encodeURIComponent(id)}`;
 
-function renderItem(item: Item): string {
-  const lines: string[] = [];
-  const state = item.state === 'decided' ? '' : ` _(${item.state})_`;
-  const edited = item.userEdited ? ' _(edited)_' : '';
-  lines.push(`- ${item.category === 'action' ? `[${item.completed ? 'x' : ' '}] ` : ''}**${noteTitle(item)}**${state}${edited}`);
-
-  for (const e of item.evidence) {
-    // Timing is approximate — measured at event arrival, never from the audio.
-    lines.push(`  > ${e.quote}`);
-    lines.push(`  > — ${e.speakerLabel}, ${e.tStart !== undefined ? clock(e.tStart * 1000) : `~${clock(e.tArrived)}`}`);
-  }
-  if (item.assignee === 'you') lines.push('  - Assigned to you');
-  if (item.due) lines.push(`  - Due ${item.due}`);
-  return lines.join('\n');
-}
-
-/**
- * Markdown export. Deliberately plain: this has to paste cleanly into whatever the
- * user already uses, which is the whole point of not building integrations.
- */
+/** Both formats follow the app: transcript and captures first, optional notes after. */
 export function toMarkdown(meeting: Meeting): string {
-  const out: string[] = [];
-  const live = meeting.items.filter((i) => !i.dismissed);
-  const notesDocument = meeting.notes ? editableDocument(meeting) : undefined;
-
-  out.push(`# ${meeting.title}`, '');
-  out.push(`${new Date(meeting.startedAt).toLocaleString()}`);
-  const decided = live.filter((i) => i.category === 'decision' && i.state === 'decided').length;
-  out.push(`${live.length} items · ${decided} decided · transcription: ${meeting.processing}`, '');
-
-  const summary = notesDocument ? documentSummary(notesDocument) : [];
-  if (summary.length) {
-    out.push('## Summary', '');
-    for (const line of summary) out.push(`- ${line.text}`);
-    out.push('');
-  }
-
-  if (notesDocument?.blocks) {
-    for (const block of notesDocument.blocks) {
-      if (block.kind === 'image') {
-        const image = meeting.images?.find((i) => i.id === block.imageId);
-        if (image && safeImageUrl(image.dataUrl)) out.push(`![${block.text.replace(/[\[\]\n]/g, ' ') || 'Meeting screenshot'}](${image.dataUrl})`, `_${image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image))} · Screenshot_`, '');
-      } else out.push(`${block.kind === 'heading' ? '## ' : block.kind === 'bullet' ? `${'  '.repeat(block.indent ?? 0)}- ` : ''}${block.text}`, '');
+  const out: string[] = [`# ${meeting.title}`, '', new Date(meeting.startedAt).toLocaleString(), '', '## Transcript', ''];
+  for (const entry of transcriptTimeline(meeting.events, meeting.images)) {
+    if (entry.kind === 'image') {
+      const image = entry.image;
+      const when = image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image));
+      if (safeImageUrl(image.dataUrl)) out.push(`![${image.caption.replace(/[\[\]\n]/g, ' ') || 'Meeting screenshot'}](${image.dataUrl})`);
+      out.push(`_${when} · Screenshot${image.caption ? ` · ${image.caption}` : ''}_`, '');
+      continue;
     }
-  } else if (meeting.notes) {
-    const sections = [{ title: 'Key points', bullets: meeting.notes.keyPoints }, ...meeting.notes.topics];
-    for (const section of sections) {
-      if (!section.bullets.length) continue;
-      out.push(`## ${section.title}`, '');
-      for (const bullet of section.bullets) out.push(`- ${bullet.text}${bullet.userEdited ? ' _(edited)_' : ''}`);
-      out.push('');
+    out.push(`### ${speaker(entry.turn.events[0]!)} · ${stamp(entry.turn.events[0]!)}`, '');
+    for (const event of entry.turn.events) {
+      out.push(event.text, '');
+      if (event.originalText !== undefined) {
+        out.push(`_Original: ${event.originalText}_`);
+        for (const correction of event.corrections ?? []) out.push(`_Corrected ${correction.correctedAt}: ${correction.text}_`);
+        out.push('');
+      }
     }
   }
-
-  const fallback: Category[] = ['decision', 'action', 'deadline', 'question'];
-  const order = Array.from(new Set(live.map((i) => i.category))) as Category[];
-  for (const category of fallback) if (!order.includes(category)) order.push(category);
-  const displayOrder = meeting.notes ? [...order.filter((c) => c !== 'action'), 'action' as const] : order;
-  for (const cat of displayOrder) {
-    const group = live.filter((i) => i.category === cat);
-    if (!group.length) continue;
-    out.push(`## ${HEADING[cat]}`, '');
-    for (const item of group) out.push(renderItem(item), '');
-  }
-
-  const needsReview = live.filter((i) => i.category === 'action' && i.assignee === 'unassigned');
-  if (needsReview.length) {
-    out.push('## Needs review', '');
-    out.push('_Excerpt could not tell who these were addressed to._', '');
-    for (const item of needsReview) out.push(`- ${noteTitle(item)}`);
-    out.push('');
-  }
-
-  out.push('## Transcript', '');
-  for (const e of meeting.events.filter((x) => x.isFinal)) {
-    if (e.originalText !== undefined) {
-      out.push(`_Original: ${e.originalText}_`);
-      for (const correction of e.corrections ?? []) out.push(`_Corrected ${correction.correctedAt}: ${correction.text}_`);
-      out.push('');
+  const notes = writtenBlocks(meeting);
+  if (notes.length) {
+    // Attribute quotes with the transcript's own names, not the raw recognizer labels.
+    const byId = new Map(meeting.events.map((event) => [event.id, event]));
+    const quoted = (source: Meeting['items'][number]['evidence'][number]) => {
+      const event = source.eventIds.map((id) => byId.get(id)).find(Boolean);
+      return event ? speaker(event) : source.speakerLabel === 'YOU' ? 'You' : source.speakerLabel === 'SPEAKER' ? 'Meeting audio' : source.speakerLabel;
+    };
+    out.push('## Notes', '');
+    for (const block of notes) {
+      const prefix = block.kind === 'heading' ? '### ' : block.kind === 'bullet' ? `${'  '.repeat(block.indent ?? 0)}- ` : '';
+      out.push(`${prefix}${block.text}`, '');
+      for (const source of block.evidence) out.push(`> ${source.quote.replace(/\n/g, '\n> ')}\n> — ${quoted(source)}, ${source.tStart !== undefined ? clock(source.tStart * 1000) : `~${clock(source.tArrived)}`}`, '');
     }
-    out.push(`**${e.speakerLabel}** ${e.tStart !== undefined ? clock(e.tStart * 1000) : `~${clock(e.tArrived)}`} — ${e.text}`, '');
   }
-
-  out.push('---', '', '_Notes by Excerpt. Times marked ~ are approximate. The original transcript is preserved._');
+  out.push('---', '', '_Times marked ~ are approximate. Original wording and correction history are preserved._');
   return out.join('\n');
 }
 
-/** Portable image export: a single offline HTML file, with escaped text and embedded raster images. */
+/** One offline document: image bytes are embedded once and sources link to passages. */
 export function toHTML(meeting: Meeting): string {
-  const escape = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-  const document = editableDocument(meeting);
-  const body = document.blocks!.map((block) => {
-    if (block.kind === 'image') {
-      const image = meeting.images?.find((i) => i.id === block.imageId);
-      return image && safeImageUrl(image.dataUrl) ? `<figure><img src="${image.dataUrl}" alt="${escape(block.text || 'Meeting screenshot')}"><figcaption>${image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image))} · ${escape(block.text || 'Screenshot')}</figcaption></figure>` : '';
-    }
-    const text = escape(block.text).replace(/\n/g, '<br>');
-    if (block.kind === 'heading') return `<h2>${text}</h2>`;
-    if (block.kind === 'bullet') return `<ul style="margin-left:${Math.min(2, Math.max(0, block.indent ?? 0)) * 24}px"><li>${text}</li></ul>`;
-    return `<p>${text}</p>`;
+  const eventIds = new Set(meeting.events.filter((event) => event.isFinal).map((event) => event.id));
+  const notes = writtenBlocks(meeting).map((block) => {
+    const value = escape(block.text).replace(/\n/g, '<br>');
+    const sources = [...new Set(block.evidence.flatMap((source) => source.eventIds))]
+      .filter((id) => eventIds.has(id)).map((id, index) => `<a href="#${passageId(id)}">Source ${index + 1}</a>`).join(' · ');
+    const text = block.kind === 'heading' ? `<h3>${value}</h3>` : block.kind === 'bullet'
+      ? `<p class="bullet" style="margin-left:${Math.max(0, Math.min(2, block.indent ?? 0)) * 24}px">${value}</p>` : `<p>${value}</p>`;
+    return `${text}${sources ? `<small>${sources}</small>` : ''}`;
   }).join('\n');
-  const summary = documentSummary(document).map((line) => `<li>${escape(line.text)}</li>`).join('');
-  const review = meeting.items.filter((i) => !i.dismissed).map((i) => `<li>${escape(noteTitle(i))}${i.due ? ` · Due ${escape(i.due)}` : ''}${i.assignee === 'you' ? ' · Assigned to you' : ''}${i.completed ? ' · Done' : ''}${i.confirmed ? ' · Confirmed by you' : ''}</li>`).join('');
-  const transcript = meeting.events.filter((event) => event.isFinal).map((event) => {
-    const history = event.originalText === undefined ? '' : `<small>Original: ${escape(event.originalText)}${(event.corrections ?? []).map((correction) => `<br>Corrected ${escape(correction.correctedAt)}: ${escape(correction.text)}`).join('')}</small>`;
-    return `<p><b>${escape(event.speakerLabel)}</b> ${event.tStart !== undefined ? clock(event.tStart * 1000) : `~${clock(event.tArrived)}`} — ${escape(event.text)}${history}</p>`;
-  }).join('');
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>${escape(meeting.title)}</title><style>body{max-width:760px;margin:60px auto;padding:0 24px;font:17px/1.65 system-ui;color:#242424}h1{font-size:36px;line-height:1.2}h2{margin-top:32px;font-size:23px}p,ul{margin:8px 0}figure{margin:28px 0}img{max-width:100%;height:auto}figcaption,small{display:block;font-size:13px;color:#666}details{margin-top:48px}li{white-space:normal}</style><h1>${escape(meeting.title)}</h1><p>${escape(meeting.startedAt)}</p>${summary ? `<h2>Summary</h2><ul>${summary}</ul>` : ''}${body}${review ? `<details><summary>Decisions and commitments</summary><ul>${review}</ul></details>` : ''}${transcript ? `<details><summary>Transcript and correction history</summary>${transcript}</details>` : ''}</html>`;
+  const transcript = transcriptTimeline(meeting.events, meeting.images).map((entry) => {
+    if (entry.kind === 'image') {
+      const image = entry.image;
+      const when = image.timeKnown === false ? 'Time unknown' : clock(meetingImageTime(image));
+      const picture = safeImageUrl(image.dataUrl) ? `<img src="${image.dataUrl}" alt="${escape(image.caption || 'Meeting screenshot')}">` : '<p>Image unavailable</p>';
+      return `<figure>${picture}<figcaption>${escape(when)} · Screenshot${image.caption ? ` · ${escape(image.caption)}` : ''}</figcaption></figure>`;
+    }
+    const lines = entry.turn.events.map((event) => {
+      const history = event.originalText === undefined ? '' : `<details><summary>Correction history</summary><p>Original: ${escape(event.originalText)}</p>${(event.corrections ?? []).map((correction) => `<p>Corrected ${escape(correction.correctedAt)}: ${escape(correction.text)}</p>`).join('')}</details>`;
+      return `<div id="${passageId(event.id)}"><p>${escape(event.text).replace(/\n/g, '<br>')}</p>${history}</div>`;
+    }).join('');
+    return `<section class="turn"><h3>${escape(speaker(entry.turn.events[0]!))} <span>${stamp(entry.turn.events[0]!)}</span></h3>${lines}</section>`;
+  }).join('\n');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>${escape(meeting.title)}</title><style>body{max-width:760px;margin:48px auto;padding:0 24px;font:17px/1.7 system-ui;color:#242424;background:#faf9f2}h1{font-size:36px;line-height:1.2}h2{margin:42px 0 20px;font-size:22px}h3{font-size:16px;margin:26px 0 6px}.turn h3{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#57574f}.turn h3 span{font-weight:400;margin-left:12px}p{margin:7px 0}.bullet{padding-left:18px}.bullet:before{content:'• ';margin-left:-18px}figure{margin:26px 0}img{max-width:100%;height:auto}figcaption,small,details,footer{display:block;font-size:13px;color:#57574f}a{color:inherit}nav{display:flex;gap:18px}footer{margin-top:40px;border-top:1px solid #ccc;padding-top:12px}:target{background:#eee8cc}</style></head><body><h1>${escape(meeting.title)}</h1><p>${escape(new Date(meeting.startedAt).toLocaleString())}</p>${notes ? '<nav aria-label="Meeting sections"><a href="#transcript">Transcript</a><a href="#notes">Notes</a></nav>' : ''}<h2 id="transcript">Transcript</h2>${transcript || '<p>No transcript or screenshots were captured.</p>'}${notes ? `<h2 id="notes">Notes</h2>${notes}` : ''}<footer>Times marked ~ are approximate. Original wording and correction history are preserved.</footer></body></html>`;
 }
