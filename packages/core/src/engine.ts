@@ -10,12 +10,11 @@
  * Nothing in this file or its imports may touch `window`, `document`, IndexedDB or
  * `fetch`. Capture, storage and rendering are the host's job on both platforms.
  */
-import type { Item, Meeting, Preferences, TranscriptEvent } from '@excerpt/types';
+import type { Meeting, TranscriptEvent } from '@excerpt/types';
 import { extractItems } from './extract';
 import { buildNotesDocument, shapeNotice, suggestMeetingTitle } from './notes/summary';
 import { composeVisualNotes } from './notes/visual';
 import { splitIntoSubtitleLines, dashDialogue } from './caption/lines';
-import { applyPreferences, deriveBoosts, orderCategories, matchedBoosts, DEFAULT_PREFERENCES } from './scoring';
 import { toMarkdown } from './export/markdown';
 
 /**
@@ -29,8 +28,6 @@ export interface EngineAPI {
   /** Version of the engine contract, so a stale bundle is visible rather than subtle. */
   version: string;
   extract(eventsJSON: string, referenceISO?: string): string;
-  rank(itemsJSON: string, preferencesJSON: string): string;
-  boostsFor(instruction: string): string;
   subtitleLines(text: string, maxChars?: number): string;
   /**
    * The immediately saved extractive document, with captured moments composed
@@ -51,10 +48,9 @@ export interface EngineAPI {
    */
   shapeNotice(meetingJSON: string): string;
   markdown(meetingJSON: string): string;
-  defaultPreferences(): string;
 }
 
-export const ENGINE_VERSION = '3';
+export const ENGINE_VERSION = '4';
 
 function parse<T>(json: string, fallback: T): T {
   try {
@@ -75,19 +71,6 @@ export const engine: EngineAPI = {
     // reinterpret its deadlines against today.
     const reference = referenceISO ? new Date(referenceISO) : new Date();
     return JSON.stringify(extractItems(events, Number.isNaN(reference.getTime()) ? new Date() : reference));
-  },
-
-  rank(itemsJSON, preferencesJSON) {
-    const items = parse<Item[]>(itemsJSON, []);
-    const prefs = { ...DEFAULT_PREFERENCES, ...parse<Partial<Preferences>>(preferencesJSON, {}) };
-    const ranked = applyPreferences(items, prefs);
-    return JSON.stringify(
-      ranked.map((item) => ({ ...item, matched: matchedBoosts(item, prefs) })),
-    );
-  },
-
-  boostsFor(instruction) {
-    return JSON.stringify(deriveBoosts(instruction ?? ''));
   },
 
   subtitleLines(text, maxChars) {
@@ -122,10 +105,6 @@ export const engine: EngineAPI = {
     const meeting = parse<Parameters<typeof toMarkdown>[0] | null>(meetingJSON, null);
     return meeting ? toMarkdown(meeting) : '';
   },
-
-  defaultPreferences() {
-    return JSON.stringify(DEFAULT_PREFERENCES);
-  },
 };
 
-export { extractItems, splitIntoSubtitleLines, dashDialogue, applyPreferences, deriveBoosts, orderCategories };
+export { extractItems, splitIntoSubtitleLines, dashDialogue };

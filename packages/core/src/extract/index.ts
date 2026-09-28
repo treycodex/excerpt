@@ -138,6 +138,4 @@ export { classifyAction } from './actions';
 export { isOpenQuestion } from './questions';
 export { findDeadline } from './deadlines';
 export { toSentences } from './sentences';
-export { relateItems } from './relate';
-export type { ItemRelation, RelationKind } from './relate';
 export type { Sentence } from './types';

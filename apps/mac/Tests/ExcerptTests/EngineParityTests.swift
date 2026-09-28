@@ -141,25 +141,4 @@ struct EngineParityTests {
         #expect(lines.allSatisfy { $0.count <= 42 })
         #expect(lines.joined(separator: " ").contains("campaign launch"))
     }
-
-    @Test func `ranking orders by what the user said they care about`() throws {
-        let engine = try Self.makeEngine()
-        let events = [
-            TranscriptEvent(id: "e0", sessionId: "s", role: .remote, speakerLabel: "SPEAKER",
-                            text: "Okay. Let's move the campaign launch to October. That's decided.",
-                            isFinal: true, tArrived: 0),
-            TranscriptEvent(id: "e1", sessionId: "s", role: .you, speakerLabel: "YOU",
-                            text: "I'll send the budget summary to the client by Thursday.",
-                            isFinal: true, tArrived: 4000),
-        ]
-        let items = try engine.extract(events: events, reference: Date(timeIntervalSince1970: 1_788_000_000))
-        var preferences = Preferences.default
-        preferences.boosts = try engine.boosts(for: "I care about client budgets")
-
-        let ranked = try engine.rank(items, preferences: preferences)
-        #expect(ranked.first?.title.contains("budget") == true)
-        // Nothing is ever hidden for not being asked for.
-        #expect(ranked.count == items.count)
-        #expect(ranked.first?.matched?.isEmpty == false)
-    }
 }

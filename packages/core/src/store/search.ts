@@ -132,14 +132,11 @@ export function meetingNoteCount(meeting: Meeting): number {
 
 /** Mirror the small native library projection in synthetic editor tests. */
 export function meetingLibraryEntry(meeting: Meeting): MeetingLibraryEntry {
-  const live = meeting.items.filter((item) => !item.dismissed);
   return {
     id: meeting.id, title: meeting.title, startedAt: meeting.startedAt,
     ...(meeting.endedAt === undefined ? {} : { endedAt: meeting.endedAt }),
     processing: meeting.processing,
     ...(meeting.draftRevision === undefined ? {} : { draftRevision: meeting.draftRevision }),
     noteCount: meetingNoteCount(meeting),
-    decidedCount: live.filter((item) => item.category === 'decision' && item.state === 'decided').length,
-    mineCount: live.filter((item) => item.assignee === 'you').length,
   };
 }

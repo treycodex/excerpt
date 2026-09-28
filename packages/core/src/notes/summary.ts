@@ -59,13 +59,6 @@ const substance = (text: string, recurring: Set<string> = new Set()) => {
   return score;
 };
 
-/** Display a task as a verb phrase while retaining its original evidence. */
-export function noteTitle(item: Item): string {
-  if (item.category !== 'action' || item.userEdited) return item.title;
-  const text = item.title.replace(/^(?:okay[, ]+|so[, ]+)?(?:i(?:['’]ll| will| can)|let me|can you|could you|would you|please)\s+/i, '').replace(/\?$/, '.');
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 /** Below this a capture is too short to say anything about its shape. */
 const SHAPE_MIN_WORDS = 200;
 

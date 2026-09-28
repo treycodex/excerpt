@@ -77,23 +77,13 @@ struct Item: Codable, Sendable, Identifiable, Equatable {
     var completed: Bool?
     var confirmed: Bool?
     var needsReview: Bool?
-    /// Which boost terms fired, filled in by `rank`. Not stored.
-    var matched: [String]?
 }
 
 struct Preferences: Codable, Sendable, Equatable {
-    var order: [Category]
-    var boosts: [String]
-    var instruction: String
     var transcriptionChoice: String?
     var notesProvider: String?
 
-    static let `default` = Preferences(
-        order: [.decision, .action, .deadline, .question],
-        boosts: [],
-        instruction: "",
-        notesProvider: "apple"
-    )
+    static let `default` = Preferences(notesProvider: "apple")
 }
 
 struct Meeting: Codable, Sendable, Identifiable, Equatable {
