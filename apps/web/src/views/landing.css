@@ -98,6 +98,10 @@
 .lp-full { width: 100%; margin-top: 22px; }
 .lp-text { background: none; border: 0; padding: 0; color: var(--ink); font-size: 13.5px; display: inline-flex; gap: 8px; align-items: center; }
 .lp-text:hover { text-decoration: underline; text-underline-offset: 5px; }
+/* A link inside running text: it has to read as one, underlined before it is hovered. */
+.lp-text.lp-inline { display: inline; font: inherit; color: var(--dim); cursor: pointer; }
+.lp-inline, .lp .lp-link { text-decoration: underline; text-underline-offset: 3px; color: var(--dim); }
+.lp-inline:hover, .lp .lp-link:hover { color: var(--ink); }
 
 /* ── Hero ───────────────────────────────────────────────────────────────────── */
 .lp-hero {
@@ -208,6 +212,7 @@
 .lp-step { display: block; font: 40px/1 var(--serif); color: #8D9180; margin-bottom: 30px; }
 .lp-note { max-width: 74ch; margin: 34px 0 0; font-size: 13.5px; line-height: 1.7; color: var(--faint); }
 .lp-centred .lp-note { margin-inline: auto; text-align: center; }
+#install .lp-cta { margin-top: 30px; }
 
 /* ── Split: copy beside a still ─────────────────────────────────────────────── */
 .lp-split { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }

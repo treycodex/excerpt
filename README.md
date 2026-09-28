@@ -9,6 +9,37 @@ when you ask: on this Mac with Apple Intelligence, or with OpenAI using your own
 Keychain key if you choose that in Settings. Speech transcription and meeting files
 remain native to the Mac app.
 
+## Install
+
+[Download Excerpt.dmg](https://github.com/treycodex/excerpt/releases/latest/download/Excerpt.dmg)
+from the latest release. It requires macOS 26 or later on Apple silicon.
+
+1. Open `Excerpt.dmg` and drag **Excerpt** onto **Applications**.
+2. Open Excerpt from Applications. macOS says Apple could not verify that Excerpt is
+   free of malware, and does not open it. Choose **Done** (not **Move to Trash**).
+3. Open **System Settings → Privacy & Security**, scroll to **Security**, and click
+   **Open Anyway** beside “Excerpt” was blocked to protect your Mac. Choose **Open Anyway** again and
+   enter your password or use Touch ID.
+
+Excerpt then opens normally, and setup walks through the microphone, screen
+recording and speech-model permissions.
+
+### The app is unsigned
+
+Excerpt is signed with a local certificate, not an Apple Developer ID, and is not
+notarized by Apple. That is why macOS blocks the first launch. On current macOS,
+right-clicking the app and choosing **Open** no longer gets past this; use **Open
+Anyway** as above. The button stays in Privacy & Security for about an hour after the
+blocked attempt; if it has gone, open Excerpt again.
+
+If you prefer the Terminal, this clears the download flag instead of steps 2–3:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Excerpt.app
+```
+
+Or build it yourself from this repository (see [Development](#development)).
+
 ## Meeting controls
 
 Start from the menu, library, or ⌘⇧R. Starting leaves the meeting window closed; use
