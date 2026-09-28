@@ -9,13 +9,17 @@ Each item says what is wrong, where, and — where it matters — why it was lef
 
 ---
 
-## 1. The library reads every meeting in full
+## 1. ~~The library reads every meeting in full~~ — done
 
-`NotesBridge.listMeetings` and `searchMeetings` load every stored meeting —
-transcript, notes and every screenshot's bytes — to build a list row or a search
-hit, and the sidebar asks for the library on nearly every navigation. The rows
-themselves are small (`MeetingLibraryEntry`); the cost is in reading and decoding
-the files to produce them.
+Library rows and search already came from small per-meeting index files (see
+`DESKTOP-PHASE-7-MEASUREMENTS.md`). Two paths still opened whole meetings, and
+were fixed 28 September 2026: rebuilding an index read and hashed every
+screenshot, and launch loaded every meeting to find notes still being written.
+Indexes now record that state (index version 3), and rebuilds skip image bytes.
+
+Measured with `EXCERPT_LIBRARY_MEASURE=1` (20 meetings, 12 screenshots each,
+three runs): cold rebuild 255 ms → 50–85 ms; launch scan 249 ms → 10–11 ms; warm
+reopen unchanged at 9–14 ms. The first launch after upgrading pays one rebuild.
 
 ## 2. Capture health has never been watched during a real capture
 

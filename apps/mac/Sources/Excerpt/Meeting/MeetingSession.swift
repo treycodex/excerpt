@@ -707,8 +707,9 @@ final class MeetingSession {
     /// A queued/running enhancement is durable work, not a reason to hold Quit open.
     /// On the next launch it is restarted from its saved source snapshot.
     func resumePendingEnhancements() {
-        for meeting in store.list() where meeting.generationStatus?.state == .queued
-            || meeting.generationStatus?.state == .running {
+        for id in store.pendingGenerationIds() {
+            guard let meeting = try? store.load(id: id), meeting.generationStatus?.state == .queued
+                    || meeting.generationStatus?.state == .running else { continue }
             startEnhancement(for: meeting)
         }
     }

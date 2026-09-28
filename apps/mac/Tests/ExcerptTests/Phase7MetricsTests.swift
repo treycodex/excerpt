@@ -258,4 +258,35 @@ struct Phase7MetricsTests {
                 + "title_edit_ms=\(uniqueEditMs)")
         }
     }
+
+    /// A cold library index rebuild and the launch scan for queued notes, over a
+    /// library where every meeting has a dozen screenshots. Neither needs image bytes.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["EXCERPT_LIBRARY_MEASURE"] == "1"))
+    func `measure cold library rebuild and launch scan with screenshots`() throws {
+        let root = URL(filePath: NSTemporaryDirectory()).appending(path: "excerpt-library-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let shots = try (0..<12).map { "data:image/png;base64,\(try screenshot(seed: $0).base64EncodedString())" }
+        let writer = try MeetingStore(root: root)
+        for index in 0..<20 {
+            let images = shots.enumerated().map { offset, dataUrl in
+                MeetingImage(id: "shot-\(offset)", dataUrl: dataUrl, capturedAt: "2026-09-23T09:00:00Z",
+                    at: Double(offset * 300_000), caption: "Synthetic screen \(offset)")
+            }
+            var saved = meeting(id: "meeting-\(index)", minutes: 45, images: images)
+            if index == 7 {
+                saved.generationStatus = NotesGenerationStatus(state: .queued, generationId: "g", sourceRevision: 0)
+            }
+            try writer.save(saved)
+        }
+
+        let (warm, warmMs) = timed { (try? MeetingStore(root: root))?.libraryRecords() ?? [] }
+        try FileManager.default.removeItem(at: root.appending(path: "library-index"))
+        let (cold, coldMs) = timed { (try? MeetingStore(root: root))?.libraryRecords() ?? [] }
+        let launch = try MeetingStore(root: root)
+        let (pending, scanMs) = timed { launch.pendingGenerationIds() }
+        #expect(warm.count == 20 && cold.count == 20)
+        #expect(pending == ["meeting-7"])
+        print("LIBRARY_MEASURE meetings=20 screenshots_each=12 warm_reopen_ms=\(warmMs) "
+            + "cold_rebuild_ms=\(coldMs) launch_pending_scan_ms=\(scanMs)")
+    }
 }
