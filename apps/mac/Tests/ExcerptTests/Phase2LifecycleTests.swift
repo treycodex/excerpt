@@ -91,6 +91,7 @@ struct Phase2LifecycleTests {
                 for: session.meetingId)
         }
         await session.stop()
+        #expect(session.status == "Transcript saved")
         let saved = try store.load(id: session.meetingId)
         #expect(saved.notes?.blocks?.contains { $0.kind == "bullet" } == false)
         #expect(saved.generationStatus == nil)
@@ -105,6 +106,21 @@ struct Phase2LifecycleTests {
         #expect(throws: (any Error).self) { _ = try session.retryAutomaticNotes(id: saved.id) }
         await gate.open()
         #expect(await waitUntil { (try? store.load(id: saved.id).generationStatus?.state) == .ready })
+    }
+
+    @Test func `a meeting with no words says why instead of only that it was saved`() async throws {
+        let directory = root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try MeetingStore(root: directory)
+        let factory = TranscriberFactory()
+        let session = try session(store: store, capture: LifecycleCapture()) { factory.make() }
+        await session.start()
+        _ = try session.addScreenshot(MeetingScreenshot.Capture(
+            dataURL: "data:image/png;base64,c3ludGhldGlj", capturedAt: Date(), origin: "excerpt"),
+            for: session.meetingId)
+        await session.stop()
+        // The fake capture delivers no buffers from either source.
+        #expect(session.status == "Meeting saved · no audio reached Excerpt — check its permissions")
     }
 
     @Test func `a chosen native screenshot is added to the live meeting and survives End`() async throws {

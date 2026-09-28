@@ -14,6 +14,15 @@ const clock = (ms: number) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 
+/** A meeting's length. `clock` reads as a time of day at this size ("24:00"). */
+export const meetingLength = (ms: number) => {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 1) return 'Under a minute';
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60), rest = minutes % 60;
+  return rest ? `${hours} hr ${rest} min` : `${hours} hr`;
+};
+
 /**
  * A timestamp, and whether it may be stated exactly.
  *
@@ -583,7 +592,7 @@ export function Notes({ meeting: initial, initialSaveFailed = false, onSaved }:
     <div className="notebook-toolbar"><a href="#/meetings">All meetings <span>/</span> Meeting</a><div><span className={`save-state ${saveState}`} role="status">{saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Not saved — export a copy' : 'Saved on this device'}</span><details className="toolbar-menu"><summary>Export</summary><div><button onClick={() => { void copy(); }}>{copied ? 'Copied ✓' : 'Copy meeting'}</button><button onClick={() => { void download(); }}>Save Markdown…</button><button onClick={() => { void exportHTML(); }}>Save HTML with images…</button></div></details></div></div>
     <div className="notes notes-reading">
       <header className="masthead">
-        <div className="notebook-date">{new Date(meeting.startedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })} <span>·</span> {clock(duration)} <span>·</span> {isLiveDraft ? 'Live meeting' : meeting.processing === 'demo' ? 'Legacy meeting' : meeting.processing === 'cloud' ? 'Cloud transcription' : 'On-device transcription'}</div>
+        <div className="notebook-date">{new Date(meeting.startedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })} <span>·</span> {meetingLength(duration)} <span>·</span> {isLiveDraft ? 'Live meeting' : meeting.processing === 'demo' ? 'Legacy meeting' : meeting.processing === 'cloud' ? 'Cloud transcription' : 'On-device transcription'}</div>
         <input className="document-title" aria-label="Meeting title" value={meeting.title} onChange={(e) => persist({ ...meeting, title: e.target.value })} />
         <p className="notebook-description">{tab === 'transcript'
           ? isLiveDraft ? 'Your transcript appears here as speech settles. Add screenshots while you listen.' : 'The conversation, with screenshots at the moments they were captured.'

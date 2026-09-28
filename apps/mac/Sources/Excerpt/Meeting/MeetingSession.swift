@@ -683,7 +683,7 @@ final class MeetingSession {
             status = message
             state = .interrupted(id: meeting.id, message: message)
         } else {
-            status = meeting.events.isEmpty ? "Meeting saved · no transcript captured" : "Transcript saved"
+            status = savedStatus(of: meeting)
             state = .completed(id: meeting.id)
         }
         onMeetingChange?(meeting)
@@ -698,7 +698,7 @@ final class MeetingSession {
             if self.lastSaved?.id == updated.id { self.lastSaved = updated }
             if case .completed(let id) = self.state, id == updated.id {
                 self.status = updated.generationStatus?.state == .ready
-                    ? "Smart notes ready" : "Transcript saved"
+                    ? "Notes ready" : self.savedStatus(of: updated)
             }
             self.onMeetingChange?(updated)
         }
@@ -891,39 +891,32 @@ final class MeetingSession {
         }.joined(separator: " | ")
     }
 
-    /// The end-of-meeting line: what was found, in the user's terms.
+    /// The end-of-meeting line. A saved transcript is the ordinary ending.
     ///
-    /// Only one of these endings is "nothing worth noting was said". The others are
-    /// failures, and each one names the thing the user can actually go and change.
-    private func summary(of meeting: Meeting) -> String {
-        guard meeting.items.isEmpty else {
-            let decided = meeting.items.filter { $0.state == .decided }.count
-            let yours = meeting.items.filter { $0.assignee == .you }.count
-            var parts = ["\(meeting.items.count) note\(meeting.items.count == 1 ? "" : "s")"]
-            if decided > 0 { parts.append("\(decided) settled") }
-            if yours > 0 { parts.append("\(yours) for you") }
-            return parts.joined(separator: " · ")
-        }
+    /// A meeting with no words in it is not one outcome: each cause below names the
+    /// thing the user can actually go and change.
+    private func savedStatus(of meeting: Meeting) -> String {
+        guard meeting.events.isEmpty else { return "Transcript saved" }
+        return "Meeting saved · " + noTranscriptReason()
+    }
 
+    private func noTranscriptReason() -> String {
         let system = audioStats[.system] ?? SourceStats()
         let microphone = audioStats[.microphone] ?? SourceStats()
         let heardSomething = system.voicedSeconds + microphone.voicedSeconds > 1
 
         if let failure = (speechStats[.system]?.error ?? speechStats[.microphone]?.error) {
-            return "Speech recognition stopped working — \(failure)"
+            return "speech recognition stopped working — \(failure)"
         }
         if system.buffers == 0 && microphone.buffers == 0 {
-            return "No audio reached Excerpt at all — check its permissions"
+            return "no audio reached Excerpt — check its permissions"
         }
         if !heardSomething {
             return system.buffers == 0
-                ? "Your microphone was heard but the meeting's audio was silent"
-                : "Everything was silent — was anything actually playing?"
+                ? "your microphone was heard but the meeting's audio was silent"
+                : "everything was silent — was anything playing?"
         }
-        if meeting.events.isEmpty {
-            return "Heard \(Int(system.voicedSeconds + microphone.voicedSeconds))s of sound but recognised no words"
-        }
-        return "Nothing worth noting was said"
+        return "heard \(Int(system.voicedSeconds + microphone.voicedSeconds))s of sound but recognised no words"
     }
 
     // MARK: - Recovery

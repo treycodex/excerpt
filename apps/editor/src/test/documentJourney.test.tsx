@@ -4,7 +4,7 @@ import type { ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
 import type { Evidence, Item, Meeting } from '@excerpt/types';
 import { App } from '../App';
 import { Library } from '../views/Library';
-import { Notes } from '../views/Notes';
+import { Notes, meetingLength } from '../views/Notes';
 import { NotesWorkspace } from '../views/NotesWorkspace';
 import { createFakeNativeHost, installFakeNativeHost } from './fakeNativeHost';
 import type { FakeNativeHost } from './fakeNativeHost';
@@ -234,6 +234,16 @@ describe('source and correction trips return to the reader’s place', () => {
     await click('Notes');
     expect(windowStub.scrollTo).toHaveBeenLastCalledWith({ top: 300, behavior: 'auto' });
     expect(replacement.focus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+});
+
+describe('meeting length', () => {
+  it('reads as a duration rather than a time of day', async () => {
+    await open();
+    expect(text()).toContain('20 min');
+    expect(meetingLength(20_000)).toBe('Under a minute');
+    expect(meetingLength(60 * 60_000)).toBe('1 hr');
+    expect(meetingLength(84 * 60_000)).toBe('1 hr 24 min');
   });
 });
 
