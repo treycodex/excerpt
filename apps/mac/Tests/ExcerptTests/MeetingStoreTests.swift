@@ -31,6 +31,24 @@ struct MeetingStoreTests {
                 events: [event(0, text: "Let's move the launch to October.")], items: items)
     }
 
+    @Test func `queued notes are found from the library index after a restart`() throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var queued = meeting(id: "queued")
+        queued.generationStatus = NotesGenerationStatus(state: .queued, generationId: "g", sourceRevision: 0)
+        try store.save(queued)
+        try store.save(meeting(id: "idle"))
+
+        #expect(try MeetingStore(root: root).pendingGenerationIds() == ["queued"])
+        // An index written before it recorded generation state is rebuilt, not trusted.
+        try FileManager.default.removeItem(at: root.appending(path: "library-index"))
+        #expect(try MeetingStore(root: root).pendingGenerationIds() == ["queued"])
+
+        queued.generationStatus?.state = .ready
+        try store.save(queued)
+        #expect(try MeetingStore(root: root).pendingGenerationIds().isEmpty)
+    }
+
     @Test func `a saved meeting comes back the way it went in`() throws {
         let (store, root) = try makeStore()
         defer { try? FileManager.default.removeItem(at: root) }

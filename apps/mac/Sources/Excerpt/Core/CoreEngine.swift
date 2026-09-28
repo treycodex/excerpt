@@ -46,7 +46,7 @@ final class CoreEngine {
 
     /// Bumped in `packages/core/src/engine.ts` whenever the contract changes, so a
     /// stale bundle fails loudly at launch instead of quietly at the first meeting.
-    private static let expectedVersion = "3"
+    private static let expectedVersion = "4"
 
     private let context: JSContext
     private let engine: JSValue
@@ -106,19 +106,6 @@ final class CoreEngine {
         let json = try String(decoding: JSONEncoder.excerpt.encode(events), as: UTF8.self)
         let out = try call("extract", [json, ISO8601DateFormatter().string(from: reference)])
         return try decode([Item].self, from: out)
-    }
-
-    /// Ordering by what the user said they care about. Never filtering: an item is
-    /// not hidden because it was not asked for.
-    func rank(_ items: [Item], preferences: Preferences) throws -> [Item] {
-        let itemsJSON = try String(decoding: JSONEncoder.excerpt.encode(items), as: UTF8.self)
-        let prefsJSON = try String(decoding: JSONEncoder.excerpt.encode(preferences), as: UTF8.self)
-        let out = try call("rank", [itemsJSON, prefsJSON])
-        return try decode([Item].self, from: out)
-    }
-
-    func boosts(for instruction: String) throws -> [String] {
-        try decode([String].self, from: call("boostsFor", [instruction]))
     }
 
     /// Phrase-aware subtitle breaking — the same routine the website's captions use,

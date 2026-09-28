@@ -3,7 +3,7 @@ import type { Meeting, TranscriptEvent } from '@excerpt/types';
 import { extractItems } from '../extract';
 import { toSentences } from '../extract/sentences';
 import { toMarkdown } from '../export/markdown';
-import { buildNotesDocument, noteTitle, preserveNoteEdits, refreshMeetingNotes, shapeNotice, suggestMeetingTitle } from './summary';
+import { buildNotesDocument, preserveNoteEdits, refreshMeetingNotes, shapeNotice, suggestMeetingTitle } from './summary';
 
 const event = (id: string, text: string, at = 0): TranscriptEvent => ({ id, text, tArrived: at,
   isFinal: true, role: 'you', speakerLabel: 'YOU', sessionId: 's' });
@@ -27,7 +27,7 @@ describe('readable meeting notes', () => {
   it('joins a fragmented commitment while preserving exact source quotes', () => {
     const events = [event('a', "I'll send the revised", 100), event('b', 'deck before Friday.', 2000)];
     const [item] = extractItems(events, new Date('2026-09-07T09:00:00Z'));
-    expect(noteTitle(item!)).toBe('Send the revised deck before Friday.');
+    expect(item!.title).toMatch(/send the revised deck before Friday\.$/i);
     expect(item!.due).toBe('2026-09-11');
     expect(item!.evidence.map((e) => e.quote)).toEqual(events.map((e) => e.text));
   });
@@ -45,7 +45,7 @@ describe('readable meeting notes', () => {
     const events = [event('a', "I'll review the pricing."), event('b', "If legal approves, I'll send the deck."), event('c', 'Can you hear me?')];
     const actions = extractItems(events).filter((i) => i.category === 'action');
     expect(actions).toHaveLength(1);
-    expect(noteTitle(actions[0]!)).toBe('Review the pricing.');
+    expect(actions[0]!.title).toMatch(/review the pricing\.$/i);
   });
   it('uses an explicit corrected deadline and merges duplicate tasks', () => {
     const text = "I'll send the deck by Thursday, actually Friday.";
@@ -64,7 +64,8 @@ describe('readable meeting notes', () => {
     const next = refreshMeetingNotes(input);
     expect(next.notes!.keyPoints[0]!.text).toBe('My edited point');
     expect(next.items[0]!.completed).toBe(true);
-    expect(toMarkdown(next)).toContain('- [x] **Send final deck**');
+    expect(next.items[0]!.title).toBe('Send final deck');
+    expect(toMarkdown(next)).not.toContain('## Action items');
     expect(toMarkdown(next)).toContain('My edited point');
   });
   it('retains edits even when a new summary no longer selects their source', () => {
@@ -78,7 +79,7 @@ describe('readable meeting notes', () => {
     input.items[0]!.userEdited = true;
     const next = refreshMeetingNotes(input);
     expect(next.items).toHaveLength(2);
-    expect(next.items.map((i) => noteTitle(i))).toContain('Review the pricing.');
+    expect(next.items.some((i) => /review the pricing\.$/i.test(i.title))).toBe(true);
   });
 });
 

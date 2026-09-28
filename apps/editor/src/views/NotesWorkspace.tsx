@@ -19,8 +19,7 @@ function sublabel(meeting: MeetingLibraryEntry): string {
     ? started.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
     : started.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   if (!meeting.endedAt && meeting.draftRevision !== undefined) return `${when} · Live`;
-  const notes = meeting.noteCount;
-  return `${when} · ${meeting.processing === 'demo' ? 'Legacy' : `${notes} ${notes === 1 ? 'note' : 'notes'}`}`;
+  return `${when} · ${meeting.processing === 'demo' ? 'Legacy' : meeting.noteCount > 0 ? 'Transcript + notes' : 'Transcript'}`;
 }
 
 /**
@@ -32,9 +31,12 @@ function sublabel(meeting: MeetingLibraryEntry): string {
  * next — `excerpt:return-to`, set before going to Preferences.
  */
 export const OPEN_AT_KEY = 'excerpt:open-at';
+export const OPEN_VIEW_KEY = 'excerpt:open-view';
 
 function rememberMatch(match: MeetingSearchResult | undefined) {
   try {
+    if (match?.kind === 'note') sessionStorage.setItem(OPEN_VIEW_KEY, `notes:${match.meeting.id}`);
+    else sessionStorage.removeItem(OPEN_VIEW_KEY);
     if (match?.eventId) sessionStorage.setItem(OPEN_AT_KEY, match.eventId);
     else sessionStorage.removeItem(OPEN_AT_KEY);
   } catch { /* the meeting still opens, just not at the passage */ }
@@ -124,7 +126,7 @@ export function NotesWorkspace({ children, currentId, library, libraryAvailable 
       })}{!available && <p role="status">Meetings could not be read from this Mac’s storage.</p>}{available && searching && <p role="status">Searching meetings…</p>}{available && searchFailed && <p role="status">Search could not be completed. Your meetings were not changed.</p>}{available && !searching && !searchFailed && filtered.length === 0 && <p>{active
         ? 'Nothing found in any title, note, transcript or caption.'
         : 'Your meetings will appear here.'}</p>}</div>
-      <div className="notebook-sidebar-footer"><a href="#/preferences">Preferences ↗</a><span>Stored on this device</span></div>
+      <div className="notebook-sidebar-footer"><a href="#/preferences">Settings ↗</a><span>Stored on this device</span></div>
     </aside>
     <div className="notebook-main">{children}</div>
   </div>;

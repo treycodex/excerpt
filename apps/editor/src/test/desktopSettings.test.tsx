@@ -59,7 +59,7 @@ describe('native desktop settings in the real Preferences component', () => {
     expect(text()).toContain('USB input disconnected');
     expect(text()).toContain('Unavailable — use the Excerpt menu');
     expect(text()).toContain('until your selected display reconnects');
-    expect(renderer.root.findAllByType('fieldset')[1]!.props.disabled).toBe(true);
+    expect(renderer.root.findByProps({ 'aria-label': 'Selected microphone' }).parent!.parent!.props.disabled).toBe(true);
   });
 
   it('does not let an old load or save acknowledgment overwrite a newer native event', async () => {
@@ -112,7 +112,7 @@ describe('library native actions', () => {
     host.startMeeting = async () => { throw new Error('Reconnect your selected microphone.'); };
     await act(async () => { button('Start meeting').props.onClick(); });
     expect(text()).toContain('Reconnect your selected microphone.');
-    await act(async () => { button('Open live notes').props.onClick(); });
+    await act(async () => { button('Open live meeting').props.onClick(); });
     expect(host.calls).toContain('openLiveNotes');
   });
 
@@ -159,22 +159,14 @@ describe('library native actions', () => {
 });
 
 describe('meeting document navigation', () => {
-  it('keeps the document primary and makes transcript and detailed review reversible', async () => {
-    const meeting: Meeting = {
-      id: 'document-nav', title: 'Document navigation', processing: 'on-device',
-      startedAt: '2026-09-01T09:00:00Z', endedAt: '2026-09-01T09:05:00Z', events: [], items: [],
-      notes: { version: 1, method: 'extractive', keyPoints: [], topics: [], blocks: [] },
-    };
-    const host = createFakeNativeHost({ meetings: [meeting] }); restore = installFakeNativeHost(host);
+  it('opens an empty meeting as a transcript and offers handwritten notes', async () => {
+    const meeting: Meeting = { id: 'empty', title: 'Empty meeting', processing: 'on-device', startedAt: '2026-09-01T09:00:00Z', endedAt: '2026-09-01T09:05:00Z', events: [], items: [] };
+    restore = installFakeNativeHost(createFakeNativeHost({ meetings: [meeting] }));
     await act(async () => { renderer = create(<Notes meeting={meeting} />); });
-    const button = (label: string) => renderer.root.findAllByType('button').find((node) => node.children.some((child) => typeof child === 'string' && child.includes(label)))!;
-    expect(text()).toContain('View transcript');
-    expect(text()).toContain('Review extracted items');
-    expect(renderer.root.findAllByType('details').some((node) => node.props.className === 'toolbar-menu')).toBe(true);
-    await act(async () => { button('View transcript').props.onClick(); });
-    expect(text()).toContain('Back to notes');
-    await act(async () => { button('Back to notes').props.onClick(); });
-    expect(text()).toContain('No decisions or action items found. Your transcript and screenshots are saved.');
+    expect(renderer.root.findByProps({ 'aria-label': 'Meeting transcript' }).props.hidden).toBe(false);
+    await act(async () => { renderer.root.findByProps({ 'data-return-id': 'view-notes' }).props.onClick(); });
+    expect(text()).toContain('There is no transcript to summarize.');
+    expect(text()).toContain('Write my own');
   });
 
   it('offers a bounded undo after accepting new wording', async () => {

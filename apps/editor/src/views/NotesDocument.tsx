@@ -22,13 +22,15 @@ function mergedEvidence(first: NoteBlock['evidence'], second: NoteBlock['evidenc
   });
 }
 
-export function NotesDocument({ document, images, onChange, onSource, onImages, onMoment, selectedImageId }: {
+export function NotesDocument({ document, images, onChange, onSource, onImages, onMoment, selectedImageId, focusBlockId }: {
   document: Document; images: MeetingImage[];
   onChange: (document: Document) => void;
   onSource: (block: NoteBlock) => void;
   onImages: (files: File[], origin?: MeetingImage['origin']) => void;
   onMoment?: (imageId: string) => void;
   selectedImageId?: string | null;
+  /** A block the parent just created, to put the caret in once it renders. */
+  focusBlockId?: string | null;
 }) {
   const blocks = document.blocks ?? [];
   const [active, setActive] = useState<string | null>(null);
@@ -49,6 +51,11 @@ export function NotesDocument({ document, images, onChange, onSource, onImages, 
       if (field && position !== undefined) field.setSelectionRange(position, position);
     });
   };
+  const focusable = !!focusBlockId && blocks.some((block) => block.id === focusBlockId);
+  useLayoutEffect(() => {
+    if (focusable) focus(focusBlockId!);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusBlockId, focusable]);
   const update = (id: string, patch: Partial<NoteBlock>) => commit(blocks.map((b) => b.id === id ? { ...b, ...patch, userEdited: true } : b));
   const add = (kind: NoteBlock['kind']) => {
     const block = fresh(kind);

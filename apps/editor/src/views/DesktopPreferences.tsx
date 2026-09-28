@@ -76,6 +76,15 @@ export function DesktopPreferences() {
         {settings.captions.displayMissing && <p role="status">Using an available display until your selected display reconnects.</p>}
         <p className="rubric">Captions can appear in screen recordings and screen sharing. Check your meeting app’s sharing preview before sharing a display.</p>
       </fieldset>
+      <fieldset disabled={busy}>
+        <legend>macOS screenshots</legend>
+        <p>To place screenshots taken with ⌘⇧4 or ⌘⇧5 in a live transcript, Excerpt needs access to the folder where macOS saves them{settings.screenshotImport.folderName ? ` (${settings.screenshotImport.folderName})` : ''}. It looks only for new screenshots while a meeting is running.</p>
+        <p>Capture moment in the Excerpt menu works without this folder access.</p>
+        <button type="button" onClick={() => { void commit(() => bridge()!.setScreenshotImportEnabled(!settings.screenshotImport.enabled)); }}>
+          {settings.screenshotImport.enabled ? 'Turn off automatic import' : 'Enable automatic import…'}
+        </button>
+        <p role="status">Automatic import is {settings.screenshotImport.enabled ? 'on' : 'off'}.</p>
+      </fieldset>
       <fieldset disabled={busy || settings.microphone.selectionLocked}>
         <legend>Microphone</legend>
         <label>Selected microphone<select aria-label="Selected microphone" value={settings.microphone.selectedDeviceId} onChange={(e) => { void commit(() => bridge()!.selectMicrophone(e.target.value)); }}>

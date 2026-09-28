@@ -204,8 +204,11 @@
 .notebook .note-counts span { padding: 0; background: none; border-radius: 0; }
 .notebook .note-counts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-.notebook-view-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 22px 0 0; font: 13px var(--sans); color: var(--dim); }
-.notebook-view-actions button { border: 0; background: none; padding: 4px 0; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.notebook-view-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; margin: 22px 0 0; border-bottom: 1px solid var(--line); font: 13px var(--sans); color: var(--dim); }
+.notebook-view-actions button { border: 0; border-bottom: 2px solid transparent; background: none; padding: 10px 1px; color: var(--dim); cursor: pointer; }
+.notebook-view-actions button[aria-pressed="true"] { border-bottom-color: var(--ink); color: var(--ink); font-weight: 600; }
+.notebook-view-actions .write-notes-action { margin-left: auto; margin-bottom: 6px; padding: 8px 14px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--paper); font-weight: 600; }
+.notebook-view-actions .write-notes-action:disabled { opacity: .55; cursor: default; }
 .advanced-preferences { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 18px; }
 .advanced-preferences > summary { cursor: pointer; }
 
@@ -291,6 +294,10 @@
    and the words run as paragraphs. Your own turns take ink-weight labels and a rule
    in the gutter, because telling you from everyone else is the whole claim. */
 .notebook .transcript { margin-top: 12px; }
+.notebook .transcript-capture { margin: 22px 0 26px 138px; max-width: 640px; }
+.notebook .transcript-capture button { display: block; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; }
+.notebook .transcript-capture img { display: block; max-width: 100%; max-height: 520px; height: auto; object-fit: contain; border: 1px solid var(--line); border-radius: 7px; }
+.notebook .transcript-capture figcaption { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 0; font: 12px/1.5 var(--sans); color: var(--dim); }
 .notebook .turn {
   display: grid; grid-template-columns: 118px minmax(0, 1fr);
   gap: 0 20px; padding: 16px 0; border-bottom: 1px solid var(--line-soft);
@@ -323,6 +330,10 @@
   background: var(--select); color: var(--ink);
 }
 .notebook .line-row + .line-row.focused { margin-top: 4px; }
+@media (max-width: 760px) {
+  .notebook .transcript-capture { margin-left: 0; }
+  .notebook-view-actions .write-notes-action { margin-left: 0; }
+}
 .notebook .nudge { font-size: 13px; margin-top: 30px; color: var(--dim); }
 .notebook .nudge a { text-decoration: underline; text-underline-offset: 3px; }
 
@@ -740,4 +751,35 @@
   .notebook *, .notebook *::before, .notebook *::after {
     transition-duration: 0s !important; animation-duration: 0s !important; scroll-behavior: auto !important;
   }
+}
+
+/* Transcript is the saved meeting; notes are a deliberate secondary view. */
+.notebook [hidden] { display: none !important; }
+.transcript-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 0 0 28px; }
+.notebook .transcript-toolbar h2 { text-transform: none; letter-spacing: 0; margin: 0 0 5px; font: 600 15px var(--sans); }
+.transcript-toolbar p { margin: 0; color: var(--dim); font: 12px/1.5 var(--sans); }
+.transcript-toolbar button, .smart-notes-empty button { padding: 9px 14px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: #fbfaf1; font: 13px var(--sans); }
+.smart-notes-empty .primary-action { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.smart-notes-empty button:disabled { opacity: .5; cursor: default; }
+.notebook .smart-notes-empty { max-width: 580px; margin: 0; padding: 18px 0 32px; }
+.notebook .smart-notes-empty h2 { font: 400 32px/1.15 var(--serif); text-transform: none; letter-spacing: -.02em; margin: 12px 0 18px; }
+.smart-notes-empty p { color: var(--dim); font: 15px/1.7 var(--sans); }
+.smart-notes-empty .notes-destination { font-size: 12px; max-width: 58ch; padding-top: 8px; }
+.notes-settings-link { display: inline-block; margin-top: 18px; font: 12px var(--sans); text-decoration: underline !important; }
+.notebook .notes-reading .transcript-capture { margin: 26px 0; }
+.transcript-capture > button { width: 100%; background: var(--paper-deep); border: 1px solid var(--line); padding: 8px; border-radius: 8px; }
+.transcript-capture img { display: block; max-width: 100%; max-height: 480px; width: auto; margin: auto; object-fit: contain; }
+.transcript-capture figcaption { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--dim); font: 12px/1.6 var(--sans); padding: 10px 0; }
+.notebook :is(button, a, input, select, summary, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.notes-compose { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 16px 0 24px; border-bottom: 1px solid var(--line); }
+.notes-compose strong { font: 600 14px var(--sans); }
+.notes-compose p { max-width: 52ch; margin: 6px 0 0; color: var(--dim); font: 12px/1.6 var(--sans); }
+.notes-compose a { text-decoration: underline; }
+.notes-compose button { padding: 8px 14px; background: var(--ink); color: var(--paper); border: 0; border-radius: 6px; }
+.notes-compose button:disabled { opacity: .5; cursor: default; }
+
+@media (max-width:740px) {
+  .notebook-sidebar-footer { display:flex; margin:0; padding:0 4px; border:0; }
+  .notebook-sidebar-footer span { display:none; }
+  .smart-notes-empty .eyebrow { margin-bottom: 8px; }
 }

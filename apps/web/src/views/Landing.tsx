@@ -15,15 +15,6 @@ const SOURCE = 'https://github.com/treycodex/excerpt';
    Every claim on this page is one the product can keep. The sections that say
    what Excerpt does *not* do are not hedging; they are the argument. */
 
-const HERO_ALT = 'Excerpt’s notes for a campaign review: a sample paid-social performance report '
-  + 'captured at 0:22 with its client, channel and 1–30 Sep 2026 period visible, the spoken '
-  + 'comparison of Variant B’s click-through rate beneath it, the Variant B creative captured at '
-  + '0:41, and a typed note reading “Agreed: test a clearer opening line on Variant B. Brief before Thursday.”';
-
-const NOTES_ALT = 'Excerpt’s review tab for the same campaign: a decision marked DECIDED with the '
-  + 'verbatim sentence it came from, an action assigned to you with a due date, and a request from '
-  + 'the other side left unassigned under “Who’s doing this?”';
-
 /** The three things the hero can show. Tabs switch the frame, nothing else. */
 type Shot = {
   id: string; tab: string; chrome: string; caption: string;
@@ -33,21 +24,15 @@ type Shot = {
 const SHOTS: readonly [Shot, Shot, Shot] = [
   {
     id: 'review',
-    tab: 'The review',
-    chrome: 'CAMPAIGN REVIEW · PAID SOCIAL · 1–30 SEP',
+    tab: 'The transcript',
+    chrome: 'EXAMPLE MEETING · TRANSCRIPT & SCREENSHOTS',
     caption: 'Captured screens sit on the meeting clock, with the speech from either side of them.',
-    src: '/media/campaign-review.png',
-    alt: HERO_ALT,
-    height: 2128,
   },
   {
     id: 'notes',
     tab: 'The notes',
-    chrome: 'REVIEW — DECISIONS · ACTIONS · DEADLINES',
-    caption: 'Every item carries the sentence it came from, so you can read it rather than trust it.',
-    src: '/media/notes.png',
-    alt: NOTES_ALT,
-    height: 2682,
+    chrome: 'EXAMPLE MEETING · OPTIONAL NOTES',
+    caption: 'Write notes when you want them. Edit the wording and follow a source back to the transcript.',
   },
   {
     id: 'subtitles',
@@ -67,33 +52,27 @@ const STEPS = [
     'Each screen is placed on the meeting clock, so the speech from either side of it sits with the picture. Nearby speech is context, not a claim that those words describe what is on screen.',
     'Placed on the meeting clock'],
   ['03', 'Write the next step, and come back to it.',
-    'Add your own note about what was agreed, correct a misheard line, and every extracted item still links to the passage it came from. Export to Markdown, or to a page with the screens in it.',
+    'End the meeting to read its transcript. Correct a misheard line, write your own notes, or choose Write notes for a shorter document. Export the conversation and screenshots together.',
     'Yours to keep'],
 ] as const;
 
 /** cap-style chip grid: a short label and the one line that earns it. */
 const KEPT = [
-  ['Transcript-linked', 'Every item cites its sentence'],
-  ['Four categories', 'Decisions, actions, deadlines, questions'],
-  ['An editable document', 'Write, reorder, correct, export'],
+  ['Transcript first', 'Read what was actually said'],
+  ['Optional notes', 'Generate them when you choose'],
+  ['Your own writing', 'An editable page alongside the transcript'],
   ['Screens on the clock', 'Placed where they happened'],
-  ['Transcript corrections', 'Fix a misheard line, review what moved'],
-  ['Markdown and HTML', 'One self-contained file, offline'],
+  ['Transcript corrections', 'Fix a passage; keep the original'],
+  ['Markdown and HTML', 'Keep the conversation and its images'],
 ] as const;
 
 const WHY = [
-  ['Grammar, not a model.',
-    'Items come from cue patterns and guards. Titles are verbatim spans of what someone said — never generated, never rewritten. That is the whole claim, and it is checkable.'],
-  ['A miss beats a false positive.',
-    '“We’ll discuss October next week” is a decision to talk, not a decision. Negation, conditionals, reported speech and questions are all rejected. Ambiguity resolves toward silence.'],
-  ['It knows you from not-you.',
-    'Two audio streams is the whole of what Excerpt knows about who spoke. A task you took on is yours; “can you send that?” from the far side is left for you to assign.'],
-  ['Everything is correctable.',
-    'Re-categorise, reassign, set a due date, fix the state, or dismiss it. Excerpt is wrong sometimes, so being wrong has to be cheap.'],
-  ['Zero operating cost.',
-    'No account, no backend, no database, no API key required. Nothing about this is free-for-now.'],
-  ['Truly open source.',
-    'MIT. Read how extraction decides what counts as a decision, or build the Mac app yourself from the same source.'],
+  ['Open the conversation.', 'Ending a meeting takes you straight to the transcript, with screenshots in time order. A summary is always optional.'],
+  ['Keep the useful screen.', 'Use Capture moment, paste or drop an image, or enable imports from macOS screenshot shortcuts during a meeting.'],
+  ['Write when you are ready.', 'Take your own notes during the call. Afterwards, choose Write notes for a shorter document based on the transcript.'],
+  ['Follow the source.', 'Generated notes link to their transcript passages. Correct a misheard line and keep the original wording in its history.'],
+  ['Choose where notes are written.', 'Use Apple Intelligence on your Mac or select OpenAI with your own key. OpenAI requests send transcript text and screenshot captions when you ask for notes.'],
+  ['Keep your meeting files.', 'No account or subscription. Meetings stay on this Mac and export to Markdown or a self-contained HTML document with images.'],
 ] as const;
 
 const NOT_CLAIMED = [
@@ -111,6 +90,24 @@ const SURFACES = [
   ['Open source', 'The capture, transcription, extraction and editor code are all available to inspect and build.',
     'MIT licensed. No subscription.', 'Explore the source ↗', SOURCE],
 ] as const;
+
+function ProductPreview({ view }: { view: 'transcript' | 'notes' }) {
+  return <div className="lp-product-preview" aria-label={`Example meeting ${view}`}>
+    <div className="lp-preview-top"><span>September 28 · 24 min</span><span>Saved on this device</span></div>
+    <h3>Autumn campaign review</h3>
+    <div className="lp-preview-tabs"><span className={view === 'transcript' ? 'active' : ''}>Transcript</span><span className={view === 'notes' ? 'active' : ''}>Notes</span></div>
+    {view === 'transcript' ? <>
+      <div className="lp-preview-passage"><small>Meeting audio · 0:02</small><p>The new opening holds attention longer, but the product arrives too late.</p></div>
+      <figure className="lp-preview-chart"><strong>Creative comparison</strong><div><span>Variant A</span><i style={{width:'46%'}} /></div><div><span>Variant B</span><i style={{width:'62%'}} /></div><div><span>New opening</span><i style={{width:'78%'}} /></div><figcaption>0:10 · Screenshot · Synthetic example</figcaption></figure>
+      <div className="lp-preview-passage"><small>You · 0:15</small><p>I’ll move the product into the first three seconds and send a revised cut on Thursday.</p></div>
+    </> : <>
+      <p className="lp-preview-provenance">Example notes · generated after choosing Write notes</p>
+      <h4>Creative direction</h4><p>Move the product into the first three seconds of the revised cut.</p><small className="lp-preview-source">Source ↗ · You, 0:15</small>
+      <h4>For the next review</h4><p>Keep the warm color treatment and compare the revised opening with Variant B.</p><small className="lp-preview-source">Source ↗ · Meeting audio, 0:28</small>
+      <p className="lp-preview-foot">Editable notes. The full transcript stays one tab away.</p>
+    </>}
+  </div>;
+}
 
 export function Landing({ onStart }: { onStart: () => void }) {
   const [shot, setShot] = useState(0);
@@ -154,16 +151,16 @@ export function Landing({ onStart }: { onStart: () => void }) {
         </a>
 
         <p className="lp-eyebrow">Meeting memory for creative and media agencies</p>
-        <h1><span>The screen.</span> <span>The speech.</span><br /><em>The note that links them.</em></h1>
+        <h1><span>The screen.</span> <span>The speech.</span><br /><em>The meeting, kept together.</em></h1>
         <p className="lp-lead">
           One free, open-source app for campaign reviews, creative feedback and client readouts.
-          Excerpt keeps the screen you were looking at, the speech from either side of it, and notes
-          where every item points back at the sentence it came from — on your own device.
+          Read the conversation with screenshots beside it. Correct a passage, add your own writing,
+          and generate notes only when you want them — all in one Mac app.
         </p>
 
         <div className="lp-cta">
-          <a className="lp-solid lp-lg" href={SOURCE} target="_blank" rel="noreferrer">Use Excerpt free <span aria-hidden>↗</span></a>
-          <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the 102-second demo</button>
+          <a className="lp-solid lp-lg" href={SOURCE} target="_blank" rel="noreferrer">Build for Mac <span aria-hidden>↗</span></a>
+          <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the captions demo</button>
         </div>
         <p className="lp-fineprint">No account, no subscription. Capture, transcription and meeting files stay on your Mac.</p>
 
@@ -196,8 +193,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
           <div className="lp-frame-media">
             {active.video
               ? <ProductFilm />
-              : <img key={active.src} src={active.src} alt={active.alt}
-                  width={1648} height={active.height} decoding="async" />}
+              : <ProductPreview view={active.id === 'notes' ? 'notes' : 'transcript'} />}
             <span className="lp-brackets" aria-hidden><i /><i /><i /><i /></span>
           </div>
           <figcaption>{active.caption}</figcaption>
@@ -230,15 +226,14 @@ export function Landing({ onStart }: { onStart: () => void }) {
       <section className="lp-section lp-split cs-reveal" id="what-it-keeps">
         <div className="lp-split-copy">
           <span className="lp-label lp-label-ember">[ After the review ]</span>
-          <h2>Notes you can <em>check.</em></h2>
+          <h2>The transcript first.<br /><em>Notes when you want them.</em></h2>
           <p>
-            Decisions, action items and deadlines come out of what was actually said. Each one links to
-            the passage in your transcript it came from, so you can read the sentence rather than trust
-            a summary.
+            Your meeting opens as a transcript, with screenshots where they were captured. Read it,
+            correct a misheard line, or add an image without generating anything.
           </p>
           <p>
-            A suggestion is not an approval, and a request from the other side of the call is not your
-            task: anything Excerpt cannot attribute is left for you to assign.
+            The Notes tab gives you a blank page or an explicit Write notes action. Generated wording
+            stays editable, with source passages close by. Your own writing is kept when notes are rewritten.
           </p>
           <div className="lp-split-actions">
             <button className="lp-outline" onClick={onStart}>See it in the demo <span aria-hidden>↗</span></button>
@@ -246,7 +241,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
           </div>
         </div>
         <figure className="lp-split-shot">
-          <img src="/media/notes.png" alt={NOTES_ALT} loading="lazy" width={1648} height={2682} />
+          <ProductPreview view="notes" />
         </figure>
       </section>
 
@@ -259,8 +254,8 @@ export function Landing({ onStart }: { onStart: () => void }) {
       <section className="lp-section lp-centred cs-reveal">
         <div className="lp-head">
           <span className="lp-label lp-label-ember">[ Why Excerpt ]</span>
-          <h2>Built to be <em>wrong cheaply.</em></h2>
-          <p>Confident output you cannot verify is the thing this replaces. Every rule below exists so a note you did not write is worth less trust than one you did, and is easy to fix.</p>
+          <h2>A meeting you can <em>return to.</em></h2>
+          <p>Keep the original conversation within reach, from the first caption to the exported meeting.</p>
         </div>
         <div className="lp-cards lp-cards-3">
           {WHY.map(([title, body]) => (
@@ -273,7 +268,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <div className="lp-head">
           <span className="lp-label lp-label-ember">[ During the review ]</span>
           <h2 id="subs-title">And while it happens, <em>subtitles.</em></h2>
-          <p>Two lines maximum, broken on phrase boundaries rather than width, fading rather than sliding, with the film dash convention when two people overlap. The Mac app draws them over the meeting.</p>
+          <p>Two-line captions follow the conversation over your meeting window. Choose their look and position, or turn them off while the transcript keeps recording.</p>
         </div>
         <div className="lp-film-wrap">
           <div className="lp-glow" aria-hidden />
@@ -283,7 +278,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
           </div>
           <div className="lp-film-credit">
             <span className="lp-label">Real product footage · Excerpt in session</span>
-            <button className="lp-text" onClick={onStart}>Try the demo <span aria-hidden>↗</span></button>
+            <button className="lp-text" onClick={onStart}>Watch captions <span aria-hidden>↗</span></button>
           </div>
         </div>
       </section>
@@ -311,11 +306,11 @@ export function Landing({ onStart }: { onStart: () => void }) {
           </article>
           <article className="lp-card lp-card-paper">
             <h3>Transcription stays local.</h3>
-            <p>Speech is transcribed on your machine. If an on-device model is unavailable, cloud transcription is offered only after you agree to it — never silently.</p>
+            <p>Apple’s speech frameworks transcribe on your Mac. Finish setup and install the speech model before starting your first meeting.</p>
           </article>
           <article className="lp-card lp-card-paper">
-            <h3>Rewriting is optional.</h3>
-            <p>The Mac app can tidy the wording with Apple Intelligence on your Mac, or with your own OpenAI key — which sends transcript text to OpenAI and is billed to you. It never produces items.</p>
+            <h3>Notes are optional.</h3>
+            <p>Choose Write notes to use Apple Intelligence on your Mac, or OpenAI with your own key. OpenAI receives transcript text and screenshot captions and is billed to you; screenshot pixels stay local.</p>
           </article>
         </div>
         <div className="lp-trust">
@@ -351,7 +346,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <span className="lp-label lp-label-ember">For your next campaign review</span>
         <h2>Keep the work, the numbers,<br /><em>and the conversation.</em></h2>
         <div className="lp-cta lp-cta-centred">
-          <a className="lp-solid lp-lg" href={SOURCE} target="_blank" rel="noreferrer">Use Excerpt free <span aria-hidden>↗</span></a>
+          <a className="lp-solid lp-lg" href={SOURCE} target="_blank" rel="noreferrer">Build for Mac <span aria-hidden>↗</span></a>
           <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the demo</button>
         </div>
         <p className="lp-fineprint">No account. No credit card. No subscription.</p>

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, create } from 'react-test-renderer';
 import type { ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
-import type { Evidence, Item, Meeting, MeetingMutation } from '@excerpt/types';
+import type { Evidence, Item, Meeting } from '@excerpt/types';
 import { App } from '../App';
 import { Library } from '../views/Library';
-import { Notes } from '../views/Notes';
+import { Notes, meetingLength } from '../views/Notes';
 import { NotesWorkspace } from '../views/NotesWorkspace';
 import { createFakeNativeHost, installFakeNativeHost } from './fakeNativeHost';
 import type { FakeNativeHost } from './fakeNativeHost';
@@ -84,91 +84,102 @@ function fixture(): Meeting {
   };
 }
 
+/** A fixture with no notes, as a meeting is saved before anyone asks for them. */
+function unwritten(patch: Partial<Meeting> = {}): Meeting {
+  const { notes: _notes, ...meeting } = fixture();
+  return { ...meeting, items: [], ...patch };
+}
+
 async function open(meeting = fixture()): Promise<FakeNativeHost> {
   const host = createFakeNativeHost({ meetings: [meeting] });
   restore = installFakeNativeHost(host);
   await act(async () => { renderer = create(<Notes meeting={host.meetings.get(meeting.id)!} />, { createNodeMock: nodeMock }); });
   return host;
 }
-const overview = () => renderer.root.findAll((node) => node.props.className === 'overview')[0];
-const nextStep = (title: string) => renderer.root.findAll((node) => node.type === 'li' && String(node.props.className).startsWith('next-step') && content(node).includes(title))[0]!;
-const reviewCard = (title: string) => renderer.root.findAll((node) => node.type === 'article' && String(node.props.className).startsWith('item') && content(node).includes(title))[0]!;
-const mutations = (host: FakeNativeHost) => host.calls.filter((call) => call.startsWith('mutateMeeting')).length;
-
-describe('the finished meeting reads as one concise document', () => {
-  it('shows a supported summary, chronological next steps, and every image exactly once', async () => {
-    await open();
-    const top = overview()!;
-    expect(content(top)).toContain('Summary');
-    expect(content(top)).toContain('We approved the October launch plan.');
-    const steps = top.findAll((node) => node.type === 'li' && String(node.props.className).startsWith('next-step')).map(content);
-    expect(steps[0]).toContain('Send the revised deck.');
-    expect(steps[1]).toContain('Someone should update the pricing page.');
-    // An owner appears only where the item carries one; nothing is inferred for the other.
-    expect(steps[0]).toContain('Yours');
-    expect(steps[1]).not.toContain('Yours');
-    // No thumbnails above the document: each saved image is drawn once, in document order, with its caption.
-    const images = renderer.root.findAll((node) => node.type === 'img' && node.props.src === png);
-    expect(images.map((image) => image.props.alt)).toEqual(['Launch timeline slide', 'Imported chart']);
-    expect(renderer.root.findAllByProps({ 'aria-label': 'Screenshot caption' }).map((field) => field.props.value))
-      .toEqual(['Launch timeline slide', 'Imported chart']);
-  });
-
-  it('hides empty sections instead of showing empty headings', async () => {
-    const quiet = { ...fixture(), items: [], images: [], notes: { version: 1 as const, method: 'extractive' as const, keyPoints: [], topics: [], blocks: [] } };
-    await open(quiet);
-    expect(overview()).toBeUndefined();
-    expect(text()).not.toContain('Next steps');
-    expect(text()).toContain('No decisions or action items found. Your transcript and screenshots are saved.');
-  });
-});
-
-describe('next steps have one identity across the document and detailed review', () => {
-  it('completes, assigns and rewords the same persisted item from either place', async () => {
+describe('transcript first', () => {
+  it('opens the chronological transcript without requesting notes', async () => {
     const host = await open();
-    const before = mutations(host);
+    expect(renderer.root.findByProps({ 'aria-label': 'Meeting transcript' }).props.hidden).toBe(false);
+    expect(host.calls.some((call) => call.startsWith('retryAutomaticNotes'))).toBe(false);
+    const timeline = renderer.root.findByProps({ 'aria-label': 'Meeting transcript' });
+    const sequence = timeline.findAll((node) => node.type === 'article' || node.type === 'figure').map(content);
+    expect(sequence[0]).toContain('October launch');
+    expect(sequence[1]).toContain('Launch timeline slide');
+    expect(sequence[2]).toContain('revised deck');
+    expect(sequence.at(-1)).toContain('Time unknown');
+    expect(timeline.findAllByType('img')).toHaveLength(2);
+    expect(text()).not.toContain('Review extracted items');
+  });
 
-    await act(async () => { nextStep('Send the revised deck.').findByProps({ type: 'checkbox' }).props.onChange({ target: { checked: true } }); });
-    expect(host.meetings.get('journey')!.items.find((item) => item.id === 'deck')!.completed).toBe(true);
-    expect(reviewCard('Send the revised deck.').findByProps({ type: 'checkbox' }).props.checked).toBe(true);
+  it('requires an explicit request and keeps the transcript accessible while notes are queued', async () => {
+    const meeting = unwritten();
+    const host = await open(meeting);
+    await click('Notes');
+    expect(text()).toContain('Written on this Mac with Apple Intelligence.');
+    await click('Write notes');
+    expect(host.calls.filter((call) => call === 'retryAutomaticNotes:journey')).toHaveLength(1);
+    expect(text()).toContain('Writing your notes…');
+    await click('Transcript');
+    expect(renderer.root.findByProps({ 'aria-label': 'Meeting transcript' }).props.hidden).toBe(false);
+    expect(text()).toContain('Writing notes in the background');
+  });
 
-    // Assign in detailed review; the document reflects it without its own copy.
-    await click('Assign to me', reviewCard('Someone should update the pricing page.'));
-    expect(host.meetings.get('journey')!.items.find((item) => item.id === 'pricing')!.assignee).toBe('you');
-    expect(content(nextStep('Someone should update the pricing page.'))).toContain('Yours');
+  it('shows the cloud destination before writing and preserves the transcript after failure', async () => {
+    const meeting = unwritten();
+    const host = createFakeNativeHost({ meetings: [meeting] });
+    host.getNotesProviderStatus = async () => ({ openAIKeyConfigured: true, selected: 'openai', ready: true, processing: 'cloud', providerName: 'OpenAI' });
+    host.retryAutomaticNotes = async () => { throw new Error('Could not queue notes.'); };
+    restore = installFakeNativeHost(host);
+    await act(async () => { renderer = create(<Notes meeting={meeting} />, { createNodeMock: nodeMock }); });
+    await click('Notes');
+    expect(text()).toContain('Transcript text and screenshot captions are sent to OpenAI');
+    await click('Write notes');
+    expect(text()).toContain('Could not queue notes.');
+    expect(host.meetings.get('journey')!.events).toEqual(events);
+    expect(button('Write notes').props.disabled).toBe(false);
+  });
 
-    // Reword in the document; review shows the corrected wording on the same item.
-    await click('Edit wording', nextStep('Someone should update the pricing page.'));
-    await act(async () => { renderer.root.findByProps({ 'aria-label': 'Next step wording' }).props.onChange({ target: { value: 'Update the pricing page' } }); });
-    await act(async () => { renderer.root.findAll((node) => node.type === 'form' && node.props.className === 'next-step-edit')[0]!.props.onSubmit({ preventDefault() {} }); });
+  it('allows a blank handwritten document during a live meeting without generating notes', async () => {
+    const host = await open((({ endedAt: _endedAt, ...live }) => live)(unwritten({ draftRevision: 0 })));
+    await click('Notes');
+    expect(renderer.root.findAllByType('button').some((node) => content(node) === 'Write notes')).toBe(false);
+    await click('Write my own');
+    const paragraph = renderer.root.findByProps({ 'aria-label': 'Paragraph' });
+    expect(paragraph.props.value).toBe('');
+    expect(host.meetings.get('journey')!.notes!.blocks).toHaveLength(1);
+    expect(renderer.root.findAll((node) => node.type === 'textarea')).toHaveLength(1);
+    await act(async () => { paragraph.props.onChange({ target: { value: 'Ask about the budget.' } }); });
+    expect(host.meetings.get('journey')!.notes!.blocks!.some((block) => block.text === 'Ask about the budget.')).toBe(true);
+    expect(host.calls.some((call) => call.startsWith('retryAutomaticNotes'))).toBe(false);
+  });
+
+  it('corrects a transcript without creating notes or review items', async () => {
+    const host = await open(unwritten());
+    await click('Correct');
+    await act(async () => { renderer.root.findByProps({ 'aria-label': 'Corrected transcript' }).props.onChange({ target: { value: 'We approved the November launch plan.' } }); });
+    await click('Save correction');
     const saved = host.meetings.get('journey')!;
-    expect(saved.items.find((item) => item.id === 'pricing')!.title).toBe('Update the pricing page');
-    expect(content(reviewCard('Update the pricing page'))).toContain('Update the pricing page');
-
-    // Three edits, three typed item mutations; no parallel action list, no document rewrite.
-    expect(mutations(host) - before).toBe(3);
-    expect(saved.items.map((item) => item.id).sort()).toEqual(['deck', 'launch', 'pricing']);
-    expect(saved.notes).toEqual(fixture().notes);
+    expect(saved.events[0]!.originalText).toBe(events[0]!.text);
+    expect(saved.items).toEqual([]);
+    expect(saved.notes).toBeUndefined();
   });
 
-  it('sends item edits through the typed setReviewItems mutation only', async () => {
+  it('reports export cancellation on the transcript without changing views', async () => {
     const host = await open();
-    const sent: MeetingMutation[] = [];
-    const original = host.mutateMeeting.bind(host);
-    host.mutateMeeting = async (mutation) => { sent.push(mutation); return original(mutation); };
-    await click('Unassign', nextStep('Send the revised deck.'));
-    expect(sent).toHaveLength(1);
-    expect(sent[0]!.changes.map((change) => change.type)).toEqual(['setReviewItems']);
-    expect(host.meetings.get('journey')!.items.find((item) => item.id === 'deck')!.assignee).toBe('unassigned');
+    host.exportMarkdown = async () => 'cancelled';
+    await click('Save Markdown');
+    expect(text()).toContain('Markdown export cancelled.');
+    expect(renderer.root.findByProps({ 'aria-label': 'Meeting transcript' }).props.hidden).toBe(false);
   });
 });
 
 describe('source and correction trips return to the reader’s place', () => {
   it('restores scroll position and focus after a source panel, transcript correction, and close', async () => {
     const host = await open();
+    await click('Notes');
     const opener = new FakeElement();
     documentStub.activeElement = opener; windowStub.scrollY = 640;
-    await click('Show the source for: Send the revised deck.', nextStep('Send the revised deck.'));
+    await click('Show the 1 source passage for this note');
     expect(text()).toContain('Source passages for this note');
 
     const openInTranscript = new FakeElement();
@@ -180,7 +191,7 @@ describe('source and correction trips return to the reader’s place', () => {
     const line = renderer.root.findAll((node) => node.type === 'p' && String(node.props.className).startsWith('line-row') && content(node).includes('revised deck'))[0]!;
     await click('Correct', line);
     await act(async () => { renderer.root.findByProps({ 'aria-label': 'Corrected transcript' }).props.onChange({ target: { value: 'I will send the revised launch deck.' } }); });
-    await click('Apply correction and update notes');
+    await click('Save correction');
     expect(host.meetings.get('journey')!.events.find((event) => event.id === 'e2')!.text).toBe('I will send the revised launch deck.');
     expect(host.meetings.get('journey')!.events.find((event) => event.id === 'e2')!.originalText).toBe('I will send the revised deck.');
     expect(text()).toContain('Correction saved.');
@@ -200,7 +211,7 @@ describe('source and correction trips return to the reader’s place', () => {
     await open();
     const image = new FakeElement();
     documentStub.activeElement = image; windowStub.scrollY = 900;
-    const time = renderer.root.findAll((node) => node.type === 'button' && node.props.className === 'moment-time')[0]!;
+    const time = button('Open screenshot at');
     await act(async () => { time.props.onClick(); });
     const viewer = renderer.root.findAll((node) => node.type === 'aside' && node.props.id === 'selected-moment')[0]!;
     expect(viewer.props.tabIndex).toBe(-1);
@@ -210,19 +221,50 @@ describe('source and correction trips return to the reader’s place', () => {
     expect(image.focus).toHaveBeenCalled();
   });
 
-  it('returns from detailed review to the navigation control that opened it', async () => {
+  it('returns from the transcript to the notes navigation control', async () => {
     await open();
+    await click('Notes');
     const control = new FakeElement();
     control.isConnected = false;
-    control.dataset.returnId = 'view-review';
+    control.dataset.returnId = 'view-transcript';
     const replacement = new FakeElement();
     documentStub.activeElement = control; windowStub.scrollY = 300;
-    documentStub.querySelector.mockImplementation((selector: string) => selector === '[data-return-id="view-review"]' ? replacement : null);
-    await click('Review extracted items');
-    expect(text()).toContain('Detailed review');
-    await click('Back to notes');
+    documentStub.querySelector.mockImplementation((selector: string) => selector === '[data-return-id="view-transcript"]' ? replacement : null);
+    await click('Transcript');
+    await click('Notes');
     expect(windowStub.scrollTo).toHaveBeenLastCalledWith({ top: 300, behavior: 'auto' });
     expect(replacement.focus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+});
+
+describe('meeting length', () => {
+  it('reads as a duration rather than a time of day', async () => {
+    await open();
+    expect(text()).toContain('20 min');
+    expect(meetingLength(20_000)).toBe('Under a minute');
+    expect(meetingLength(60 * 60_000)).toBe('1 hr');
+    expect(meetingLength(84 * 60_000)).toBe('1 hr 24 min');
+  });
+});
+
+describe('returning to a meeting', () => {
+  it('keeps requested notes in progress after leaving through the sidebar', async () => {
+    const host = createFakeNativeHost({ meetings: [unwritten()] });
+    restore = installFakeNativeHost(host);
+    windowStub.location.hash = '#/m/journey';
+    await act(async () => { renderer = create(<App />, { createNodeMock: nodeMock }); });
+    await click('Notes');
+    await click('Write notes');
+    expect(text()).toContain('Writing your notes…');
+    const visit = async (hash: string) => {
+      windowStub.location.hash = hash;
+      await act(async () => { windowStub.dispatchEvent(new Event('hashchange')); });
+    };
+    await visit('#/meetings');
+    await visit('#/m/journey');
+    await click('Notes');
+    expect(text()).toContain('Writing your notes…');
+    expect(renderer.root.findAllByType('button').some((node) => content(node) === 'Write notes')).toBe(false);
   });
 });
 

@@ -40,7 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var gateWindow: NSWindow?
     private var setup: SetupWindowController?
     private var previewTimeout: Task<Void, Never>?
-    private lazy var setupModel = SetupModel(overlay: overlay, microphone: microphone)
+    private lazy var setupModel = SetupModel(
+        overlay: overlay, microphone: microphone,
+        requestScreenshotAccess: { [weak self] in try self?.setScreenshotImportEnabled(true) },
+        screenshotFolderName: { [weak self] in self?.systemScreenshots.destinationName })
 
     /// Before the first frame, not after. Coming up as a regular app and demoting in
     /// applicationDidFinishLaunching puts a Dock icon on screen for a moment and then
@@ -97,7 +100,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.bridge?.publishDesktopSettings()
             }
             session.onHealthChange = { [weak self] in self?.bridge?.publishDesktopSettings() }
-            session.onHeadphoneSuggestion = { [weak self] in self?.suggestHeadphonesIfNeeded() }
             commands = MeetingCommandCoordinator(
                 isActive: { [weak session] in session?.state.isActive == true },
                 start: { [weak self, weak session] in
@@ -150,7 +152,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 },
                 desktopSettings: { [weak self] in self?.desktopSettings() ?? Self.emptyDesktopSettings },
                 saveCaptionSettings: { [weak self] settings in self?.applyCaptionSettings(settings) },
-                selectMicrophone: { [weak self] id in try self?.microphone.select(id) }
+                selectMicrophone: { [weak self] id in try self?.microphone.select(id) },
+                setScreenshotImportEnabled: { [weak self] enabled in try self?.setScreenshotImportEnabled(enabled) }
             )
             self.bridge = bridge
             session.onMeetingChange = { [weak bridge] meeting in bridge?.publish(meeting) }
@@ -295,10 +298,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(screenshot)
         screenshotItem = screenshot
 
-        let openNotes = NSMenuItem(title: "Open notes", action: #selector(openNotes), keyEquivalent: "n")
+        let openNotes = NSMenuItem(title: "Open meetings", action: #selector(openNotes), keyEquivalent: "n")
         openNotes.keyEquivalentModifierMask = [.command]
         openNotes.target = self
-        openNotes.image = Self.symbol("doc.text", "Open notes")
+        openNotes.image = Self.symbol("doc.text", "Open meetings")
         menu.addItem(openNotes)
 
         menu.addItem(.separator())
@@ -353,9 +356,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsMenu.addItem(.separator())
 
         // "Nothing leaves this Mac" is a claim. This is how a person checks it.
-        let reveal = NSMenuItem(title: "Show where notes are kept", action: #selector(revealFolder), keyEquivalent: "")
+        let reveal = NSMenuItem(title: "Show meeting storage", action: #selector(revealFolder), keyEquivalent: "")
         reveal.target = self
-        reveal.image = Self.symbol("folder", "Show where notes are kept")
+        reveal.image = Self.symbol("folder", "Show meeting storage")
         settingsMenu.addItem(reveal)
 
         let setupItem = NSMenuItem(title: "Set up Excerpt…", action: #selector(showSetup), keyEquivalent: "")
@@ -454,7 +457,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                     let image = try session.addScreenshot(MeetingScreenshot.fromData(data, capturedAt: capturedAt, origin: origin), for: id)
                     captureReceipt.show(image)
-                    catchUp.showNotice("Image added to your notes")
+                    catchUp.showNotice("Screenshot added to your transcript")
                     refresh()
                 } catch {
                     present(title: "Image wasn't added", body: error.localizedDescription, style: .warning)
@@ -497,7 +500,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func syncSystemScreenshots() {
-        guard let session, session.canCaptureImage else {
+        guard UserDefaults.standard.bool(forKey: SystemScreenshotImporter.preferenceKey),
+              let session, session.canCaptureImage else {
             systemScreenshots.stop()
             return
         }
@@ -574,15 +578,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .speech:
             "Excerpt turns speech into text on this Mac, and macOS asks permission for that even though nothing is uploaded. Turn it on in System Settings › Privacy & Security › Speech Recognition."
         }
-    }
-
-    private func suggestHeadphonesIfNeeded() {
-        guard let session, session.shouldSuggestHeadphones else { return }
-        present(
-            title: "Your microphone is picking up the meeting",
-            body: "Excerpt is hearing the same words twice, which makes it harder to tell who said what. Headphones fix it completely.",
-            style: .informational
-        )
     }
 
     @objc private func toggleOverlay() {
@@ -690,10 +685,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func desktopSettings() -> DesktopSettings {
         microphone.refresh()
-        return DesktopSettings(
+        var settings = DesktopSettings(
             captions: overlay.settings(),
             microphone: microphone.snapshot(liveHealth: session?.canCaptureImage == true ? session?.microphoneHealth : nil),
             shortcuts: shortcuts.statuses())
+        settings.screenshotImport = ScreenshotImportSettings(
+            enabled: UserDefaults.standard.bool(forKey: SystemScreenshotImporter.preferenceKey),
+            folderName: systemScreenshots.destinationName)
+        return settings
+    }
+
+    private func setScreenshotImportEnabled(_ enabled: Bool) throws {
+        if enabled { try systemScreenshots.requestFolderAccess() }
+        UserDefaults.standard.set(enabled, forKey: SystemScreenshotImporter.preferenceKey)
+        syncSystemScreenshots()
+        refresh()
     }
 
     private func applyCaptionSettings(_ patch: CaptionSettingsPatch) {
@@ -775,7 +781,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.messageText = interrupted.count == 1
             ? "A meeting ended unexpectedly"
             : "\(interrupted.count) meetings ended unexpectedly"
-        alert.informativeText = "Excerpt kept what it had already heard. Would you like the notes from it?"
+        alert.informativeText = "Excerpt kept the transcript, screenshots and writing from the interrupted meeting. Recover the meeting to read them?"
         alert.addButton(withTitle: "Recover")
         alert.addButton(withTitle: "Discard")
         alert.alertStyle = .informational

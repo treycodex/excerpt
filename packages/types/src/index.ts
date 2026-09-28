@@ -127,8 +127,6 @@ export interface MeetingLibraryEntry {
   processing: ProcessingMode;
   draftRevision?: number;
   noteCount: number;
-  decidedCount: number;
-  mineCount: number;
 }
 
 export interface MeetingSearchResult {
@@ -216,9 +214,6 @@ export interface NoteBlock {
 }
 
 export interface Preferences {
-  order: Category[];
-  boosts: string[];
-  instruction: string;
   transcriptionChoice?: 'on-device-only' | 'cloud-allowed';
   /** Optional note wording provider. Transcription remains independent. */
   notesProvider?: 'apple' | 'openai';
@@ -278,6 +273,7 @@ export interface DesktopSettings {
   captions: CaptionSettings;
   microphone: MicrophoneSettings;
   shortcuts: MeetingShortcutStatus[];
+  screenshotImport: { enabled: boolean; folderName: string | null };
 }
 
 export interface Meeting {

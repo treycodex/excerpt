@@ -41,7 +41,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
         <div className="eyebrow">Excerpt</div>
         <h1>Your meetings</h1>
         <p className="rubric">
-          Kept on this Mac. There is no account; optional OpenAI note enhancement is configured separately in Preferences.
+          Your conversations and screenshots, saved on this Mac. Open a meeting to read its transcript or write notes.
         </p>
       </header>
 
@@ -53,8 +53,8 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
       )}
       {storageAvailable && meetings?.length === 0 && (
         <div className="empty-library">
-          <p>Nothing yet. Start a meeting to capture captions and moments.</p>
-          <div className="actions"><button disabled={commandPending} onClick={() => { void runCommand(onStart); }}>Start meeting</button><button disabled={commandPending} onClick={() => { void runCommand(onOpenLiveNotes); }}>Open live notes</button></div>
+          <p>Your first meeting starts here. Read live captions, capture screenshots, and return to the transcript afterwards.</p>
+          <div className="actions"><button disabled={commandPending} onClick={() => { void runCommand(onStart); }}>Start meeting</button><button disabled={commandPending} onClick={() => { void runCommand(onOpenLiveNotes); }}>Open live meeting</button></div>
         </div>
       )}
 
@@ -75,7 +75,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
             ) : <button className="open" onClick={() => onOpen(m.id)}>
               <span className="mtitle">{m.title} {m.processing === 'demo' && <small>Legacy</small>}</span>
               <span className="mmeta">
-                {when(m.startedAt)} · {m.decidedCount} decided · {m.mineCount} assigned to you
+                {when(m.startedAt)} · {!m.endedAt && m.draftRevision !== undefined ? 'Live' : m.noteCount > 0 ? 'Transcript + notes' : 'Transcript'}
               </span>
             </button>}
             {pendingDelete === m.id ? (
@@ -92,7 +92,7 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
           </article>
         );
       })}
-      {meetings && meetings.length > 0 && <div className="actions"><button disabled={commandPending} onClick={() => { void runCommand(onStart); }}>Start meeting</button><button disabled={commandPending} onClick={() => { void runCommand(onOpenLiveNotes); }}>Open live notes</button></div>}
+      {meetings && meetings.length > 0 && <div className="actions"><button disabled={commandPending} onClick={() => { void runCommand(onStart); }}>Start meeting</button><button disabled={commandPending} onClick={() => { void runCommand(onOpenLiveNotes); }}>Open live meeting</button></div>}
     </div></NotesWorkspace>
   );
 }

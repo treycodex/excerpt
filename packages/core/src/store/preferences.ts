@@ -1,7 +1,8 @@
 import type { Preferences } from '@excerpt/types';
 import { bridge } from './bridge';
-import { DEFAULT_PREFERENCES } from '../scoring';
 import { NativeEditorHostError } from './meetings';
+
+export const DEFAULT_PREFERENCES: Preferences = { notesProvider: 'apple' };
 
 export async function loadPreferences(): Promise<Preferences> {
   const host = bridge();

@@ -1,17 +1,22 @@
 # Excerpt
 
 Excerpt is a desktop Mac app for reading movie-style captions during a meeting,
-capturing useful screen moments, and leaving with editable notes that retain the
-conversation and visuals together.
+capturing useful screen moments, and leaving with a transcript that keeps the
+conversation and screenshots together. Notes are optional.
 
-The app works locally without an account or browser capture. Optional OpenAI note
-enhancement is an explicit Preferences choice and uses a user-provided Keychain key.
-Speech transcription and meeting files remain native to the Mac app.
+The app works locally without an account or browser capture. Notes are written only
+when you ask: on this Mac with Apple Intelligence, or with OpenAI using your own
+Keychain key if you choose that in Settings. Speech transcription and meeting files
+remain native to the Mac app.
 
 ## Meeting controls
 
-Start from the menu, library, or ⌘⇧R. Starting leaves live notes closed; use **Open
-live notes** when you want to write. Ending opens the saved meeting. Cinema captions
+Start from the menu, library, or ⌘⇧R. Starting leaves the meeting window closed; use
+**Open live meeting** to follow the transcript or write your own notes. Ending saves
+the transcript and opens it, with screenshots at the moments they were captured.
+Correct any passage there; the original wording is kept. The **Notes** tab offers
+**Write notes** (generated from the transcript, each note linked to its source) or
+**Write my own** (a blank page). Nothing is generated automatically. Cinema captions
 are on by default, and ⌘⇧C toggles them. Capture moment (⌘⇧S) and Catch up (⌘⇧J)
 are available during a meeting. If another app owns a shortcut, use the menu and
 check **Settings → Keyboard shortcuts**.

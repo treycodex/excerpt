@@ -67,7 +67,7 @@ struct Phase2LifecycleTests {
         return condition()
     }
 
-    @Test func `ending saves visual transcript notes before optional enhancement`() async throws {
+    @Test func `ending saves the transcript and only explicit Write notes starts generation`() async throws {
         let directory = root()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = try MeetingStore(root: directory)
@@ -91,12 +91,36 @@ struct Phase2LifecycleTests {
                 for: session.meetingId)
         }
         await session.stop()
+        #expect(session.status == "Transcript saved")
         let saved = try store.load(id: session.meetingId)
-        #expect(saved.notes?.blocks?.contains { $0.kind == "bullet" && $0.text.contains("onboarding") } == true)
+        #expect(saved.notes?.blocks?.contains { $0.kind == "bullet" } == false)
+        #expect(saved.generationStatus == nil)
+        #expect(saved.items.isEmpty)
+        #expect(saved.events.count == 1)
         #expect(saved.notes?.blocks?.filter { $0.kind == "image" }.count == 2)
         #expect(saved.suggestedNotes == nil)
         #expect(saved.title.contains("onboarding"))
+        let queued = try session.retryAutomaticNotes(id: saved.id)
+        #expect(queued.generationStatus?.state == .queued)
+        await gate.waitUntilEntered()
+        #expect(throws: (any Error).self) { _ = try session.retryAutomaticNotes(id: saved.id) }
         await gate.open()
+        #expect(await waitUntil { (try? store.load(id: saved.id).generationStatus?.state) == .ready })
+    }
+
+    @Test func `a meeting with no words says why instead of only that it was saved`() async throws {
+        let directory = root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try MeetingStore(root: directory)
+        let factory = TranscriberFactory()
+        let session = try session(store: store, capture: LifecycleCapture()) { factory.make() }
+        await session.start()
+        _ = try session.addScreenshot(MeetingScreenshot.Capture(
+            dataURL: "data:image/png;base64,c3ludGhldGlj", capturedAt: Date(), origin: "excerpt"),
+            for: session.meetingId)
+        await session.stop()
+        // The fake capture delivers no buffers from either source.
+        #expect(session.status == "Meeting saved · no audio reached Excerpt — check its permissions")
     }
 
     @Test func `a chosen native screenshot is added to the live meeting and survives End`() async throws {
@@ -380,10 +404,10 @@ struct Phase2LifecycleTests {
         #expect(saved.finishReason == .interrupted)
         #expect(saved.captureError == "display stream disappeared")
         #expect(opened == [interruptedID])
-        #expect(session.status == "The meeting was interrupted — your notes so far were saved")
+        #expect(session.status == "The meeting was interrupted — your transcript and captures were saved")
         #expect(session.state == .interrupted(
             id: interruptedID,
-            message: "The meeting was interrupted — your notes so far were saved"))
+            message: "The meeting was interrupted — your transcript and captures were saved"))
     }
 
     @Test func `save failure never opens an older meeting and retry uses the recovery snapshot`() async throws {
@@ -405,16 +429,14 @@ struct Phase2LifecycleTests {
         let previousID = session.meetingId
         await session.stop()
         #expect(opened == [previousID])
-        #expect(await waitUntil {
-            (try? store.load(id: previousID).generationStatus?.state) == .ready
-        })
+        #expect(try store.load(id: previousID).generationStatus == nil)
 
         failMeetingWrite = true
         await session.start()
         let failedID = session.meetingId
         await session.stop()
 
-        #expect(session.state == .failed("Could not write the notes file."))
+        #expect(session.state == .failed("Could not save the meeting."))
         #expect(session.lastSaved == nil)
         #expect(opened == [previousID])
         #expect(session.canRetryFailedSave)
@@ -446,6 +468,15 @@ struct Phase2LifecycleTests {
         await session.start()
         let meetingID = session.meetingId
 
+        let previous = Meeting(id: "background-notes", title: "Earlier meeting",
+            startedAt: "2026-09-22T01:00:00Z", endedAt: "2026-09-22T01:10:00Z",
+            processing: .onDevice, events: [TranscriptEvent(id: "earlier", sessionId: "background-notes",
+                role: .remote, speakerLabel: "SPEAKER", text: "We decided to review the plan.",
+                isFinal: true, tArrived: 1000)], items: [])
+        try store.save(previous)
+        _ = try session.retryAutomaticNotes(id: previous.id)
+        await generation.waitUntilEntered()
+
         let picker = LifecycleGate()
         let screenshots = MeetingScreenshotCoordinator()
         var attached = false
@@ -475,7 +506,6 @@ struct Phase2LifecycleTests {
         #expect(await waitUntil { replied })
         #expect(!screenshots.isCapturing)
         #expect(try store.load(id: meetingID).finishReason == .stopped)
-        await generation.waitUntilEntered()
         #expect(replied, "optional enhancement must not hold the termination reply")
 
         await picker.open()

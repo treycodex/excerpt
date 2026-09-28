@@ -80,8 +80,19 @@ final class MeetingStore {
     }
 
     private struct LibraryIndex: Codable {
+        // Version 2 counts written text, excluding transcript captures and hidden review items.
+        // Version 3 records whether requested notes were still being written.
+        var version: Int = 3
         var stamp: FileStamp
         var record: MeetingLibraryRecord
+        var generationPending: Bool
+
+        init(stamp: FileStamp, meeting: Meeting) {
+            self.stamp = stamp
+            record = MeetingLibraryRecord(meeting)
+            let state = meeting.generationStatus?.state
+            generationPending = state == .queued || state == .running
+        }
     }
 
     init(root: URL? = nil, faults: Faults = Faults()) throws {
@@ -120,7 +131,7 @@ final class MeetingStore {
         if let stamp = FileStamp(destination) {
             touchFullMeetingCache(durable.id)
             meetingCache[durable.id] = (stamp, durable)
-            let index = LibraryIndex(stamp: stamp, record: MeetingLibraryRecord(durable))
+            let index = LibraryIndex(stamp: stamp, meeting: durable)
             touchLibraryCache(durable.id)
             libraryCache[durable.id] = index
             writeLibraryIndex(index, id: durable.id)
@@ -171,6 +182,16 @@ final class MeetingStore {
     /// Reads compact sidecars on warm requests, validating each against the
     /// authoritative file. Legacy files or stale/corrupt indexes decode once.
     func libraryRecords() -> [MeetingLibraryRecord] {
+        libraryIndexes().map(\.record).sorted { $0.entry.startedAt > $1.entry.startedAt }
+    }
+
+    /// Meetings whose requested notes were still queued or running, read from the
+    /// library indexes so launch does not open every meeting to find them.
+    func pendingGenerationIds() -> [String] {
+        libraryIndexes().filter(\.generationPending).map(\.record.entry.id)
+    }
+
+    private func libraryIndexes() -> [LibraryIndex] {
         let files = (try? FileManager.default.contentsOfDirectory(
             at: meetingsDirectory, includingPropertiesForKeys: nil)) ?? []
         return files.filter { $0.pathExtension == "json" }.compactMap { url in
@@ -178,28 +199,32 @@ final class MeetingStore {
             let id = url.deletingPathExtension().lastPathComponent
             if let cached = libraryCache[id], cached.stamp == stamp {
                 touchLibraryCache(id)
-                return cached.record
+                return cached
             }
             if let data = try? Data(contentsOf: libraryIndexURL(id)),
                let index = try? JSONDecoder.excerpt.decode(LibraryIndex.self, from: data),
-               index.stamp == stamp, index.record.entry.id == id {
+               index.version == 3, index.stamp == stamp, index.record.entry.id == id {
                 touchLibraryCache(id)
                 libraryCache[id] = index
-                return index.record
+                return index
             }
             do {
-                let meeting = try load(id: id)
-                let index = LibraryIndex(stamp: stamp, record: MeetingLibraryRecord(meeting))
+                // A row needs captions, not image bytes: the compact file is enough,
+                // and reading and hashing every screenshot here made a rebuild cost
+                // as much as opening each meeting. A damaged image still fails when
+                // the meeting itself is opened.
+                let meeting = try JSONDecoder.excerpt.decode(Meeting.self, from: Data(contentsOf: url)).revisioned()
+                let index = LibraryIndex(stamp: stamp, meeting: meeting)
                 touchLibraryCache(id)
                 libraryCache[id] = index
                 writeLibraryIndex(index, id: id)
-                return index.record
+                return index
             } catch {
                 libraryCache[id] = nil
                 log.error("skipping unreadable meeting \(url.lastPathComponent): \(error)")
                 return nil
             }
-        }.sorted { $0.entry.startedAt > $1.entry.startedAt }
+        }
     }
 
     func delete(id: String) throws {

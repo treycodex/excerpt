@@ -25,6 +25,8 @@ export interface ExcerptBridge {
   saveCaptionSettings(settings: Partial<Pick<CaptionSettings, 'preset' | 'size' | 'position' | 'enabled' | 'displayId'>>): Promise<DesktopSettings>;
   /** Selects a stable native capture-device identifier. */
   selectMicrophone(deviceId: string): Promise<DesktopSettings>;
+  /** Chooses whether to import new macOS screenshots saved during a meeting. */
+  setScreenshotImportEnabled(enabled: boolean): Promise<DesktopSettings>;
   listMeetings(): Promise<MeetingLibraryEntry[]>;
   /** Native searches persisted text without sending a whole library into the webview. */
   searchMeetings(query: string): Promise<MeetingSearchResult[]>;

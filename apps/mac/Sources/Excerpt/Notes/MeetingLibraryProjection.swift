@@ -10,8 +10,6 @@ struct MeetingLibraryEntry: Codable, Sendable, Equatable {
     var processing: ProcessingMode
     var draftRevision: Int?
     var noteCount: Int
-    var decidedCount: Int
-    var mineCount: Int
 
     init(_ meeting: Meeting) {
         id = meeting.id
@@ -20,18 +18,15 @@ struct MeetingLibraryEntry: Codable, Sendable, Equatable {
         endedAt = meeting.endedAt
         processing = meeting.processing
         draftRevision = meeting.draftRevision
-        let live = meeting.items.filter { $0.dismissed != true }
-        decidedCount = live.filter { $0.category == .decision && $0.state == .decided }.count
-        mineCount = live.filter { $0.assignee == .you }.count
         let written: Int
         if let blocks = meeting.notes?.blocks, !blocks.isEmpty {
-            written = blocks.filter { $0.kind == "image" || !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+            written = blocks.filter { $0.kind != "image" && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
         } else {
             written = MeetingLibrarySearch.noteTexts(meeting).filter {
                 !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }.count
         }
-        noteCount = written == 0 ? live.count : written
+        noteCount = written
     }
 }
 

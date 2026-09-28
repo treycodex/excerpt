@@ -41,6 +41,7 @@ export function createFakeNativeHost(input: { meetings?: Meeting[]; preferences?
       { name: 'catchUp', label: 'Catch up', shortcut: '⌘⇧J', registered: false, relevant: false },
       { name: 'capture', label: 'Capture moment', shortcut: '⌘⇧S', registered: false, relevant: false },
     ],
+    screenshotImport: { enabled: false, folderName: 'Desktop' },
   };
 
   return {
@@ -54,6 +55,7 @@ export function createFakeNativeHost(input: { meetings?: Meeting[]; preferences?
       if (!meeting || meeting.endedAt) throw new Error('That meeting is no longer listening.');
       return Math.max(0, Date.now() - new Date(meeting.startedAt).getTime());
     },
+    async getNotesProviderStatus() { return { openAIKeyConfigured: false, selected: 'apple', ready: true, providerName: 'Apple Intelligence', processing: 'on-device' }; },
     async retryAutomaticNotes(id) {
       calls.push(`retryAutomaticNotes:${id}`);
       const meeting = meetings.get(id);
@@ -73,6 +75,11 @@ export function createFakeNativeHost(input: { meetings?: Meeting[]; preferences?
     async selectMicrophone(deviceId) {
       calls.push(`selectMicrophone:${deviceId}`);
       desktopSettings = { ...desktopSettings, microphone: { ...desktopSettings.microphone, selectedDeviceId: deviceId } };
+      return clone(desktopSettings);
+    },
+    async setScreenshotImportEnabled(enabled) {
+      calls.push(`setScreenshotImportEnabled:${enabled}`);
+      desktopSettings = { ...desktopSettings, screenshotImport: { ...desktopSettings.screenshotImport, enabled } };
       return clone(desktopSettings);
     },
     async listMeetings() { calls.push('listMeetings'); return [...meetings.values()].map(meetingLibraryEntry).map(clone); },

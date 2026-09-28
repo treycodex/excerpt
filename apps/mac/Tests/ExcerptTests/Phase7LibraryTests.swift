@@ -23,6 +23,13 @@ struct Phase7LibraryTests {
                 capturedAt: "2026-09-23T09:10:00Z", at: 600_000, caption: "Pricing chart")])
     }
 
+    @Test func `settings saved with retired review priorities keep the note provider`() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        defaults.set(Data(#"{"order":["action","decision","deadline","question"],"boosts":["budget"],"instruction":"budgets","notesProvider":"openai"}"#.utf8),
+                     forKey: "excerpt.preferences")
+        #expect(PreferencesStore(defaults: defaults).load().notesProvider == "openai")
+    }
+
     @Test func `library and search bridge responses omit image bytes and full text`() async throws {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "excerpt-phase7-library-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -35,9 +42,7 @@ struct Phase7LibraryTests {
         let listJSON = try #require(try await bridge.dispatch("listMeetings") as? String)
         let entries = try JSONDecoder.excerpt.decode([MeetingLibraryEntry].self, from: Data(listJSON.utf8))
         #expect(entries.count == 1)
-        #expect(entries[0].noteCount == 2)
-        #expect(entries[0].decidedCount == 1)
-        #expect(entries[0].mineCount == 1)
+        #expect(entries[0].noteCount == 1)
         #expect(!listJSON.contains("data:image"))
         #expect(!listJSON.contains("launch transcript"))
 
