@@ -147,8 +147,11 @@ const PEOPLE = [
 
 const BARS = [['Variant A', 46], ['Variant B', 62], ['New opening', 78]] as const;
 
-/** One person's turn. `final` is the turn a still of the scene (reduced motion) keeps. */
-type Turn = { lines: readonly string[]; at: number; until: number; who: number; final?: boolean };
+/** What the overlay shows at `at`: a phrase snapshot, broken into at most two lines. */
+type Cue = { at: number; lines: readonly string[] };
+/** One person's turn, as the snapshots the overlay published while they spoke.
+    `final` is the turn a still of the scene (reduced motion) keeps. */
+type Turn = { who: number; at: number; until: number; cues: readonly Cue[]; final?: boolean };
 
 function Slide({ grow = true }: { grow?: boolean }) {
   return (
@@ -185,7 +188,7 @@ function Desk({ children, pingAt }: { children: ReactNode; pingAt?: number }) {
   );
 }
 
-function Call({ turns = [], share, children }: { turns?: readonly Turn[]; share?: ReactNode; children?: ReactNode }) {
+function Call({ turns = [], share }: { turns?: readonly Turn[]; share?: ReactNode }) {
   return (
     <div className="dm-call">
       <div className="dm-call-bar">
@@ -210,24 +213,39 @@ function Call({ turns = [], share, children }: { turns?: readonly Turn[]; share?
           ))}
         </div>
       </div>
-      {children}
     </div>
   );
 }
 
-/** Two lines that arrive word by word, the way live recognition settles. */
-function Caption({ turn, transient }: { turn: Turn; transient: boolean }) {
-  let n = 0;
+/* The Mac overlay, in its Golden hour look — drawn with the product's own caption
+   tokens (`[data-caption="warm"]` in @excerpt/ui/tokens.css), not a copy of them.
+   It follows the overlay's rules: centred at 84% of the screen, two lines at most,
+   bottom-aligned, phrase snapshots rather than words. A caption arriving fades in
+   over --cap-fade; one snapshot replacing another is a cut, as film subtitles are. */
+const FADE = 0.18;
+const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
+
+function Subtitles({ turns }: { turns: readonly Turn[] }) {
+  const cues = turns.flatMap((t) => t.cues.map((c, i) => ({
+    ...c, until: t.cues[i + 1]?.at ?? t.until, final: !!t.final && i === t.cues.length - 1,
+  })));
   return (
-    <p className={transient ? 'dm-caption dm-life dm-transient' : 'dm-caption dm-life'} style={life(turn.at, turn.until)}>
-      {turn.lines.map((line) => (
-        <span className="dm-caption-line" key={line}>
-          {line.split(' ').map((word, i) => (
-            <span key={i}>{i > 0 && ' '}<span className="dm-word" style={delay(turn.at + 0.12 + n++ * 0.11)}>{word}</span></span>
-          ))}
-        </span>
-      ))}
-    </p>
+    <div className="dm-subtitles" data-caption="warm" aria-hidden>
+      {cues.map((c, i) => {
+        const arrives = (cues[i - 1]?.until ?? -1) < c.at;
+        const leaves = (cues[i + 1]?.at ?? Infinity) > c.until;
+        const animation = [
+          `dm-cut ${c.until - c.at}s linear ${c.at}s`,
+          arrives && `dm-cue-in ${FADE}s ${EASE_OUT} ${c.at}s`,
+          leaves && `dm-cue-out ${FADE}s ${EASE_OUT} ${c.until - FADE}s forwards`,
+        ].filter(Boolean).join(', ');
+        return (
+          <div key={c.at} className={c.final ? 'dm-cue dm-cue-final' : 'dm-cue'} style={{ animation }}>
+            {c.lines.map((line) => <span className="dm-cue-line" key={line}>{line}</span>)}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -249,19 +267,25 @@ function Cursor({ at, stay = false }: { at: number; stay?: boolean }) {
 /* ── Scene 1 · Live captions ────────────────────────────────────────────────── */
 
 const TURNS: readonly Turn[] = [
-  { lines: ['The new opening holds attention longer,', 'but the product arrives too late.'], at: 0.9, until: 4.3, who: 0 },
-  { lines: ['So the product moves', 'into the first three seconds?'], at: 4.5, until: 7.5, who: 1 },
-  { lines: ['Yes — I’ll send a revised cut', 'on Thursday.'], at: 7.7, until: 11.5, who: 2, final: true },
+  { who: 0, at: 0.9, until: 4.5, cues: [
+    { at: 0.9, lines: ['The new opening holds attention longer,'] },
+    { at: 2.2, lines: ['The new opening holds attention longer,', 'but the product arrives too late.'] },
+  ] },
+  { who: 1, at: 4.5, until: 7.7, cues: [
+    { at: 4.5, lines: ['So the product moves'] },
+    { at: 5.5, lines: ['So the product moves', 'into the first three seconds?'] },
+  ] },
+  { who: 2, at: 7.7, until: 11.5, final: true, cues: [
+    { at: 7.7, lines: ['Yes — I’ll send a revised cut'] },
+    { at: 8.8, lines: ['Yes — I’ll send a revised cut', 'on Thursday.'] },
+  ] },
 ];
 
 function CaptionsScene() {
   return (
     <Desk>
-      <Call turns={TURNS}>
-        <div className="dm-captions">
-          {TURNS.map((t) => <Caption key={t.at} turn={t} transient={!t.final} />)}
-        </div>
-      </Call>
+      <Call turns={TURNS} />
+      <Subtitles turns={TURNS} />
       <Toast at={0.2} until={2.6}><Wordmark markOnly /> Captions on <kbd>⌘⇧C</kbd></Toast>
     </Desk>
   );
@@ -269,7 +293,7 @@ function CaptionsScene() {
 
 /* ── Scene 2 · Visual capture ───────────────────────────────────────────────── */
 
-const LEAD_IN: Turn = { lines: ['Here’s where the three cuts landed.'], at: 0.1, until: 2.3, who: 0 };
+const LEAD_IN: Turn = { who: 0, at: 0.1, until: 2.3, cues: [{ at: 0.1, lines: ['Here’s where the three cuts landed.'] }] };
 
 function CaptureScene() {
   return (
@@ -280,9 +304,8 @@ function CaptureScene() {
           <span className="dm-crosshair" />
         </span>
         <span className="dm-fly dm-transient"><Slide grow={false} /></span>
-      </>}>
-        <div className="dm-captions"><Caption turn={LEAD_IN} transient /></div>
-      </Call>
+      </>} />
+      <Subtitles turns={[LEAD_IN]} />
       <div className="dm-keys dm-life dm-transient" style={life(0.4, 2.7)}>
         <kbd style={delay(0.8)}>⌘</kbd><kbd style={delay(0.9)}>⇧</kbd><kbd style={delay(1)}>S</kbd>
         <span>Capture moment</span>
