@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { DemoModal } from './views/DemoModal';
 import { InstallPage } from './views/Install';
 import { Landing } from './views/Landing';
 import { LandingLegacy } from './views/LandingLegacy';
@@ -24,17 +25,14 @@ export function App() {
   }, []);
   useEffect(() => { document.title = TITLES[route] ?? DEFAULT_TITLE; }, [route]);
 
-  const showDemo = () => {
-    if (route !== 'landing') window.location.hash = '#/';
-    window.setTimeout(() => {
-      document.getElementById('tab-subtitles')?.click();
-      document.getElementById('lp-frame')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 0);
-  };
+  // "Watch the demo" plays the film, wherever on the site it is pressed.
+  const [demo, setDemo] = useState(false);
+  const showDemo = () => setDemo(true);
 
   return <main id="main" tabIndex={-1}>
     {route === 'legacy'
       ? <><p className="legacy-notice">Archived landing-page design. <a href="#/">See the current transcript-first product →</a></p><LandingLegacy onStart={showDemo} /></>
       : route === 'install' ? <InstallPage /> : <Landing onStart={showDemo} />}
+    <DemoModal open={demo} onClose={() => setDemo(false)} />
   </main>;
 }

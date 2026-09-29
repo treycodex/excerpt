@@ -184,6 +184,8 @@ final class MeetingSession {
     }
 
     var elapsedMilliseconds: Double { clock.positionMilliseconds() }
+    /// The live meeting's name as it stands, for the home screen.
+    var liveTitle: String? { state.isActive ? draftTitle : nil }
     var canCaptureImage: Bool { if case .listening = state { return true }; return false }
     var microphoneHealth: SourceHealth? { health[.microphone] }
 
@@ -267,6 +269,26 @@ final class MeetingSession {
 
     func cancelBackgroundWork(for id: String) { enhancer.cancel(id: id) }
 
+    /// What the meeting would be called if it ended now: the name someone chose, or
+    /// the one End would take from the transcript so far. Nil before anything is said.
+    func titleSuggestion() -> String? {
+        guard state.isActive else { return nil }
+        if draftTitle != Self.title(for: clock.startedAt) { return draftTitle }
+        let suggested = try? engine.suggestedTitle(for: draftMeeting())
+        return suggested?.isEmpty == false ? suggested : nil
+    }
+
+    /// Names the live meeting. A chosen name is kept at End rather than replaced by
+    /// the transcript's suggestion.
+    func rename(_ title: String) {
+        let chosen = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard state.isActive, !chosen.isEmpty, chosen != draftTitle else { return }
+        draftTitle = chosen
+        do { try checkpointDraftAndPublish() }
+        catch { log.error("draft checkpoint failed after rename: \(error.localizedDescription)") }
+        onStateChange?()
+    }
+
     @discardableResult
     func addScreenshot(_ capture: MeetingScreenshot.Capture, for id: String) throws -> MeetingImage {
         guard id == meetingId, canCaptureImage else { throw NSError(domain: "Excerpt", code: 1, userInfo: [NSLocalizedDescriptionKey: "The meeting ended before the screenshot could be added."]) }
@@ -294,7 +316,10 @@ final class MeetingSession {
 
     // MARK: - Start
 
-    func start() async {
+    /// `title` is what the person typed, or accepted, when Excerpt noticed the meeting.
+    /// Left empty, the meeting keeps its dated placeholder and is named from its
+    /// transcript at End, as before.
+    func start(title: String? = nil) async {
         guard !state.isActive else { return }
         if let failed = pendingSave {
             do { try persistFinished(failed) }
@@ -317,6 +342,9 @@ final class MeetingSession {
         events = []
         images = []
         draftTitle = Self.title(for: clock.startedAt)
+        if let chosen = title?.trimmingCharacters(in: .whitespacesAndNewlines), !chosen.isEmpty {
+            draftTitle = chosen
+        }
         draftNotes = NotesDocument(method: "extractive", keyPoints: [], topics: [], blocks: [])
         draftItems = []
         draftRevision = 0

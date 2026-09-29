@@ -55,7 +55,7 @@ struct Phase4BridgeSettingsTests {
             return true
         }, stop: { active = false }, didStart: { returnedFocus += 1 })
         let bridge = NotesBridge(store: try MeetingStore(root: directory), preferences: PreferencesStore(defaults: defaults()),
-            startMeeting: { try await commands.start() }, openLiveNotes: { openedNotes += 1 })
+            startMeeting: { _ in try await commands.start() }, openLiveNotes: { openedNotes += 1 })
         let first = Task { try await bridge.dispatch("startMeeting") }
         await gate.waitUntilEntered()
         let duplicate = Task { try await commands.start() }

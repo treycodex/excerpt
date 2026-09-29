@@ -37,6 +37,23 @@ struct DesktopSettings: Codable, Equatable, Sendable {
     var microphone: MicrophoneSettings
     var shortcuts: [MeetingShortcutStatus]
     var screenshotImport = ScreenshotImportSettings(enabled: false, folderName: nil)
+    var meeting = LiveMeetingStatus.idle
+    var noticeMeetings = true
+}
+
+/// What the home screen needs to say about the meeting in progress, if any. The
+/// clock is not sent; `startedAt` is, and the page counts from it.
+struct LiveMeetingStatus: Codable, Equatable, Sendable {
+    enum Phase: String, Codable, Sendable { case idle, starting, live, finishing }
+    var phase: Phase
+    var meetingId: String?
+    var title: String?
+    var startedAt: String?
+    var status: String
+    /// The call app Excerpt saw the meeting in, such as "Zoom".
+    var app: String?
+
+    static let idle = LiveMeetingStatus(phase: .idle, status: "Not listening")
 }
 
 struct ScreenshotImportSettings: Codable, Equatable, Sendable {

@@ -17,3 +17,40 @@
   font-weight: 600;
   letter-spacing: -0.045em;
 }
+
+/* ── The desktop's paper, in the website's own grammar ─────────────────────────
+   The app is the site's paper section (the pricing ticket's page) made into a
+   workspace: Archivo at a light display weight with a serif turn at the end of a
+   headline, mono capitals for labels, the cinema line icons, soft 11px controls,
+   and the one ember accent drawn as four corner brackets round whatever is active. */
+.home, .notebook {
+  --radius: 8px;
+  --radius-control: 11px;
+  --radius-card: 14px;
+  --bracket: var(--ember);
+  --brackets:
+    linear-gradient(var(--bracket) 0 0) left top / var(--frame-size) 1px no-repeat,
+    linear-gradient(var(--bracket) 0 0) left top / 1px var(--frame-size) no-repeat,
+    linear-gradient(var(--bracket) 0 0) right top / var(--frame-size) 1px no-repeat,
+    linear-gradient(var(--bracket) 0 0) right top / 1px var(--frame-size) no-repeat,
+    linear-gradient(var(--bracket) 0 0) left bottom / var(--frame-size) 1px no-repeat,
+    linear-gradient(var(--bracket) 0 0) left bottom / 1px var(--frame-size) no-repeat,
+    linear-gradient(var(--bracket) 0 0) right bottom / var(--frame-size) 1px no-repeat,
+    linear-gradient(var(--bracket) 0 0) right bottom / 1px var(--frame-size) no-repeat;
+}
+.home .ci, .notebook .ci { display: block; flex: none; width: 18px; height: 18px; }
+
+/* The site's `.lp-solid` sheen: light crossing a lens, once, on hover. */
+.home .home-primary, .notebook :is(.notebook-new, .write-notes-action) { position: relative; overflow: hidden; }
+.home .home-primary::after, .notebook :is(.notebook-new, .write-notes-action)::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .22) 50%, transparent 65%);
+  transform: translateX(-120%);
+}
+.home .home-primary:not(:disabled):hover::after,
+.notebook :is(.notebook-new, .write-notes-action):not(:disabled):hover::after {
+  transform: translateX(120%); transition: transform .7s var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .home .home-primary::after, .notebook :is(.notebook-new, .write-notes-action)::after { display: none; }
+}

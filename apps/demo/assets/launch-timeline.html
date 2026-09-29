@@ -1,0 +1,35 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  /* A synthetic slide for the demo meeting: a fictional product, invented dates. */
+  body { margin: 0; width: 1920px; height: 1080px; background: #fafaf7; font-family: -apple-system, "Helvetica Neue", sans-serif; color: #1b1d22; }
+  .slide { padding: 110px 130px; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; }
+  .kicker { font-size: 22px; letter-spacing: .16em; text-transform: uppercase; color: #5b6170; }
+  h1 { font-size: 76px; margin: 18px 0 0; letter-spacing: -.02em; font-weight: 700; }
+  .track { position: relative; margin-top: 120px; height: 4px; background: #d9dbe2; }
+  .bar { position: absolute; left: 0; top: 0; height: 4px; width: 58%; background: #3553e0; }
+  .m { position: absolute; top: -16px; transform: translateX(-50%); text-align: center; width: 300px; }
+  .m i { display: block; width: 36px; height: 36px; margin: 0 auto; border-radius: 50%; background: #fff; border: 4px solid #3553e0; box-sizing: border-box; }
+  .m.todo i { border-color: #b8bcc8; }
+  .m.risk i { border-color: #e0772b; background: #fff4ea; }
+  .m b { display: block; margin-top: 26px; font-size: 30px; }
+  .m span { display: block; margin-top: 8px; font-size: 24px; color: #5b6170; }
+  .note { margin-top: auto; display: flex; gap: 60px; font-size: 26px; color: #3b3f4a; }
+  .note div { padding: 26px 30px; background: #fff; border: 1px solid #e3e5ea; border-radius: 14px; flex: 1; }
+  .note strong { display: block; font-size: 20px; letter-spacing: .12em; text-transform: uppercase; color: #5b6170; margin-bottom: 10px; }
+  .foot { margin-top: 40px; font-size: 20px; color: #8a8f9c; }
+</style></head><body><div class="slide">
+  <div class="kicker">Northwind · Launch review</div>
+  <h1>Beta launch timeline</h1>
+  <div class="track"><div class="bar"></div>
+    <div class="m" style="left:0%"><i></i><b>Sep 16</b><span>Beta build frozen</span></div>
+    <div class="m" style="left:30%"><i></i><b>Sep 30</b><span>QA sign-off</span></div>
+    <div class="m risk" style="left:58%"><i></i><b>Oct 7</b><span>Help center · at risk</span></div>
+    <div class="m todo" style="left:82%"><i></i><b>Oct 14</b><span>Proposed launch</span></div>
+  </div>
+  <div class="note">
+    <div><strong>Ready</strong>Beta build, pricing page, onboarding flow</div>
+    <div><strong>Blocking</strong>Help center articles: 9 of 22 written</div>
+    <div><strong>Open</strong>Press embargo · end card for onboarding video</div>
+  </div>
+  <div class="foot">Sample slide for a product demo. Fictional company and dates.</div>
+</div></body></html>

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 /* ── Cinema icons ──────────────────────────────────────────────────────────────
-   One line-icon set for the landing page, drawn from the film set rather than the
+   One line-icon set for the landing page and the Mac app's pages, drawn from the film set rather than the
    office: a slate for notes, a script for the transcript, a viewfinder for a
    capture, a ticket for the price. Every shape is 24 units, a 1.5 stroke in
    currentColor, and carries pathLength="1" so a revealed section can draw its

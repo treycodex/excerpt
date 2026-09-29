@@ -16,6 +16,33 @@ describe('readable meeting notes', () => {
     expect(suggestMeetingTitle(input)).toBe('The customer onboarding flow needs fewer steps before launch');
     expect(suggestMeetingTitle(meeting([]))).toBeUndefined();
   });
+  it('titles from the cleanest span said, and leaves a meeting untitled rather than name it a stumble', () => {
+    const decided = (...titles: string[]): Meeting => ({ ...meeting([]), items: titles.map((title, i) => ({
+      id: `d${i}`, category: 'decision', state: 'decided', title, evidence: [], assignee: 'unassigned', salience: 1,
+    }) as Meeting['items'][number]) });
+    const title = (...titles: string[]) => suggestMeetingTitle(decided(...titles));
+    // A stumble inside the span has no clean cut; the next candidate is used.
+    expect(title('Um So then I think um part of my critique', 'We ship the pricing page on Friday.'))
+      .toBe('We ship the pricing page on Friday');
+    // A span that stops mid-thought is not a title.
+    expect(title("What I'd say is")).toBeUndefined();
+    // Openers are trimmed off the front; the words kept are the words said.
+    expect(title('Okay so I think the onboarding checklist moves to week two.'))
+      .toBe('The onboarding checklist moves to week two');
+    // Cut short at a pause, not mid-clause, and never on a dangling word.
+    expect(title('The hiring plan for design, which we argued about for an hour, is final.'))
+      .toBe('The hiring plan for design');
+    expect(title('We should move the quarterly planning offsite to the second week of the month'))
+      .toBe('We should move the quarterly planning offsite');
+    // Fragments and stutters from real captures are passed over, stray punctuation trimmed.
+    expect(title('Of, of the campaign launch to October.')).toBeUndefined();
+    expect(title('to the second week of the month')).toBeUndefined();
+    expect(title(", you're not just getting an automation")).toBe("You're not just getting an automation");
+    expect(title('How do we record on Zoom ,........')).toBe('How do we record on Zoom');
+    expect(title('So how do we record on Zoom ,........, like a training or a webinar and not.. have all'))
+      .toBe('How do we record on Zoom');
+    expect(title("No, we'll move on to item 4.")).toBe("We'll move on to item 4");
+  });
   it('keeps a subject that returns much later in its later passage', () => {
     const statement = 'We decided the customer onboarding flow needs fewer steps before launch.';
     const notes = buildNotesDocument(meeting([

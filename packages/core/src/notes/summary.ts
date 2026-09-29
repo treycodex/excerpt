@@ -226,16 +226,73 @@ export function buildNotesDocument(meeting: Meeting): NotesDocument {
     topics: passages(bullets, recurring, sentences.at(-1)?.event.tArrived ?? 0) };
 }
 
-/** A short verbatim topic from supported speech; no model or invented subject. */
+/** Openers that carry no subject; trimming them leaves a verbatim span. */
+const OPENER = /^(?:(?:um+|uh+|erm|er|ah|oh|okay|ok|so|right|well|alright|yeah|yes|and|but|then|anyway|like|i mean|you know|i think|i guess|i feel like)\b[,.]?|no,)\s*/i;
+/** A hesitation: past the first word, no clean verbatim title can be cut around it. */
+const STUMBLE = /\b(?:um+|uh+|erm|hmm+|mm+)\b/i;
+/** A title ending on one of these stops mid-thought ("What I'd say is"). */
+const DANGLING = /^(?:a|an|the|and|or|but|so|to|of|in|on|at|for|with|from|by|about|as|than|then|if|is|are|was|were|be|been|that|this|which|who|what|my|our|your|their|his|her|its|i|we|you|they|i'd|i'm|i'll|we're|we'll|say|said|think|mean|like|just|really|very|kind|sort)$/i;
+/** Words that open a phrase; a cut soon after one leaves it hanging. */
+const LINK = /^(?:to|of|in|on|at|for|with|from|by|about|into|over|after|before|until|and|or|but|because|when|while|which|that)$/i;
+const TITLE_WORDS = 10;
+
+function lastIndex(words: string[], test: (word: string, index: number) => boolean): number {
+  for (let i = words.length - 1; i >= 0; i--) if (test(words[i]!, i)) return i;
+  return -1;
+}
+const TITLE_CHARS = 64;
+
+/** The cleanest verbatim span of a sentence that can stand as a title, or nothing. */
+function titleSpan(text: string): string | undefined {
+  let span = text.replace(/\s+/g, ' ').trim();
+  // One "um" to open is throat-clearing; another after it is a false start.
+  if (STUMBLE.test(span.split(' ').slice(1).join(' '))) return undefined;
+  for (let before = ''; before !== span;) { before = span; span = span.replace(/^[\s,.;:…-]+/, '').replace(OPENER, ''); }
+  // Captions scatter punctuation ("Zoom ,........, like"); a token of nothing else
+  // is a pause belonging to the word before it.
+  const all: string[] = [];
+  for (const token of span.split(' ')) {
+    if (/[\p{L}\p{N}]/u.test(token)) all.push(token);
+    else if (all.length && /[,;:]/.test(token)) all[all.length - 1] += ',';
+  }
+  // Starting on a joining word is the back half of a sentence; a repeated word is a stutter.
+  if (!all.length || LINK.test(all[0]!.replace(/\W+$/, ''))) return undefined;
+  const plain = all.map((w) => w.toLowerCase().replace(/\W+$/, ''));
+  if (plain.some((w, i) => i > 0 && w === plain[i - 1])) return undefined;
+  let words: string[] = [];
+  for (const word of all) {
+    if (words.length === TITLE_WORDS || [...words, word].join(' ').length > TITLE_CHARS) break;
+    words.push(word);
+  }
+  // Cut short, end where the speaker paused, or else before the phrase the cut
+  // would leave unfinished ("…offsite to the second").
+  if (words.length < all.length) {
+    const pause = lastIndex(words, (w, i) => i >= 2 && /[,;:]$/.test(w));
+    const phrase = lastIndex(words, (w, i) => i >= 3 && LINK.test(w));
+    if (pause >= 0) words = words.slice(0, pause + 1);
+    else if (phrase >= 0) words = words.slice(0, phrase);
+  }
+  const bare = (word: string) => word.replace(/[^\p{L}\p{N}'’%)]+$/u, '');
+  while (words.length && DANGLING.test(bare(words.at(-1)!))) words.pop();
+  const title = [...words.slice(0, -1), bare(words.at(-1) ?? '')].join(' ');
+  return words.length >= 3 && title.length >= 12 ? title[0]!.toUpperCase() + title.slice(1) : undefined;
+}
+
+/**
+ * A short verbatim topic from supported speech; no model or invented subject.
+ * Tries decisions, then key points, and names nothing when none reads cleanly:
+ * "Untitled" is honest, a stumble is not a title.
+ */
 export function suggestMeetingTitle(meeting: Meeting): string | undefined {
-  const source = meeting.items.find((item) => item.category === 'decision' && !item.dismissed)?.title
-    ?? buildNotesDocument(meeting).keyPoints[0]?.text;
-  if (!source) return undefined;
-  const words = source.replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '').split(' ');
-  if (words.length < 3) return undefined;
-  let title = words.slice(0, 10).join(' ');
-  if (title.length > 64) title = title.slice(0, 64).replace(/\s+\S*$/, '');
-  return title.length >= 12 ? title[0]!.toUpperCase() + title.slice(1) : undefined;
+  const sources = [
+    ...meeting.items.filter((item) => item.category === 'decision' && !item.dismissed).map((item) => item.title),
+    ...buildNotesDocument(meeting).keyPoints.map((point) => point.text),
+  ];
+  for (const source of sources) {
+    const title = titleSpan(source);
+    if (title) return title;
+  }
+  return undefined;
 }
 
 /** Regeneration cannot erase edits, including an edited point no longer selected. */

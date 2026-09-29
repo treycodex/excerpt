@@ -3,7 +3,7 @@ import { Wordmark } from './Wordmark';
 import './landing.css';
 import { Showcase } from './Showcase';
 import { CommandLine, InstallMethods } from './Install';
-import { Icon, IconTile, type IconName } from './CinemaIcons';
+import { Icon, IconTile, type IconName } from '@excerpt/ui';
 import { DOWNLOAD, INSTALL_COMMAND, REQUIRES, SOURCE } from './site';
 
 /* ── The page ──────────────────────────────────────────────────────────────────
@@ -563,7 +563,7 @@ function Bento() {
         </div>
         <div className="bt-copy">
           <h3><Icon name="record" /> Start from anywhere <kbd>⌘⇧R</kbd></h3>
-          <p>Start from the menu bar, library, or keyboard shortcut.</p>
+          <p>When Zoom, Teams, Meet or FaceTime takes the microphone, Excerpt asks whether to start, and asks again before it stops. Or start from the menu bar or the shortcut.</p>
         </div>
       </article>
     </div>

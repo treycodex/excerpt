@@ -27,18 +27,47 @@ final class NotesWindowController: NSWindowController {
         )
         window.title = "Excerpt"
         window.titlebarAppearsTransparent = true
+        // The pages draw the wordmark beside the traffic lights; the title stays for the
+        // Window menu and Mission Control.
+        window.titleVisibility = .hidden
+        // The pages are paper-light in every system mode; a dark titlebar would draw
+        // the title in white over them and it would vanish.
+        window.appearance = NSAppearance(named: .aqua)
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("ExcerptNotes")
         window.minSize = NSSize(width: 720, height: 520)
 
         super.init(window: window)
-        window.contentView = makeWebView()
+        window.contentView = makeContent(titlebarHeight: window.frame.height - window.contentLayoutRect.height)
         bridge.onMeetingChange = { [weak self] json in self?.receive(meetingJSON: json) }
         bridge.onDesktopSettingsChange = { [weak self] json in self?.receive(settingsJSON: json) }
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not from a nib") }
+
+    /// The page runs under the transparent titlebar, so that strip is web content and a
+    /// drag there never reaches AppKit. A native strip over it takes drags back.
+    private func makeContent(titlebarHeight: CGFloat) -> NSView {
+        let webView = makeWebView()
+        let strip = TitlebarDragView(passingClicksTo: webView)
+        let container = NSView()
+        for view in [webView, strip] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: container.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            strip.topAnchor.constraint(equalTo: container.topAnchor),
+            strip.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            strip.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            strip.heightAnchor.constraint(equalToConstant: max(titlebarHeight, 28)),
+        ])
+        return container
+    }
 
     private func makeWebView() -> WKWebView {
         let controller = WKUserContentController()
@@ -86,6 +115,12 @@ final class NotesWindowController: NSWindowController {
         guard let target = URL(string: "\(NotesSchemeHandler.origin)/index.html\(route)") else { return }
         webView.load(URLRequest(url: target))
         present()
+    }
+
+    /// Brings the window back as it was left, loading the library only the first
+    /// time, so reopening the app does not throw away a half-read meeting.
+    func reveal() {
+        if webView.url == nil { show(route: "#/home") } else { present() }
     }
 
     /// Ordering front and telling DockPresence are the same act: a visible window is
@@ -164,5 +199,45 @@ extension NotesWindowController: WKUIDelegate {
         panel.allowsMultipleSelection = parameters.allowsMultipleSelection
         panel.allowedContentTypes = [.png, .jpeg, .webP]
         panel.begin { response in completionHandler(response == .OK ? panel.urls : nil) }
+    }
+}
+
+/// Moves the window from the titlebar row. The page draws links in that row too, so
+/// a press that does not move the window is handed to the page as the click it was;
+/// a double-click does what System Settings says a titlebar double-click does.
+final class TitlebarDragView: NSView {
+    private weak var page: NSView?
+
+    init(passingClicksTo page: NSView) {
+        self.page = page
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("not from a nib") }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { return }
+        let origin = window.frame.origin
+        window.performDrag(with: event)
+        guard window.frame.origin == origin else { return }
+        if event.clickCount == 2 {
+            switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
+            case "Minimize": window.miniaturize(nil)
+            case "None": break
+            default: window.zoom(nil)
+            }
+            return
+        }
+        guard let page else { return }
+        page.mouseDown(with: event)
+        if let up = NSEvent.mouseEvent(with: .leftMouseUp, location: event.locationInWindow,
+                                       modifierFlags: event.modifierFlags,
+                                       timestamp: ProcessInfo.processInfo.systemUptime,
+                                       windowNumber: event.windowNumber, context: nil,
+                                       eventNumber: event.eventNumber, clickCount: event.clickCount,
+                                       pressure: 0) {
+            page.mouseUp(with: up)
+        }
     }
 }
