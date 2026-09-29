@@ -51,14 +51,16 @@
   h1 em { font-style: normal; color: var(--cap); }
   .step-one { position: absolute; top: 140px; left: 40px; }
 
-  /* Icon slots. Centres: Excerpt (130, 262), Applications (370, 262), Read me (90, 416). */
+  /* Icon slots. Centres: Excerpt (130, 262), Applications (370, 262), Read me (120, 416).
+     Keep every icon at least ~110px from the left edge: nearer, and Finder shifts the
+     whole layout right so it no longer lines up with these plates. */
   .plate { position: absolute; height: 22px; border-radius: 11px; background: var(--plate); transform: translateX(-50%); }
   .p-app { left: 130px; top: 308px; width: 96px; }
   .p-apps { left: 370px; top: 308px; width: 124px; }
-  .p-readme { left: 90px; top: 462px; width: 116px; }
+  .p-readme { left: 120px; top: 462px; width: 116px; }
   .arrow { position: absolute; left: 212px; top: 252px; width: 76px; height: 20px; }
 
-  .help { position: absolute; left: 160px; top: 398px; width: 300px; font-size: 12px; line-height: 1.5; color: var(--dim); }
+  .help { position: absolute; left: 182px; top: 398px; width: 300px; font-size: 12px; line-height: 1.5; color: var(--dim); }
   .help b { font-weight: 600; color: var(--ink); }
   .help code { font: 11px var(--mono); color: var(--cap); }
 

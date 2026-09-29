@@ -33,5 +33,5 @@ show_icon_preview = False
 icon_locations = {
     os.path.basename(app): (130, 262),
     "Applications": (370, 262),
-    os.path.basename(readme): (90, 416),
+    os.path.basename(readme): (120, 416),
 }
