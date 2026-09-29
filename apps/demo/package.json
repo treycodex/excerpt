@@ -1,0 +1,27 @@
+{
+  "name": "@excerpt/demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts Demo out/excerpt-demo.mp4 --codec h264 --crf 18",
+    "render:web": "node scripts/encode-web.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@excerpt/ui": "workspace:*",
+    "@remotion/cli": "^4.0.529",
+    "@remotion/media-utils": "^4.0.529",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.529"
+  },
+  "devDependencies": {
+    "@excerpt/core": "workspace:*",
+    "@excerpt/types": "workspace:*",
+    "@types/react": "^18.3.31",
+    "@vitejs/plugin-react": "^4.7.0",
+    "playwright-core": "^1.63.0",
+    "vite": "^6.4.3"
+  }
+}

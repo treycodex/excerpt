@@ -1,0 +1,22 @@
+/* The demo film over the landing page: the cinema ground, the film in a frame. */
+.demo-modal {
+  width: min(1200px, calc(100vw - 32px)); max-width: none; padding: 0; border: 0;
+  background: transparent; color: #EDECDB; overflow: visible;
+}
+.demo-modal::backdrop { background: rgba(8, 9, 7, .86); backdrop-filter: blur(6px); }
+.demo-modal-frame {
+  position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
+  background: #0E0F0D; border: 1px solid #363A2D; box-shadow: 0 40px 120px -40px rgba(0, 0, 0, .9);
+}
+.demo-modal-frame video { display: block; width: 100%; height: 100%; }
+.demo-modal-close {
+  position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid #363A2D; background: rgba(14, 15, 13, .8); color: #EDECDB;
+  font: 22px/1 system-ui, sans-serif; cursor: pointer;
+}
+.demo-modal-close:focus-visible { outline: 2px solid #F1F0DD; outline-offset: 2px; }
+.demo-modal-note {
+  margin: 14px 0 0; text-align: center; font: 11px/1.6 "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: .13em; text-transform: uppercase; color: #7C7E70;
+}
+@media (prefers-reduced-motion: reduce) { .demo-modal::backdrop { backdrop-filter: none; } }

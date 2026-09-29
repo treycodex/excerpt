@@ -1,7 +1,7 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { readMeetingLibrary, searchMeetingLibrary } from '@excerpt/core';
-import type { MeetingLibraryEntry, MeetingSearchResult } from '@excerpt/types';
+import type { Meeting, MeetingLibraryEntry, MeetingSearchResult } from '@excerpt/types';
 import { Wordmark } from './Wordmark';
 import './notes.css';
 
@@ -73,6 +73,24 @@ export function NotesWorkspace({ children, currentId, library, libraryAvailable 
   const [search, setSearch] = useState<{
     query: string; source: MeetingLibraryEntry[] | null; matches: MeetingSearchResult[]; failed: boolean;
   }>({ query: '', source: null, matches: [], failed: false });
+  // Bumped when a pushed meeting changes what the list says, so a meeting that
+  // ends while it is open stops reading "Live" without navigating away and back.
+  const [revision, setRevision] = useState(0);
+  const shown = useRef(meetings);
+  shown.current = meetings;
+  useEffect(() => {
+    if (library) return;
+    const receive = (event: Event) => {
+      const incoming = (event as CustomEvent<Meeting>).detail;
+      if (!incoming?.id) return;
+      const entry = shown.current.find((m) => m.id === incoming.id);
+      // Live meetings push on every settled line; only a new or newly ended one
+      // changes the list, so only those pay for a re-read.
+      if (!entry || (!entry.endedAt && incoming.endedAt)) setRevision((n) => n + 1);
+    };
+    window.addEventListener('excerpt:meeting', receive);
+    return () => window.removeEventListener('excerpt:meeting', receive);
+  }, [library]);
   useEffect(() => {
     if (library) return;
     let current = true;
@@ -81,7 +99,7 @@ export function NotesWorkspace({ children, currentId, library, libraryAvailable 
       setMeetings(result.meetings); setReadAvailable(result.available);
     });
     return () => { current = false; };
-  }, [currentId, library]);
+  }, [currentId, library, revision]);
   const listed = library ?? meetings;
   const available = library ? libraryAvailable : readAvailable;
   // Deferred so typing stays responsive while native searches persisted text.
