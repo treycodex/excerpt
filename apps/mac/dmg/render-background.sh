@@ -7,7 +7,7 @@ CHROME=${CHROME:-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
 for scale in 1 2; do
   out=$([ "$scale" = 1 ] && echo background.png || echo background@2x.png)
   "$CHROME" --headless --disable-gpu --hide-scrollbars --allow-file-access-from-files \
-    --window-size=720,440 --force-device-scale-factor="$scale" \
+    --window-size=920,520 --force-device-scale-factor="$scale" \
     --screenshot="$(pwd)/$out" "file://$(pwd)/background.html" 2>/dev/null
   echo "wrote $out ($(sips -g pixelWidth -g pixelHeight "$out" | awk '/pixel/{printf "%s ", $2}'))"
 done

@@ -31,7 +31,8 @@ installed on first run into `build/dmgbuild-venv`. The background is
 `dmg/render-background.sh` (needs Google Chrome); the PNGs are committed so packaging
 does not. Icon positions live in `dmg/dmg-settings.py` and must match the slots drawn
 in the HTML. Finder draws the icon names itself, black in light mode and white in dark,
-so each sits on a bronze plate that reads in both.
+so each sits on a bronze plate that reads in both. The first-open card draws the
+Gatekeeper dialogs in miniature; keep its steps in line with the Install page.
 
 ## Publish a release
 
