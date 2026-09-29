@@ -23,6 +23,16 @@ cd apps/mac
 ./package-dmg.sh
 ```
 
+## The disk image window
+
+`package-dmg.sh` lays out the window with [dmgbuild](https://github.com/dmgbuild/dmgbuild),
+installed on first run into `build/dmgbuild-venv`. The background is
+`dmg/background.html`, rendered to `dmg/background.png` and `background@2x.png` by
+`dmg/render-background.sh` (needs Google Chrome); the PNGs are committed so packaging
+does not. Icon positions live in `dmg/dmg-settings.py` and must match the slots drawn
+in the HTML. Finder draws the icon names itself, black in light mode and white in dark,
+so each sits on a bronze plate that reads in both.
+
 ## Publish a release
 
 The website and README link to
