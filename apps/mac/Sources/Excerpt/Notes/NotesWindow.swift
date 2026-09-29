@@ -101,7 +101,9 @@ final class NotesWindowController: NSWindowController {
     /// meeting does not flash the whole editor.
     func navigate(toMeeting id: String) {
         guard webView.url != nil else { show(meeting: id); return }
-        webView.evaluateJavaScript("location.hash = '#/m/\(id)'")
+        guard let data = try? JSONEncoder().encode("#/m/\(id)"),
+              let literal = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("location.hash = \(literal)")
         present()
     }
 
@@ -139,8 +141,12 @@ extension NotesWindowController: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction
     ) async -> WKNavigationActionPolicy {
         guard let url = navigationAction.request.url else { return .cancel }
-        if url.scheme == NotesSchemeHandler.scheme || url.isFileURL { return .allow }
-        NSWorkspace.shared.open(url)
+        if url.scheme == NotesSchemeHandler.scheme && url.host == "notes" { return .allow }
+        if navigationAction.navigationType == .linkActivated,
+           let scheme = url.scheme?.lowercased(),
+           ["http", "https", "mailto"].contains(scheme) {
+            NSWorkspace.shared.open(url)
+        }
         return .cancel
     }
 

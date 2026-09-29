@@ -10,7 +10,18 @@ const BUILD = new Date().toISOString().replace('T', ' ').slice(0, 16);
 // root there and silently load nothing.
 export default defineConfig({
   base: './',
-  plugins: [react()],
+  plugins: [react(), {
+    name: 'bundled-editor-csp',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html) {
+        const policy = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
+        return html.replace('<meta name="viewport"',
+          `<meta http-equiv="Content-Security-Policy" content="${policy}" />\n    <meta name="viewport"`);
+      },
+    },
+  }],
   define: { __BUILD__: JSON.stringify(BUILD) },
   server: { port: 5273 },
 });

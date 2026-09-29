@@ -162,6 +162,12 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
         _ controller: WKUserContentController,
         didReceive message: WKScriptMessage
     ) async -> (Any?, String?) {
+        let origin = message.frameInfo.securityOrigin
+        guard message.frameInfo.isMainFrame,
+              origin.`protocol` == NotesSchemeHandler.scheme,
+              origin.host == "notes" else {
+            return (nil, "the bridge is only available to Excerpt's notes editor")
+        }
         guard let payload = message.body as? [String: Any],
               let name = payload["method"] as? String else {
             return (nil, "the bridge was called with no method")

@@ -62,6 +62,45 @@ struct MeetingStoreTests {
         #expect(store.list().isEmpty)
     }
 
+    @Test func `meeting IDs cannot write or delete outside their storage folders`() throws {
+        let parent = URL(filePath: NSTemporaryDirectory())
+            .appending(path: "excerpt-path-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let store = try MeetingStore(root: parent.appending(path: "Excerpt"))
+        let sentinel = parent.appending(path: "sentinel")
+        try FileManager.default.createDirectory(at: sentinel, withIntermediateDirectories: true)
+        try Data("keep".utf8).write(to: sentinel.appending(path: "proof.txt"))
+
+        for id in ["../../sentinel", "../sentinel", "/tmp/sentinel", ".", "", "a/b", "a\\b", "a%2Fb", "café"] {
+            #expect(!MeetingStore.validID(id))
+            #expect(!store.contains(id: id))
+            #expect(throws: MeetingStore.Failure.self) { try store.save(meeting(id: id)) }
+            #expect(throws: MeetingStore.Failure.self) { try store.load(id: id) }
+            #expect(throws: MeetingStore.Failure.self) { try store.delete(id: id) }
+            let create = MeetingMutation(operationId: UUID().uuidString, meetingId: id,
+                baseRevision: 0, baseDocumentRevision: 0, baseSourceRevision: 0,
+                changes: [.create(meeting: meeting(id: id))])
+            #expect(throws: MeetingStore.Failure.self) { try store.apply(create) }
+            #expect(throws: MeetingStore.Failure.self) { try store.checkpointImages([], id: id) }
+            #expect(throws: MeetingStore.Failure.self) { try store.checkpointDraft(meeting(id: id)) }
+            #expect(store.replayJournal(id: id).isEmpty)
+            store.discardJournal(id: id)
+        }
+        #expect(try String(contentsOf: sentinel.appending(path: "proof.txt"), encoding: .utf8) == "keep")
+        #expect(!FileManager.default.fileExists(atPath: parent.appending(path: "sentinel.json").path))
+
+        let safe = meeting(id: "m-123_ABC")
+        try store.save(safe)
+        #expect(try store.load(id: safe.id).id == safe.id)
+
+        // A damaged file must not substitute a different ID before asset hydration.
+        let mismatched = meeting(id: "../../sentinel")
+        try JSONEncoder.excerpt.encode(mismatched).write(
+            to: parent.appending(path: "Excerpt/meetings/mismatched.json"))
+        #expect(throws: MeetingStore.Failure.self) { try store.load(id: "mismatched") }
+        #expect(!store.libraryRecords().contains { $0.entry.id == mismatched.id })
+    }
+
     @Test func `deleted note blocks survive native storage and legacy documents decode`() throws {
         let (store, root) = try makeStore()
         defer { try? FileManager.default.removeItem(at: root) }

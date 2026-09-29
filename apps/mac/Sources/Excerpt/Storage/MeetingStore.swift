@@ -31,6 +31,7 @@ final class MeetingStore {
     enum Failure: Error, LocalizedError {
         case directoryUnavailable(String)
         case assetUnavailable(String)
+        case invalidMeetingID
 
         var errorDescription: String? {
             switch self {
@@ -38,6 +39,8 @@ final class MeetingStore {
                 "Excerpt could not use its folder at \(path)."
             case .assetUnavailable(let id):
                 "A saved image for \(id) could not be verified. The meeting was not changed."
+            case .invalidMeetingID:
+                "That meeting ID is invalid. No files were changed."
             }
         }
     }
@@ -60,6 +63,13 @@ final class MeetingStore {
     private var recentMeetingIds: [String] = []
     private let fullMeetingCacheLimit = 2
     private let assetPrefix = "excerpt-asset:v1:"
+    /// IDs are filenames in four storage folders. Keep them to one plain component.
+    static func validID(_ id: String) -> Bool {
+        !id.isEmpty && id.utf8.count <= 128 && id.utf8.allSatisfy {
+            (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
+                || $0 == 45 || $0 == 95
+        }
+    }
     var cachedFullMeetingCount: Int { meetingCache.count }
     var cachedLibraryRecordCount: Int { libraryCache.count }
 
@@ -119,6 +129,7 @@ final class MeetingStore {
     // MARK: - Meetings
 
     func save(_ meeting: Meeting) throws {
+        guard Self.validID(meeting.id) else { throw Failure.invalidMeetingID }
         let durable = meeting.revisioned()
         let data = try JSONEncoder.excerpt.encode(compactAssets(in: durable))
         // Atomic: a meeting half-written by a crash is worse than one not written,
@@ -142,13 +153,15 @@ final class MeetingStore {
     }
 
     func load(id: String) throws -> Meeting {
+        guard Self.validID(id) else { throw Failure.invalidMeetingID }
         let url = url(forMeeting: id)
         if let stamp = FileStamp(url), let cached = meetingCache[id], cached.stamp == stamp {
             touchFullMeetingCache(id)
             return cached.meeting
         }
-        let loaded = try hydrateAssets(in: JSONDecoder.excerpt.decode(Meeting.self,
-            from: Data(contentsOf: url))).revisioned()
+        let decoded = try JSONDecoder.excerpt.decode(Meeting.self, from: Data(contentsOf: url))
+        guard decoded.id == id else { throw Failure.invalidMeetingID }
+        let loaded = try hydrateAssets(in: decoded).revisioned()
         if let stamp = FileStamp(url) {
             touchFullMeetingCache(id)
             meetingCache[id] = (stamp, loaded)
@@ -157,7 +170,8 @@ final class MeetingStore {
     }
 
     func contains(id: String) -> Bool {
-        FileManager.default.fileExists(atPath: url(forMeeting: id).path(percentEncoded: false))
+        guard Self.validID(id) else { return false }
+        return FileManager.default.fileExists(atPath: url(forMeeting: id).path(percentEncoded: false))
     }
 
     /// Newest first. A meeting that fails to decode is skipped and logged rather than
@@ -167,7 +181,7 @@ final class MeetingStore {
             at: meetingsDirectory, includingPropertiesForKeys: nil)) ?? []
 
         return files
-            .filter { $0.pathExtension == "json" }
+            .filter { $0.pathExtension == "json" && Self.validID($0.deletingPathExtension().lastPathComponent) }
             .compactMap { url in
                 do {
                     return try load(id: url.deletingPathExtension().lastPathComponent)
@@ -197,6 +211,7 @@ final class MeetingStore {
         return files.filter { $0.pathExtension == "json" }.compactMap { url in
             guard let stamp = FileStamp(url) else { return nil }
             let id = url.deletingPathExtension().lastPathComponent
+            guard Self.validID(id) else { return nil }
             if let cached = libraryCache[id], cached.stamp == stamp {
                 touchLibraryCache(id)
                 return cached
@@ -214,6 +229,7 @@ final class MeetingStore {
                 // as much as opening each meeting. A damaged image still fails when
                 // the meeting itself is opened.
                 let meeting = try JSONDecoder.excerpt.decode(Meeting.self, from: Data(contentsOf: url)).revisioned()
+                guard meeting.id == id else { throw Failure.invalidMeetingID }
                 let index = LibraryIndex(stamp: stamp, meeting: meeting)
                 touchLibraryCache(id)
                 libraryCache[id] = index
@@ -228,6 +244,7 @@ final class MeetingStore {
     }
 
     func delete(id: String) throws {
+        guard Self.validID(id) else { throw Failure.invalidMeetingID }
         closeJournal(id: id)
         // The meeting file is removed last. If cleanup fails, the library entry is
         // still present and the caller can truthfully report that deletion failed.
@@ -245,6 +262,7 @@ final class MeetingStore {
     }
 
     func apply(_ mutation: MeetingMutation) throws -> MeetingMutationAcknowledgment {
+        guard Self.validID(mutation.meetingId) else { throw Failure.invalidMeetingID }
         let meetingURL = url(forMeeting: mutation.meetingId)
         if !FileManager.default.fileExists(atPath: meetingURL.path(percentEncoded: false)) {
             guard mutation.changes.count == 1,
@@ -283,6 +301,7 @@ final class MeetingStore {
     @discardableResult
     func append(_ event: TranscriptEvent, toJournalFor id: String) -> Bool {
         do {
+            guard Self.validID(id) else { throw Failure.invalidMeetingID }
             var line = try JSONEncoder.excerpt.encode(event)
             line.append(0x0A)                                 // newline-delimited JSON
             try faults.beforeJournalAppend?(url(forJournal: id))
@@ -309,13 +328,14 @@ final class MeetingStore {
                 .replacingOccurrences(of: ".images.json", with: "")
                 .replacingOccurrences(of: ".draft.json", with: "")
                 .replacingOccurrences(of: ".ndjson", with: "") }
-            .filter { !FileManager.default.fileExists(atPath: url(forMeeting: $0).path(percentEncoded: false)) }
+            .filter { Self.validID($0) && !FileManager.default.fileExists(atPath: url(forMeeting: $0).path(percentEncoded: false)) }
             )).sorted()
     }
 
     /// Replays a journal. A truncated final line — the shape a crash leaves — is
     /// dropped rather than failing the whole recovery.
     func replayJournal(id: String) -> [TranscriptEvent] {
+        guard Self.validID(id) else { return [] }
         guard let text = try? String(contentsOf: url(forJournal: id), encoding: .utf8) else { return [] }
         return text
             .split(separator: "\n", omittingEmptySubsequences: true)
@@ -326,12 +346,14 @@ final class MeetingStore {
     }
 
     func closeJournal(id: String) {
+        guard Self.validID(id) else { return }
         try? handles[id]?.close()
         handles[id] = nil
     }
 
     /// Removes the journal once its meeting is safely saved.
     func discardJournal(id: String) {
+        guard Self.validID(id) else { return }
         closeJournal(id: id)
         try? FileManager.default.removeItem(at: url(forJournal: id))
         try? FileManager.default.removeItem(at: imageJournal(id))
@@ -339,6 +361,7 @@ final class MeetingStore {
     }
 
     func checkpointImages(_ images: [MeetingImage], id: String) throws {
+        guard Self.validID(id) else { throw Failure.invalidMeetingID }
         let destination = imageJournal(id)
         try faults.beforeWrite?(destination)
         try JSONEncoder.excerpt.encode(compactImages(images, meetingId: id))
@@ -346,6 +369,7 @@ final class MeetingStore {
     }
 
     func recoverImages(id: String) throws -> [MeetingImage] {
+        guard Self.validID(id) else { throw Failure.invalidMeetingID }
         guard FileManager.default.fileExists(atPath: imageJournal(id).path(percentEncoded: false)) else { return [] }
         return try hydrateImages(JSONDecoder.excerpt.decode([MeetingImage].self,
             from: Data(contentsOf: imageJournal(id))), meetingId: id)
@@ -354,6 +378,7 @@ final class MeetingStore {
     /// A compact atomic checkpoint complements the append-only speech journal. It
     /// preserves writing even when no recognizer result has settled yet.
     func checkpointDraft(_ meeting: Meeting) throws {
+        guard Self.validID(meeting.id) else { throw Failure.invalidMeetingID }
         let destination = draftJournal(meeting.id)
         try faults.beforeWrite?(destination)
         try JSONEncoder.excerpt.encode(compactAssets(in: meeting.revisioned()))
@@ -361,9 +386,11 @@ final class MeetingStore {
     }
 
     func recoverDraft(id: String) throws -> Meeting? {
+        guard Self.validID(id) else { throw Failure.invalidMeetingID }
         guard FileManager.default.fileExists(atPath: draftJournal(id).path(percentEncoded: false)) else { return nil }
-        return try hydrateAssets(in: JSONDecoder.excerpt.decode(Meeting.self,
-            from: Data(contentsOf: draftJournal(id))))
+        let decoded = try JSONDecoder.excerpt.decode(Meeting.self, from: Data(contentsOf: draftJournal(id)))
+        guard decoded.id == id else { throw Failure.invalidMeetingID }
+        return try hydrateAssets(in: decoded)
     }
 
     private func imageJournal(_ id: String) -> URL { journalDirectory.appending(path: "\(id).images.json") }
