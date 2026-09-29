@@ -3,6 +3,7 @@ import { bridge, isNativeHost, loadMeeting, loadPreferences } from '@excerpt/cor
 import type { Meeting, Preferences as Prefs } from '@excerpt/types';
 import { Notes } from './views/Notes';
 import { Library } from './views/Library';
+import { Home } from './views/Home';
 import { Preferences } from './views/Preferences';
 import { NotesWorkspace } from './views/NotesWorkspace';
 import { useRoute } from './router';
@@ -51,7 +52,9 @@ export function App() {
   const start = async () => { await host.startMeeting(); };
   const openLiveNotes = async () => { await host.openLiveNotes(); };
   let body;
-  if (route.name === 'library') {
+  if (route.name === 'home') {
+    body = <Home onOpen={(id) => { setMeeting(null); go(`/m/${id}`); }} />;
+  } else if (route.name === 'library') {
     body = <Library onOpen={(id) => { setMeeting(null); go(`/m/${id}`); }} onStart={start} onOpenLiveNotes={openLiveNotes} />;
   } else if (route.name === 'preferences') {
     body = <NotesWorkspace><Preferences /></NotesWorkspace>;

@@ -13,7 +13,7 @@ struct DesktopBridgeActionsTests {
         var opened = 0
         let bridge = NotesBridge(
             store: store, preferences: PreferencesStore(defaults: defaults),
-            startMeeting: { started += 1 }, openLiveNotes: { opened += 1 })
+            startMeeting: { _ in started += 1 }, openLiveNotes: { opened += 1 })
 
         try await bridge.performStartMeeting()
         bridge.performOpenLiveNotes()

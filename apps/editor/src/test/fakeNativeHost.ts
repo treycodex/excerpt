@@ -42,12 +42,28 @@ export function createFakeNativeHost(input: { meetings?: Meeting[]; preferences?
       { name: 'capture', label: 'Capture moment', shortcut: '⌘⇧S', registered: false, relevant: false },
     ],
     screenshotImport: { enabled: false, folderName: 'Desktop' },
+    meeting: { phase: 'idle', status: 'Not listening' },
+    noticeMeetings: true,
   };
 
   return {
     calls,
     meetings,
-    async startMeeting() { calls.push('startMeeting'); },
+    async startMeeting(title?: string) {
+      calls.push(title ? `startMeeting:${title}` : 'startMeeting');
+      desktopSettings = { ...desktopSettings, meeting: {
+        phase: 'live', meetingId: 'live-meeting', title: title || 'Meeting', startedAt: new Date().toISOString(), status: 'Listening',
+      } };
+    },
+    async endMeeting() {
+      calls.push('endMeeting');
+      desktopSettings = { ...desktopSettings, meeting: { phase: 'idle', status: 'Transcript saved' } };
+    },
+    async setNoticeMeetings(enabled: boolean) {
+      calls.push(`setNoticeMeetings:${enabled}`);
+      desktopSettings = { ...desktopSettings, noticeMeetings: enabled };
+      return clone(desktopSettings);
+    },
     async openLiveNotes() { calls.push('openLiveNotes'); },
     async getLiveMeetingTime(id) {
       calls.push(`getLiveMeetingTime:${id}`);

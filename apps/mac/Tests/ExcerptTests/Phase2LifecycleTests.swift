@@ -610,6 +610,33 @@ struct Phase2LifecycleTests {
         #expect(session.suppressedEchoes >= 3)
         await session.stop()
     }
+
+    @Test func `a name given at start or while live is kept at End`() async throws {
+        let directory = root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try MeetingStore(root: directory)
+        let factory = TranscriberFactory()
+        let session = try session(store: store, capture: LifecycleCapture()) { factory.make() }
+        let words = "We decided the customer onboarding flow needs fewer steps before launch."
+
+        await session.start(title: "  Weekly sync ")
+        #expect(session.titleSuggestion() == "Weekly sync")
+        await factory.runs.last?[.system]?.emit(Segment(start: 0, end: 1, text: words))
+        #expect(await waitUntil { session.events.count == 1 })
+        await session.stop()
+        #expect(try store.load(id: session.meetingId).title == "Weekly sync")
+
+        await session.start(title: "   ")
+        #expect(session.activeMeeting()?.title.hasPrefix("Meeting · ") == true)
+        session.rename("Launch review")
+        #expect(session.activeMeeting()?.title == "Launch review")
+        await factory.runs.last?[.system]?.emit(Segment(start: 0, end: 1, text: words))
+        #expect(await waitUntil { session.events.count == 1 })
+        await session.stop()
+        #expect(try store.load(id: session.meetingId).title == "Launch review")
+        session.rename("After the fact")
+        #expect(try store.load(id: session.meetingId).title == "Launch review")
+    }
 }
 
 private struct LifecycleFailure: Error, LocalizedError {

@@ -104,7 +104,7 @@ export function NotesWorkspace({ children, currentId, library, libraryAvailable 
   const matchOf = useMemo(() => new Map(matches.map((m) => [m.meeting.id, m])), [matches]);
   return <div className="notebook">
     <aside className="notebook-sidebar" aria-label="Meeting library">
-      <a className="notebook-brand" href="#/meetings"><Wordmark /></a>
+      <a className="notebook-brand" href="#/home" aria-label="Excerpt home"><Wordmark /></a>
       <label className="notebook-search"><span className="sr-only">Search meetings</span><input type="search" aria-label="Search meetings" placeholder="Search meetings…" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
       {/* The badge showed the unfiltered total beside a filtered list, so a search
           matching one meeting sat under a count of forty. */}

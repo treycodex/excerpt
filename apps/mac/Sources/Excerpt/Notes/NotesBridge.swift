@@ -18,6 +18,7 @@ final class NotesBridge: NSObject {
         case loadPreferences, savePreferences, exportMarkdown, exportHTML, summarizeNotes
         case getNotesProviderStatus, configureOpenAIKey, removeOpenAIKey
         case loadDesktopSettings, saveCaptionSettings, selectMicrophone, setScreenshotImportEnabled
+        case endMeeting, setNoticeMeetings
     }
 
     private enum Failure: Error, LocalizedError {
@@ -39,7 +40,9 @@ final class NotesBridge: NSObject {
     private let activeMeeting: (String?) -> Meeting?
     private let mutateLiveMeeting: (MeetingMutation) throws -> MeetingMutationAcknowledgment?
     private let didDeleteMeeting: (String) -> Void
-    private let startMeetingAction: () async throws -> Void
+    private let startMeetingAction: (String?) async throws -> Void
+    private let endMeetingAction: () async -> Void
+    private let setNoticeMeetingsAction: (Bool) -> Void
     private let openLiveNotesAction: () -> Void
     private let liveMeetingTime: (String) -> Double?
     private let retryAutomaticNotesAction: (String) throws -> Meeting
@@ -56,7 +59,9 @@ final class NotesBridge: NSObject {
          activeMeeting: @escaping (String?) -> Meeting? = { _ in nil },
          mutateLiveMeeting: @escaping (MeetingMutation) throws -> MeetingMutationAcknowledgment? = { _ in nil },
          didDeleteMeeting: @escaping (String) -> Void = { _ in },
-         startMeeting: @escaping () async throws -> Void = {},
+         startMeeting: @escaping (_ title: String?) async throws -> Void = { _ in },
+         endMeeting: @escaping () async -> Void = {},
+         setNoticeMeetings: @escaping (Bool) -> Void = { _ in },
          openLiveNotes: @escaping () -> Void = {},
          liveMeetingTime: @escaping (String) -> Double? = { _ in nil },
          retryAutomaticNotes: @escaping (String) throws -> Meeting = { _ in throw Failure.noLiveMeeting },
@@ -78,6 +83,8 @@ final class NotesBridge: NSObject {
         self.mutateLiveMeeting = mutateLiveMeeting
         self.didDeleteMeeting = didDeleteMeeting
         self.startMeetingAction = startMeeting
+        self.endMeetingAction = endMeeting
+        self.setNoticeMeetingsAction = setNoticeMeetings
         self.openLiveNotesAction = openLiveNotes
         self.liveMeetingTime = liveMeetingTime
         self.retryAutomaticNotesAction = retryAutomaticNotes
@@ -116,7 +123,9 @@ final class NotesBridge: NSObject {
         try { return JSON.parse(reply); } catch { return undefined; }
       };
       globalThis.__excerptBridge = {
-        startMeeting:     ()          => send('startMeeting', []),
+        startMeeting:     (title)     => send('startMeeting', title ? [title] : []),
+        endMeeting:       ()          => send('endMeeting', []),
+        setNoticeMeetings: (enabled)  => send('setNoticeMeetings', [enabled]),
         openLiveNotes:    ()          => send('openLiveNotes', []),
         getLiveMeetingTime: (id)      => send('getLiveMeetingTime', [id]),
         retryAutomaticNotes: (id)      => send('retryAutomaticNotes', [id]),
@@ -216,8 +225,17 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
     private func handle(_ method: Method, _ arguments: [Any]) async throws -> Any? {
         switch method {
         case .startMeeting:
-            try await performStartMeeting()
+            try await performStartMeeting(title: arguments.first as? String)
             return nil
+        case .endMeeting:
+            await endMeetingAction()
+            return nil
+        case .setNoticeMeetings:
+            guard let enabled = arguments.first as? Bool else { throw Failure.badArguments("setNoticeMeetings") }
+            setNoticeMeetingsAction(enabled)
+            let snapshot = desktopSettings()
+            publishDesktopSettings()
+            return try json(snapshot)
         case .openLiveNotes:
             performOpenLiveNotes()
             return nil
@@ -363,7 +381,7 @@ extension NotesBridge: WKScriptMessageHandlerWithReply {
 
     /// Explicit operations exposed to the bundled editor. Keeping them here makes
     /// the UI bridge testable without a browser or an alternative capture path.
-    func performStartMeeting() async throws { try await startMeetingAction() }
+    func performStartMeeting(title: String? = nil) async throws { try await startMeetingAction(title) }
     func performOpenLiveNotes() { openLiveNotesAction() }
 
     func deleteMeeting(_ id: String) throws {

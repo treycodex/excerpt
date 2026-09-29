@@ -27,6 +27,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let termination = ApplicationTerminationCoordinator()
     private var screenshotItem: NSMenuItem?
     private var catchUpItem: NSMenuItem?
+    private var noticeItem: NSMenuItem?
+    private let detector = MeetingDetector()
+    private let meetingPrompt = MeetingPromptController()
+    /// The call app the running meeting is taking place in, if Excerpt saw one. Its
+    /// letting go of the microphone is what prompts the end question.
+    private var followedApp: MeetingApp? {
+        didSet { if followedApp != oldValue { bridge?.publishDesktopSettings() } }
+    }
 
     private var engine: CoreEngine?
     private var store: MeetingStore?
@@ -47,8 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Before the first frame, not after. Coming up as a regular app and demoting in
     /// applicationDidFinishLaunching puts a Dock icon on screen for a moment and then
-    /// takes it away, which reads as a glitch. Excerpt starts with no windows, so the
-    /// rule starts it at accessory and the icon appears when a window does.
+    /// takes it away, which reads as a glitch. The rule starts it at accessory and the
+    /// icon appears with the first window — the meetings window, or setup on first run.
     func applicationWillFinishLaunching(_ notification: Notification) {
         DockPresence.shared.onChange = { [weak self] in self?.overlay.policyDidChange() }
         DockPresence.shared.apply()
@@ -95,6 +103,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             session.onStateChange = { [weak self] in
                 guard let self else { return }
                 self.microphone.selectionLocked = self.session?.state.isActive == true
+                if self.session?.state.isActive != true, self.commands?.isStarting != true {
+                    self.followedApp = nil
+                    if self.meetingPrompt.kind == .end { self.meetingPrompt.close() }
+                }
                 self.syncSystemScreenshots()
                 self.refresh()
                 self.bridge?.publishDesktopSettings()
@@ -102,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             session.onHealthChange = { [weak self] in self?.bridge?.publishDesktopSettings() }
             commands = MeetingCommandCoordinator(
                 isActive: { [weak session] in session?.state.isActive == true },
-                start: { [weak self, weak session] in
+                start: { [weak self, weak session] title in
                     guard let self, let session else { return false }
                     await self.setupModel.inputCheck.stop()
                     guard await self.ensurePermissions() else {
@@ -112,12 +124,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.previewTimeout?.cancel()
                     self.setup?.close()
                     _ = try self.microphone.selectedDeviceIDForCapture()
-                    await session.start()
+                    await session.start(title: title)
                     guard session.canCaptureImage else {
                         try Task.checkCancellation()
                         throw MeetingCommandError.unavailable(session.status)
                     }
                     if self.overlay.captionsEnabled { self.overlay.show() }
+                    if self.meetingPrompt.kind == .start { self.meetingPrompt.close() }
+                    if self.followedApp == nil { self.followedApp = self.detector.active.first }
                     self.refresh()
                     return true
                 },
@@ -131,6 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         self?.systemScreenshots.stop()
                     }
                     self?.catchUp.close()
+                    self?.followedApp = nil
+                    if self?.meetingPrompt.kind == .end { self?.meetingPrompt.close() }
                     await session?.stop()
                     self?.refresh()
                 },
@@ -143,7 +159,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try session?.applyEditorMutation(mutation)
                 },
                 didDeleteMeeting: { [weak session] id in session?.cancelBackgroundWork(for: id) },
-                startMeeting: { [weak self] in try await self?.commands?.start() },
+                startMeeting: { [weak self] title in try await self?.commands?.start(title: title) },
+                endMeeting: { [weak self] in await self?.commands?.end() },
+                setNoticeMeetings: { [weak self] enabled in self?.setNoticeMeetings(enabled) },
                 openLiveNotes: { [weak self] in self?.openLiveNotesFromEditor() },
                 liveMeetingTime: { [weak session] id in session?.currentMeetingTime(id: id) },
                 retryAutomaticNotes: { [weak session] id in
@@ -178,6 +196,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             session.resumePendingEnhancements()
             offerRecovery(store: store)
             shortcuts.registerCore()
+            detector.onEdge = { [weak self] edge in self?.meetingAppEdge(edge) }
+            syncMeetingDetection()
         } catch {
             // Without the engine there are no notes and without the folder there is
             // nowhere to put them. Say so plainly at launch rather than at Stop, when
@@ -214,6 +234,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notes?.show()
         }
         if CommandLine.arguments.contains("--captions") { overlay.show() }
+        // Opening the app opens the app: the meetings window, with Start in it. First
+        // run belongs to setup, and development flags decide for themselves.
+        let hasLaunchFlags = CommandLine.arguments.dropFirst().contains { $0.hasPrefix("--") }
+        if setupModel.hasCompletedSetup, !hasLaunchFlags, notes?.window?.isVisible != true {
+            notes?.reveal()
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--diagnose") {
             let arguments = Array(CommandLine.arguments.dropFirst(index + 1))
             let seconds = arguments.first.flatMap(Double.init) ?? 15
@@ -297,6 +323,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         screenshot.target = self
         menu.addItem(screenshot)
         screenshotItem = screenshot
+
+        let notice = NSMenuItem(title: "Notice meetings", action: #selector(toggleNoticeMeetings), keyEquivalent: "")
+        notice.target = self
+        notice.image = Self.symbol("waveform.badge.mic", "Notice meetings")
+        notice.toolTip = "Offer to start a transcript when Zoom, Teams, Meet or another call app starts using the microphone, and to end it when the call does."
+        menu.addItem(notice)
+        noticeItem = notice
 
         let openNotes = NSMenuItem(title: "Open meetings", action: #selector(openNotes), keyEquivalent: "n")
         openNotes.keyEquivalentModifierMask = [.command]
@@ -400,10 +433,100 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func toggleMeetingCommand() {
+        // The shortcut answers an open start question, taking the name typed so far.
+        if meetingPrompt.kind == .start, let app = meetingPrompt.app,
+           session?.state.isActive != true, commands?.isStarting != true {
+            let title = meetingPrompt.title
+            meetingPrompt.close()
+            startMeeting(title: title, following: app)
+            return
+        }
         Task {
             do { try await commands?.toggle() }
             catch is CancellationError { }
             catch { present(title: "Meeting could not start", body: error.localizedDescription, style: .warning) }
+        }
+    }
+
+    private func startMeeting(title: String?, following app: MeetingApp) {
+        followedApp = app
+        Task {
+            do { try await commands?.start(title: title) }
+            catch is CancellationError { followedApp = nil }
+            catch {
+                followedApp = nil
+                present(title: "Meeting could not start", body: error.localizedDescription, style: .warning)
+            }
+        }
+    }
+
+    // MARK: - Noticing meetings
+
+    private static let noticeMeetingsKey = "ExcerptNoticeMeetings"
+
+    private var noticesMeetings: Bool {
+        UserDefaults.standard.object(forKey: Self.noticeMeetingsKey) as? Bool ?? true
+    }
+
+    @objc private func toggleNoticeMeetings() {
+        setNoticeMeetings(!noticesMeetings)
+    }
+
+    private func setNoticeMeetings(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Self.noticeMeetingsKey)
+        syncMeetingDetection()
+        refresh()
+        bridge?.publishDesktopSettings()
+    }
+
+    /// Off means not listening at all, not listening and staying quiet. Development
+    /// launches that drive a meeting by themselves never listen.
+    private func syncMeetingDetection() {
+        let unattended = CommandLine.arguments.contains("--diagnose")
+            || Bundle.main.bundleIdentifier?.hasPrefix("com.excerpt.phase7fixture.") == true
+        if noticesMeetings, session != nil, !unattended {
+            detector.start()
+        } else {
+            detector.stop()
+            meetingPrompt.close()
+            followedApp = nil
+        }
+    }
+
+    private func meetingAppEdge(_ edge: MeetingDetector.Edge) {
+        let meetingOn = session?.state.isActive == true || commands?.isStarting == true
+        switch edge {
+        case .began(let app):
+            if meetingOn {
+                // Taking the microphone back after muting is the same meeting.
+                if meetingPrompt.kind == .end, meetingPrompt.app == app { meetingPrompt.close() }
+                if followedApp == nil { followedApp = app }
+                return
+            }
+            // First run is the setup's turn to talk.
+            guard setupModel.hasCompletedSetup, !meetingPrompt.isVisible else { return }
+            Task { [weak self] in
+                let guess = MeetingTitleGuess.guess(from: await MeetingTitleGuess.windowTitles(for: app))
+                guard let self, self.detector.active.contains(app), !self.meetingPrompt.isVisible,
+                      self.session?.state.isActive != true, self.commands?.isStarting != true else { return }
+                self.meetingPrompt.show(.start, app: app, title: guess) { [weak self] title in
+                    self?.startMeeting(title: title, following: app)
+                }
+            }
+        case .ended(let app):
+            if meetingPrompt.kind == .start, meetingPrompt.app == app { meetingPrompt.close() }
+            guard session?.state.isActive == true, followedApp == app else { return }
+            // Moving the call to another app (a browser to the desktop client, say)
+            // is not the meeting ending.
+            if let next = detector.active.first {
+                followedApp = next
+                return
+            }
+            meetingPrompt.show(.end, app: app, title: session?.titleSuggestion()) { [weak self] title in
+                guard let self else { return }
+                if let title { self.session?.rename(title) }
+                Task { await self.commands?.end() }
+            }
         }
     }
 
@@ -692,7 +815,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.screenshotImport = ScreenshotImportSettings(
             enabled: UserDefaults.standard.bool(forKey: SystemScreenshotImporter.preferenceKey),
             folderName: systemScreenshots.destinationName)
+        settings.meeting = liveMeetingStatus()
+        settings.noticeMeetings = noticesMeetings
         return settings
+    }
+
+    private func liveMeetingStatus() -> LiveMeetingStatus {
+        guard let session else { return .idle }
+        let phase: LiveMeetingStatus.Phase
+        var startedAt: String?
+        switch session.state {
+        case .starting: phase = .starting
+        case .listening(let since):
+            phase = .live
+            startedAt = ISO8601DateFormatter().string(from: since)
+        case .finishing: phase = .finishing
+        case .idle, .completed, .interrupted, .failed:
+            return LiveMeetingStatus(phase: .idle, status: session.status)
+        }
+        return LiveMeetingStatus(phase: phase, meetingId: session.meetingId, title: session.liveTitle,
+                                 startedAt: startedAt, status: session.status, app: followedApp?.name)
     }
 
     private func setScreenshotImportEnabled(_ enabled: Bool) throws {
@@ -822,6 +964,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listenItem?.image = Self.symbol(listening ? "stop.circle" : "record.circle",
                                         listening ? "End meeting" : "Start meeting")
         captionsItem?.state = captionsOn ? .on : .off
+        noticeItem?.state = noticesMeetings ? .on : .off
     }
 
     private func present(title: String, body: String, style: NSAlert.Style) {
@@ -841,6 +984,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Opening Excerpt again from Finder, Spotlight or the Dock while it runs brings
+    /// back its window rather than doing nothing visible. Captions do not count as a
+    /// window here; they are a layer over someone else's app.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if let setup, setup.window?.isVisible == true {
+            setup.present()
+        } else if let session, session.state.isActive, !session.meetingId.isEmpty {
+            notes?.navigate(toMeeting: session.meetingId)
+        } else {
+            notes?.reveal()
+        }
+        return false
+    }
 
     /// AppKit asks synchronously, but capture finalization and the required store write
     /// are asynchronous. Return `.terminateLater`, let the main actor keep running,

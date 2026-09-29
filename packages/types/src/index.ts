@@ -269,11 +269,26 @@ export interface MeetingShortcutStatus {
   relevant: boolean;
 }
 
+/** The meeting in progress, as the home screen shows it. Native owns the clock. */
+export interface LiveMeetingStatus {
+  phase: 'idle' | 'starting' | 'live' | 'finishing';
+  meetingId?: string;
+  title?: string;
+  /** ISO time the meeting clock started; the page counts up from it. */
+  startedAt?: string;
+  status: string;
+  /** The call app the meeting was noticed in, such as "Zoom". */
+  app?: string;
+}
+
 export interface DesktopSettings {
   captions: CaptionSettings;
   microphone: MicrophoneSettings;
   shortcuts: MeetingShortcutStatus[];
   screenshotImport: { enabled: boolean; folderName: string | null };
+  /** Absent from hosts older than the home screen. */
+  meeting?: LiveMeetingStatus;
+  noticeMeetings?: boolean;
 }
 
 export interface Meeting {

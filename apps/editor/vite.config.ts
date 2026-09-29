@@ -3,6 +3,9 @@ import { defineConfig } from 'vite';
 
 // Stamped into the bundle so the running build is visible. A stale bundle served
 // from memory cost three test cycles before this existed.
+// Node's env, typed here rather than pulling in @types/node for one read.
+declare const process: { env: Record<string, string | undefined> };
+
 const BUILD = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
 // `base: './'` so the same build works from a web server and from a file:// URL
@@ -23,5 +26,6 @@ export default defineConfig({
     },
   }],
   define: { __BUILD__: JSON.stringify(BUILD) },
-  server: { port: 5273 },
+  // The website also defaults to 5273; a launcher that assigns PORT runs both at once.
+  server: { port: Number(process.env.PORT) || 5273 },
 });

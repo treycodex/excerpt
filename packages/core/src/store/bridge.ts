@@ -12,8 +12,12 @@ import type {
  * webview round trip would put them behind the words.
  */
 export interface ExcerptBridge {
-  /** Starts native capture through the single application coordinator. */
-  startMeeting(): Promise<void>;
+  /** Starts native capture through the single application coordinator, optionally named. */
+  startMeeting(title?: string): Promise<void>;
+  /** Ends the meeting in progress and saves its transcript. */
+  endMeeting?(): Promise<void>;
+  /** Whether Excerpt offers to start when a call app takes the microphone. */
+  setNoticeMeetings?(enabled: boolean): Promise<DesktopSettings>;
   /** Opens the native live editor for the active meeting, if one exists. */
   openLiveNotes(): Promise<void>;
   /** The current position on the active native meeting clock, in milliseconds. */

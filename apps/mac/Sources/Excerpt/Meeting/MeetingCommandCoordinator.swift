@@ -6,7 +6,7 @@ import Foundation
 @MainActor
 final class MeetingCommandCoordinator {
     private let isActive: () -> Bool
-    private let startAction: () async throws -> Bool
+    private let startAction: (String?) async throws -> Bool
     private let stopAction: () async -> Void
     private let didStart: () -> Void
     private var startTask: Task<Void, Error>?
@@ -15,7 +15,7 @@ final class MeetingCommandCoordinator {
     var isStarting: Bool { startTask != nil }
 
     init(isActive: @escaping () -> Bool,
-         start: @escaping () async throws -> Bool,
+         start: @escaping (_ title: String?) async throws -> Bool,
          stop: @escaping () async -> Void,
          didStart: @escaping () -> Void = {}) {
         self.isActive = isActive
@@ -24,12 +24,20 @@ final class MeetingCommandCoordinator {
         self.didStart = didStart
     }
 
-    func start() async throws {
+    convenience init(isActive: @escaping () -> Bool,
+                     start: @escaping () async throws -> Bool,
+                     stop: @escaping () async -> Void,
+                     didStart: @escaping () -> Void = {}) {
+        self.init(isActive: isActive, start: { _ in try await start() }, stop: stop, didStart: didStart)
+    }
+
+    /// A start already under way keeps its own title; the second caller shares it.
+    func start(title: String? = nil) async throws {
         if let startTask { return try await startTask.value }
         guard !stopping, !isActive() else { return }
         let task = Task { @MainActor in
             try Task.checkCancellation()
-            let started = try await startAction()
+            let started = try await startAction(title)
             try Task.checkCancellation()
             if started { didStart() }
         }

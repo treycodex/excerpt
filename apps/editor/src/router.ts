@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export type Route = { name: 'meeting'; id: string } | { name: 'library' } | { name: 'preferences' };
+export type Route = { name: 'meeting'; id: string } | { name: 'library' } | { name: 'preferences' } | { name: 'home' };
 
 function rewrite(hash: string) {
   try { window.history.replaceState(null, '', `${window.location.pathname}${hash}`); } catch { /* no history */ }
@@ -11,6 +11,7 @@ export function parse(hash: string): Route {
   const path = hash.replace(/^#\/?/, '');
   if (path.startsWith('m/') && path.slice(2)) return { name: 'meeting', id: path.slice(2) };
   if (path === 'preferences') return { name: 'preferences' };
+  if (path === 'home') return { name: 'home' };
   if (path === 'meetings' || path === '') return { name: 'library' };
   rewrite('#/meetings');
   return { name: 'library' };

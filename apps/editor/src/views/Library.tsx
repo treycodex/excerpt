@@ -58,6 +58,9 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
         </div>
       )}
 
+      {/* Above the list, not under it: with a long history the one thing done every
+          meeting would otherwise be a scroll away. */}
+      {meetings && meetings.length > 0 && <div className="actions"><button disabled={commandPending} onClick={() => { void runCommand(onStart); }}>Start meeting</button><button disabled={commandPending} onClick={() => { void runCommand(onOpenLiveNotes); }}>Open live meeting</button></div>}
       {meetings?.map((m) => {
         return (
           <article className="meeting-row" key={m.id}>
@@ -92,7 +95,6 @@ export function Library({ onOpen, onStart, onOpenLiveNotes }: {
           </article>
         );
       })}
-      {meetings && meetings.length > 0 && <div className="actions"><button disabled={commandPending} onClick={() => { void runCommand(onStart); }}>Start meeting</button><button disabled={commandPending} onClick={() => { void runCommand(onOpenLiveNotes); }}>Open live meeting</button></div>}
     </div></NotesWorkspace>
   );
 }

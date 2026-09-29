@@ -8,9 +8,9 @@
       section — `--paper: #f1f0dd` on `#24281f` — Archivo for interface, Instrument
       Serif where you read rather than are sold to, and mono at wide tracking for
       labels. Nothing here invents a colour the marketing site does not have.
-   3. macOS, for the chrome. A tinted sidebar that reads as a separate material, a
-      scroll-edge fade instead of a hard divider under the toolbar, a segmented
-      control, and rounded selection fills rather than outlines.
+   3. macOS, for the chrome. A tinted sidebar that reads as a separate material and
+      a scroll-edge fade instead of a hard divider under the toolbar. Selection is
+      Excerpt's, not macOS's: four ember corner brackets (brand.css).
 
    The previous version used a green accent that appears nowhere else in the
    product. Hierarchy here comes from weight, size and the paper/ink contrast, so
@@ -46,7 +46,7 @@
 .notebook a { color: inherit; text-decoration: none; }
 .notebook button, .notebook summary { cursor: pointer; }
 .notebook :is(button, a, input, select, summary):focus-visible {
-  outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px;
+  outline: 2px solid var(--ink); outline-offset: 3px; border-radius: var(--radius);
 }
 
 /* ── Sidebar: a material, not a column ─────────────────────────────────────── */
@@ -69,7 +69,7 @@
 .notebook-new {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   padding: 10px; margin-bottom: 4px;
-  border-radius: 7px; background: var(--ink); color: var(--paper) !important;
+  border-radius: var(--radius); background: var(--ink); color: var(--paper) !important;
   font-size: 13px; font-weight: 500;
   transition: background .15s;
 }
@@ -79,16 +79,16 @@
   width: 100%; min-width: 0; padding: 8px 11px;
   font: 13px var(--sans); color: var(--ink);
   background: #fbfaf1;
-  border: 1px solid var(--line); border-radius: 7px;
+  border: 1px solid var(--line); border-radius: var(--radius);
 }
 .notebook-search input::placeholder { color: var(--faint); }
 
 .notebook-all {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 8px 11px; border-radius: 7px; font-size: 13.5px;
+  padding: 8px 11px; border-radius: var(--radius); font-size: 13.5px;
 }
 .notebook-all span { color: var(--faint); font-variant-numeric: tabular-nums; }
-.notebook .selected { background: var(--select); }
+.notebook .selected { background: var(--brackets); }
 .notebook .selected span { color: var(--dim); }
 
 .notebook-sidebar-label {
@@ -109,19 +109,19 @@
 .notebook-snippet mark { background: none; color: var(--ink); font-weight: 500; }
 
 .notebook-recent { overflow-y: auto; flex: 1; margin: 0 -2px; padding: 0 2px; }
-.notebook-recent a { display: block; padding: 9px 11px; border-radius: 7px; }
+.notebook-recent a { display: block; padding: 9px 11px; border-radius: var(--radius); }
 .notebook-recent strong {
-  display: block; font-size: 13.5px; font-weight: 500; line-height: 1.35;
+  display: block; font: 400 16px/1.3 var(--serif);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.notebook-recent span {
-  display: block; margin-top: 3px; font-size: 12px; color: var(--faint);
+.notebook-recent strong + span {
+  display: block; margin-top: 3px; font: 400 10px/1.5 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .notebook-recent p { padding: 4px 11px; font-size: 13px; line-height: 1.6; color: var(--faint); }
 @media (hover: hover) and (pointer: fine) {
-  .notebook-recent a:hover { background: #e2e0ca; }
-  .notebook-recent a.selected:hover { background: var(--select); }
+  .notebook-recent a:hover { background: color-mix(in srgb, var(--select) 55%, transparent); }
+  .notebook-recent a.selected:hover { background: var(--brackets); }
 }
 
 .notebook-sidebar-footer {
@@ -153,7 +153,7 @@
 .notebook-toolbar > a span { padding: 0 9px; color: #b0b3a1; }
 .notebook-toolbar > div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .notebook-toolbar button {
-  border: 1px solid var(--line); border-radius: 6px;
+  border: 1px solid var(--line); border-radius: var(--radius);
   padding: 6px 12px; background: #fbfaf1; color: var(--ink-soft);
   font: 13px var(--sans);
   transition: background .15s, border-color .15s;
@@ -164,7 +164,7 @@
 .notebook-toolbar .save-state { color: var(--faint); }
 .toolbar-menu, .generation-actions { position: relative; }
 .toolbar-menu > summary, .generation-actions > summary {
-  cursor: pointer; list-style: none; border: 1px solid var(--line); border-radius: 6px;
+  cursor: pointer; list-style: none; border: 1px solid var(--line); border-radius: var(--radius);
   padding: 7px 12px; color: var(--ink); background: #fbfaf1;
 }
 .toolbar-menu > summary::-webkit-details-marker, .generation-actions > summary::-webkit-details-marker { display: none; }
@@ -172,8 +172,7 @@
 .toolbar-menu > div, .generation-actions > div {
   position: absolute; right: 0; top: calc(100% + 5px); z-index: 5;
   display: grid; gap: 4px; min-width: 190px; padding: 6px;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--paper);
-  box-shadow: 0 8px 24px rgba(36, 40, 31, .13);
+  border: 1px solid var(--ink); border-radius: var(--radius); background: var(--paper);
 }
 .toolbar-menu button, .generation-actions button { text-align: left; white-space: nowrap; }
 
@@ -207,7 +206,7 @@
 .notebook-view-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; margin: 22px 0 0; border-bottom: 1px solid var(--line); font: 13px var(--sans); color: var(--dim); }
 .notebook-view-actions button { border: 0; border-bottom: 2px solid transparent; background: none; padding: 10px 1px; color: var(--dim); cursor: pointer; }
 .notebook-view-actions button[aria-pressed="true"] { border-bottom-color: var(--ink); color: var(--ink); font-weight: 600; }
-.notebook-view-actions .write-notes-action { margin-left: auto; margin-bottom: 6px; padding: 8px 14px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--paper); font-weight: 600; }
+.notebook-view-actions .write-notes-action { margin-left: auto; margin-bottom: 6px; padding: 8px 14px; border: 1px solid var(--ink); border-radius: var(--radius); background: var(--ink); color: var(--paper); font-weight: 600; }
 .notebook-view-actions .write-notes-action:disabled { opacity: .55; cursor: default; }
 .advanced-preferences { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 18px; }
 .advanced-preferences > summary { cursor: pointer; }
@@ -271,20 +270,20 @@
 }
 .notebook .controls :is(button, select), .notebook .edit button {
   font: 12.5px var(--sans); text-transform: none; letter-spacing: 0;
-  border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 5px 10px;
   background: #fbfaf1; color: var(--dim);
 }
 @media (hover: hover) and (pointer: fine) {
   .notebook .controls :is(button, select):hover { color: var(--ink); border-color: #c9c7ae; }
 }
-.notebook .due-edit input { color-scheme: light; border-radius: 6px; }
+.notebook .due-edit input { color-scheme: light; border-radius: var(--radius); }
 .notebook .edit { display: flex; flex-wrap: wrap; gap: 8px; }
 .notebook .edit input {
   min-width: 0; width: 100%; font: 16px var(--sans);
-  border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; background: #fbfaf1;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 11px; background: #fbfaf1;
 }
 
-.notebook .passage-context { border-radius: 8px; background: var(--paper-deep); padding: 14px 16px; }
+.notebook .passage-context { border-radius: var(--radius); background: var(--paper-deep); padding: 14px 16px; }
 .notebook .passage-context p { grid-template-columns: 92px 1fr; }
 .notebook .passage-context::before, .notebook .passage-context::after { display: none; }
 
@@ -296,7 +295,7 @@
 .notebook .transcript { margin-top: 12px; }
 .notebook .transcript-capture { margin: 22px 0 26px 138px; max-width: 640px; }
 .notebook .transcript-capture button { display: block; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; }
-.notebook .transcript-capture img { display: block; max-width: 100%; max-height: 520px; height: auto; object-fit: contain; border: 1px solid var(--line); border-radius: 7px; }
+.notebook .transcript-capture img { display: block; max-width: 100%; max-height: 520px; height: auto; object-fit: contain; border: 1px solid var(--line); border-radius: var(--radius); }
 .notebook .transcript-capture figcaption { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 0; font: 12px/1.5 var(--sans); color: var(--dim); }
 .notebook .turn {
   display: grid; grid-template-columns: 118px minmax(0, 1fr);
@@ -326,7 +325,7 @@
 .notebook .turn.mine .line-row { color: var(--ink); }
 .notebook .line-row + .line-row { margin-top: 7px; }
 .notebook .line-row.focused {
-  margin: 0 -10px; padding: 3px 10px; border-radius: 5px;
+  margin: 0 -10px; padding: 3px 10px; border-radius: var(--radius);
   background: var(--select); color: var(--ink);
 }
 .notebook .line-row + .line-row.focused { margin-top: 4px; }
@@ -347,7 +346,7 @@
 .notebook .preferences-hint p { margin: 0; }
 .notebook .preferences-hint div { display: flex; gap: 8px; }
 .notebook .preferences-hint a, .notebook .preferences-hint button {
-  border: 1px solid var(--line); border-radius: 6px; padding: 6px 11px;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 11px;
   font: 13px var(--sans); color: var(--ink); background: transparent; cursor: pointer;
 }
 .notebook .preferences-return {
@@ -364,7 +363,7 @@
 .notebook select, .notebook textarea, .notebook input[type="text"], .notebook input[type="date"] {
   color-scheme: light;
   background: #fbfaf1; color: var(--ink);
-  border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 11px;
   font: 14px var(--sans);
 }
 .notebook select { padding-right: 28px; }
@@ -374,7 +373,7 @@
    white on a picture, and showing it on paper would be showing something the product
    never does. Same reason the notes page keeps its strip dark. */
 .notebook .call {
-  background: #101110; border: 1px solid var(--line); border-radius: 8px;
+  background: #101110; border: 1px solid var(--line); border-radius: var(--radius);
   overflow: hidden;
 }
 .notebook .call .caption .line { color: var(--cap-color); }
@@ -385,9 +384,9 @@
 
 /* Cards for the two capture modes, and the preset picker on Preferences. */
 .notebook .share-option, .notebook .caption-style-card {
-  background: #fbfaf1; border: 1px solid var(--line); border-radius: 9px;
+  background: #fbfaf1; border: 1px solid var(--line); border-radius: var(--radius);
 }
-.notebook .caption-style-preview { background: #101110; border-radius: 7px; }
+.notebook .caption-style-preview { background: #101110; border-radius: var(--radius); }
 .notebook .chip {
   background: var(--paper-deep); border: 1px solid var(--line); border-radius: 20px;
   color: var(--ink-soft); font: 12.5px var(--sans); padding: 5px 11px;
@@ -403,7 +402,7 @@
 }
 .notebook .meeting-row button { color: var(--dim); }
 .notebook .meeting-row .row-actions button {
-  border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 5px 10px;
   font: 12.5px var(--sans); text-transform: none; letter-spacing: 0; background: #fbfaf1;
 }
 .notebook .notebook-library .eyebrow { color: var(--faint); }
@@ -412,7 +411,7 @@
 .notebook .notes-editor { border: 0; padding: 0; margin: 0; min-width: 0; }
 .notebook .notes-editor:disabled { opacity: .65; }
 .document-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin: 24px 0; font: 12px var(--sans); color: var(--dim); }
-.document-toolbar button { border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; color: var(--ink); }
+.document-toolbar button { border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 12px; color: var(--ink); }
 .document-toolbar button:disabled { opacity: .5; cursor: default; }
 /* The sentence sits under the provenance and before the buttons, so what an action
    can do here is read rather than discovered by pressing it. */
@@ -420,10 +419,10 @@
 .document-provenance small { font: 12px/1.5 var(--sans); color: var(--faint); }
 .document-provenance small a { color: var(--dim); text-decoration: underline; text-underline-offset: 3px; }
 .generation-actions { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; flex:none; }
-.generation-error { padding:16px 18px; margin:16px 0 24px; border:1px solid #d9d5cc; border-left:2px solid var(--ember); background:#f0eee8; border-radius:5px; }
+.generation-error { padding:16px 18px; margin:16px 0 24px; border:1px solid #d9d5cc; border-left:2px solid var(--ember); background:#f0eee8; border-radius:var(--radius); }
 .generation-error p { margin:0 0 12px; font:14px/1.6 var(--sans); color:var(--ink); }
 .generation-error div { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
-.generation-error button { border:1px solid var(--line-strong); border-radius:6px; padding:7px 12px; font:inherit; font-size:13px; color:var(--ink); background:transparent; cursor:pointer; }
+.generation-error button { border:1px solid var(--line-strong); border-radius:var(--radius); padding:7px 12px; font:inherit; font-size:13px; color:var(--ink); background:transparent; cursor:pointer; }
 .generation-error a { font:13px var(--sans); color:var(--dim); text-decoration:underline; text-underline-offset:3px; }
 .notebook .notes-document h2 { font: 600 18px var(--sans); letter-spacing: -.025em; text-transform: none; margin: 30px 0 14px; }
 .notebook .key-points { border-bottom: 1px solid var(--line); padding-bottom: 24px; }
@@ -516,7 +515,7 @@
 .block-gutter { position:relative; min-height:34px; }
 .block-menu { position:absolute; top:3px; left:0; z-index:7; }
 .block-menu summary {
-  display:grid; place-items:center; width:22px; height:27px; border-radius:5px;
+  display:grid; place-items:center; width:22px; height:27px; border-radius:var(--radius);
   color:var(--faint); opacity:0; cursor:pointer; list-style:none;
   font:16px/1 var(--sans); transition:opacity .12s,background .12s,color .12s;
 }
@@ -527,10 +526,10 @@
 .block-menu summary:hover,.block-menu[open] summary { opacity:1; color:var(--ink); background:var(--paper-deep); }
 .block-popover {
   position:absolute; top:32px; left:0; z-index:8; width:174px; padding:6px;
-  border:1px solid var(--line); border-radius:8px; background:#fbfaf1;
+  border:1px solid var(--line); border-radius:var(--radius); background:#fbfaf1;
 }
 .block-popover button {
-  display:block; width:100%; padding:7px 9px; border:0; border-radius:5px;
+  display:block; width:100%; padding:7px 9px; border:0; border-radius:var(--radius);
   background:transparent; color:var(--ink-soft); text-align:left;
   font:13px var(--sans); cursor:pointer;
 }
@@ -542,23 +541,23 @@
 }
 .block-kind-picker button { padding:6px 3px; text-align:center; font-size:11px; }
 .block-kind-picker button[aria-pressed="true"] { background:var(--select); color:var(--ink); font-weight:600; }
-.block-popover .block-delete { margin-top:5px; padding-top:7px; border-top:1px solid var(--line-soft); color:var(--bad); border-radius:0 0 5px 5px; }
+.block-popover .block-delete { margin-top:5px; padding-top:7px; border-top:1px solid var(--line-soft); color:var(--bad); border-radius:0 0 var(--radius) var(--radius); }
 
 .block-meta { display:flex; align-items:center; flex-wrap:wrap; gap:10px; min-height:18px; }
 .slash-menu {
   position:absolute; left:0; top:calc(100% + 4px); z-index:6;
   display:flex; align-items:center; gap:3px; padding:6px;
-  border:1px solid var(--line); border-radius:7px; background:#fbfaf1;
+  border:1px solid var(--line); border-radius:var(--radius); background:#fbfaf1;
 }
 .slash-menu span { padding:0 6px; font:10px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
-.slash-menu button { padding:5px 8px; border:0; border-radius:4px; background:transparent; color:var(--ink-soft); font:12px var(--sans); cursor:pointer; }
+.slash-menu button { padding:5px 8px; border:0; border-radius:var(--radius); background:transparent; color:var(--ink-soft); font:12px var(--sans); cursor:pointer; }
 .slash-menu button:hover { background:var(--paper-deep); color:var(--ink); }
 
 .writing-block figure { margin:20px 0 6px; }
-.writing-block img { display:block; max-width:100%; max-height:620px; object-fit:contain; border:1px solid var(--line); border-radius:7px; }
+.writing-block img { display:block; max-width:100%; max-height:620px; object-fit:contain; border:1px solid var(--line); border-radius:var(--radius); }
 .writing-block .moment-image { cursor:zoom-in; }
 .writing-block .moment-image:focus-visible { outline:2px solid var(--settled); outline-offset:3px; }
-.writing-block.selected-moment figure { margin-inline:-12px; padding:12px; background:var(--select); border-radius:9px; }
+.writing-block.selected-moment figure { margin-inline:-12px; padding:12px; background:var(--select); border-radius:var(--radius); }
 .writing-block figcaption { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:9px 0; font-size:12px; color:var(--faint); }
 .writing-block .moment-time { padding:0; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:#c9c7ae; text-underline-offset:3px; }
 .writing-block figcaption input { flex:1; min-width:180px; padding:6px 0; border:0; border-radius:0; background:transparent; font:inherit; color:inherit; }
@@ -574,7 +573,7 @@
 }
 .writing-toolbar button {
   display:inline-flex; align-items:center; gap:6px; padding:6px 8px;
-  border:0; border-radius:5px; background:transparent; color:inherit;
+  border:0; border-radius:var(--radius); background:transparent; color:inherit;
   font:12px var(--sans); cursor:pointer;
 }
 .writing-toolbar button>span { min-width:13px; text-align:center; color:var(--faint); }
@@ -589,7 +588,7 @@
 .review-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
 .review-actions button,.image-placement button,.document-preview button,.correction-preview button { padding:7px 12px; font:inherit; font-size:13px; cursor:pointer; }
 .confirmed { color:#55764b; }
-.image-placement,.document-preview,.correction-preview { padding:20px; margin:16px 0 28px; background:#f0eee8; border:1px solid #d9d5cc; border-radius:5px; }
+.image-placement,.document-preview,.correction-preview { padding:20px; margin:16px 0 28px; background:#f0eee8; border:1px solid #d9d5cc; border-radius:var(--radius); }
 /* What an item absorbed when the reader joined two, and the way out of it. */
 .item-joined { margin:8px 0 2px; }
 .item-joined p { margin:0; font:400 12px/1.5 var(--sans); color:var(--faint); }
@@ -603,7 +602,7 @@
 /* The way back from a passage to the note that cited it. */
 .return-to-note {
   display:block; width:100%; text-align:left; margin:0 0 16px; padding:9px 12px;
-  border:1px solid var(--line); border-radius:6px; background:transparent;
+  border:1px solid var(--line); border-radius:var(--radius); background:transparent;
   font:400 13px/1.5 var(--sans); color:var(--dim); cursor:pointer;
 }
 .return-to-note span { display:block; color:var(--faint); font-size:12px; margin-top:2px; }
@@ -611,12 +610,12 @@
 
 /* A proposed relation between two items. Phrased and styled as a question, not
    as a finding: nothing here has happened until the reader answers. */
-.item-relation { margin:10px 0 4px; padding:10px 12px; border:1px dashed var(--line-strong); border-radius:6px; background:rgba(120,110,90,.03); }
+.item-relation { margin:10px 0 4px; padding:10px 12px; border:1px dashed var(--line-strong); border-radius:var(--radius); background:rgba(120,110,90,.03); }
 .item-relation p { margin:0; font:400 13px/1.5 var(--sans); color:var(--ink); }
 .item-relation p span { color:var(--faint); }
 .item-relation-why { margin-top:4px !important; font-size:11px !important; color:var(--faint) !important; }
 .item-relation-actions { display:flex; gap:8px; margin-top:8px; }
-.item-relation-actions button { font:12px var(--sans); padding:4px 10px; border:1px solid var(--line-strong); border-radius:4px; background:transparent; color:var(--dim); cursor:pointer; }
+.item-relation-actions button { font:12px var(--sans); padding:4px 10px; border:1px solid var(--line-strong); border-radius:var(--radius); background:transparent; color:var(--dim); cursor:pointer; }
 .item-relation-actions button:first-child { color:var(--ink); }
 .item-relation-actions button:hover { background:#e9e6df; color:var(--ink); }
 
@@ -648,8 +647,8 @@
   .next-step:hover .next-step-actions, .next-step:focus-within .next-step-actions { opacity:1; }
 }
 .next-step-edit { display:flex; flex-wrap:wrap; gap:8px; }
-.next-step-edit input { flex:1 1 240px; min-width:0; padding:6px 8px; font:15px var(--sans); color:var(--ink); background:#fbfaf1; border:1px solid var(--line); border-radius:5px; }
-.next-step-edit button { font:12px var(--sans); padding:5px 10px; border:1px solid var(--line); border-radius:5px; background:#fbfaf1; color:var(--ink); }
+.next-step-edit input { flex:1 1 240px; min-width:0; padding:6px 8px; font:15px var(--sans); color:var(--ink); background:#fbfaf1; border:1px solid var(--line); border-radius:var(--radius); }
+.next-step-edit button { font:12px var(--sans); padding:5px 10px; border:1px solid var(--line); border-radius:var(--radius); background:#fbfaf1; color:var(--ink); }
 /* Clear of the sticky toolbar when scrolled into view. */
 .source-panel, .moment-viewer { scroll-margin-top:72px; }
 .source-panel:focus, .moment-viewer:focus { outline:none; }
@@ -657,7 +656,7 @@
 
 /* Source passages, in the same frame as a captured moment: both answer "where
    did this come from", and they should not look like two different products. */
-.source-panel { margin:24px 0 34px; border:1px solid var(--line); border-radius:8px; background:var(--paper-deep); overflow:hidden; }
+.source-panel { margin:24px 0 34px; border:1px solid var(--line); border-radius:var(--radius); background:var(--paper-deep); overflow:hidden; }
 .source-panel>header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); }
 .source-panel>header div { display:flex; align-items:baseline; gap:12px; }
 .source-panel>header span,.source-panel>header strong { font:10px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
@@ -685,7 +684,7 @@
 .block-citation:hover { color:var(--ink); }
 .block-citation:hover span { transform:translate(1px,-1px); }
 
-.moment-viewer { margin:24px 0 34px; border:1px solid var(--line); border-radius:8px; background:var(--paper-deep); overflow:hidden; }
+.moment-viewer { margin:24px 0 34px; border:1px solid var(--line); border-radius:var(--radius); background:var(--paper-deep); overflow:hidden; }
 .moment-viewer>header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); }
 .moment-viewer>header div { display:flex; align-items:baseline; gap:12px; }
 .moment-viewer>header span,.moment-viewer>header strong { font:10px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
@@ -694,7 +693,7 @@
 .moment-layout { display:grid; grid-template-columns:minmax(220px,.9fr) minmax(260px,1.1fr); gap:0; }
 .moment-layout>div,.moment-layout>section { padding:18px; min-width:0; }
 .moment-layout>section { border-left:1px solid var(--line); }
-.moment-layout img { display:block; width:100%; max-height:360px; object-fit:contain; background:#171814; border-radius:5px; }
+.moment-layout img { display:block; width:100%; max-height:360px; object-fit:contain; background:#171814; border-radius:var(--radius); }
 .moment-layout label { display:block; margin-top:14px; font:10px var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--faint); }
 .moment-layout label input { display:block; width:100%; box-sizing:border-box; margin-top:6px; text-transform:none; letter-spacing:0; }
 .moment-layout small { display:block; margin-top:9px; color:var(--faint); font:11px var(--sans); }
@@ -702,7 +701,7 @@
 .moment-passage { display:block; width:100%; padding:9px 0; border:0; border-bottom:1px solid var(--line-soft); background:transparent; text-align:left; font:14px/1.5 var(--sans); color:var(--ink-soft); cursor:pointer; }
 .moment-passage span { display:block; margin-bottom:3px; color:var(--faint); font:9px var(--mono); letter-spacing:.08em; text-transform:uppercase; }
 .moment-passage:hover { color:var(--ink); }
-.moment-layout .moment-expand { margin-top:13px; padding:5px 9px; border:1px solid var(--line); border-radius:5px; background:#fbfaf1; color:var(--dim); cursor:pointer; font:12px var(--sans); }
+.moment-layout .moment-expand { margin-top:13px; padding:5px 9px; border:1px solid var(--line); border-radius:var(--radius); background:#fbfaf1; color:var(--dim); cursor:pointer; font:12px var(--sans); }
 .moment-layout section>p { margin:10px 0 0; color:var(--faint); font:11px/1.5 var(--sans); }
 .moment-layout .moment-empty { color:var(--dim); font-size:13px; }
 @media (max-width:760px) { .moment-layout { grid-template-columns:1fr; }.moment-layout>section { border-left:0; border-top:1px solid var(--line); } }
@@ -714,13 +713,13 @@
 .correct-transcript { display:block; background:transparent; border:0; padding:6px 0; font:inherit; font-size:12px; color:var(--dim); cursor:pointer; }
 .correction-original { display:block; font-size:12px; color:var(--faint); margin-top:6px; }
 /* The correction opens under the line being corrected, so nobody loses their place. */
-.line-row .correction-preview { display:block; margin:8px 0 14px; padding:12px 14px; border:1px solid var(--line); border-radius:7px; background:var(--paper-deep); }
-.line-row .correction-preview textarea { margin:0 0 10px; min-height:80px; background:#fbfaf1; color:var(--ink); border:1px solid var(--line); border-radius:5px; }
+.line-row .correction-preview { display:block; margin:8px 0 14px; padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius); background:var(--paper-deep); }
+.line-row .correction-preview textarea { margin:0 0 10px; min-height:80px; background:#fbfaf1; color:var(--ink); border:1px solid var(--line); border-radius:var(--radius); }
 .correction-note { display:block; margin:6px 0; font:12px/1.5 var(--sans); color:var(--dim); }
 .line-row .correction-change { display:block; padding:8px 0; border-top:1px solid var(--line); font-size:13px; }
 .line-row .correction-change>span { display:block; }
 .correction-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-.correction-actions button { font:12px var(--sans); padding:5px 10px; border:1px solid var(--line); border-radius:5px; background:#fbfaf1; color:var(--ink); }
+.correction-actions button { font:12px var(--sans); padding:5px 10px; border:1px solid var(--line); border-radius:var(--radius); background:#fbfaf1; color:var(--ink); }
 .correction-actions button:disabled { color:var(--faint); cursor:default; }
 @media(max-width:700px) { .notebook-toolbar { flex-wrap:wrap; gap:8px; } .notebook-toolbar>div { flex-wrap:wrap; } }
 .source-review-notice { margin:0; font-size:11px; color:var(--warn); padding:2px 0; }
@@ -741,7 +740,7 @@
 .desktop-settings fieldset { display: grid; gap: 1rem; border: 1px solid var(--line); padding: 1.25rem; min-width: 0; }
 .desktop-settings legend { padding: 0 .4rem; font-weight: 600; }
 .desktop-settings label { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
-.desktop-settings select { font: inherit; color: inherit; background: var(--ground); border: 1px solid var(--line); border-radius: 4px; padding: .4rem .6rem; max-width: 100%; }
+.desktop-settings select { font: inherit; color: inherit; background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius); padding: .4rem .6rem; max-width: 100%; }
 .desktop-settings p { margin: 0; }
 .desktop-settings summary { cursor: pointer; }
 .desktop-settings li { margin: .6rem 0; }
@@ -758,7 +757,7 @@
 .transcript-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 0 0 28px; }
 .notebook .transcript-toolbar h2 { text-transform: none; letter-spacing: 0; margin: 0 0 5px; font: 600 15px var(--sans); }
 .transcript-toolbar p { margin: 0; color: var(--dim); font: 12px/1.5 var(--sans); }
-.transcript-toolbar button, .smart-notes-empty button { padding: 9px 14px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: #fbfaf1; font: 13px var(--sans); }
+.transcript-toolbar button, .smart-notes-empty button { padding: 9px 14px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); background: #fbfaf1; font: 13px var(--sans); }
 .smart-notes-empty .primary-action { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .smart-notes-empty button:disabled { opacity: .5; cursor: default; }
 .notebook .smart-notes-empty { max-width: 580px; margin: 0; padding: 18px 0 32px; }
@@ -767,7 +766,7 @@
 .smart-notes-empty .notes-destination { font-size: 12px; max-width: 58ch; padding-top: 8px; }
 .notes-settings-link { display: inline-block; margin-top: 18px; font: 12px var(--sans); text-decoration: underline !important; }
 .notebook .notes-reading .transcript-capture { margin: 26px 0; }
-.transcript-capture > button { width: 100%; background: var(--paper-deep); border: 1px solid var(--line); padding: 8px; border-radius: 8px; }
+.transcript-capture > button { width: 100%; background: var(--paper-deep); border: 1px solid var(--line); padding: 8px; border-radius: var(--radius); }
 .transcript-capture img { display: block; max-width: 100%; max-height: 480px; width: auto; margin: auto; object-fit: contain; }
 .transcript-capture figcaption { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--dim); font: 12px/1.6 var(--sans); padding: 10px 0; }
 .notebook :is(button, a, input, select, summary, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
@@ -775,7 +774,7 @@
 .notes-compose strong { font: 600 14px var(--sans); }
 .notes-compose p { max-width: 52ch; margin: 6px 0 0; color: var(--dim); font: 12px/1.6 var(--sans); }
 .notes-compose a { text-decoration: underline; }
-.notes-compose button { padding: 8px 14px; background: var(--ink); color: var(--paper); border: 0; border-radius: 6px; }
+.notes-compose button { padding: 8px 14px; background: var(--ink); color: var(--paper); border: 0; border-radius: var(--radius); }
 .notes-compose button:disabled { opacity: .5; cursor: default; }
 
 @media (max-width:740px) {

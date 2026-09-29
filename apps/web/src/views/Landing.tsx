@@ -3,7 +3,7 @@ import { Wordmark } from './Wordmark';
 import './landing.css';
 import { Showcase } from './Showcase';
 import { CommandLine, InstallMethods } from './Install';
-import { Icon, IconTile, type IconName } from './CinemaIcons';
+import { Icon, IconTile, type IconName } from '@excerpt/ui';
 import { DOWNLOAD, INSTALL_COMMAND, REQUIRES, SOURCE } from './site';
 
 /* ── The page ──────────────────────────────────────────────────────────────────

@@ -11,11 +11,12 @@ beforeEach(() => {
 });
 
 describe('desktop routes', () => {
-  it('keeps only library, meeting, and settings reachable', () => {
+  it('keeps only home, library, meeting, and settings reachable', () => {
     expect(parse('')).toEqual({ name: 'library' });
     expect(parse('#/meetings')).toEqual({ name: 'library' });
     expect(parse('#/m/saved-meeting')).toEqual({ name: 'meeting', id: 'saved-meeting' });
     expect(parse('#/preferences')).toEqual({ name: 'preferences' });
+    expect(parse('#/home')).toEqual({ name: 'home' });
     expect(replaced).toEqual([]);
   });
 
