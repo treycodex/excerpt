@@ -29,7 +29,10 @@ Requires Apple silicon and macOS 26 or later.
 
 Excerpt is locally signed, not notarized by Apple, which is why step 3 is
 needed. Right-click > Open no longer skips it on current macOS. More help:
-https://github.com/treycodex/excerpt#the-app-is-unsigned
+https://excerpt-rho.vercel.app/#/install
+
+To install or update without step 3, paste this into Terminal instead:
+curl -fsSL https://excerpt-rho.vercel.app/install.sh | sh
 
 Your notes stay on this Mac. There is no account or subscription.
 INSTALL
