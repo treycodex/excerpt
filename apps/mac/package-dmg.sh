@@ -10,10 +10,7 @@ fi
 codesign --verify --deep --strict "$APP"
 STAGING=$(mktemp -d "${TMPDIR:-/tmp}/excerpt-dmg.XXXXXX")
 trap 'rm -rf "$STAGING"' EXIT
-mkdir -p "$STAGING/Excerpt"
-ditto "$APP" "$STAGING/Excerpt/Excerpt.app"
-ln -s /Applications "$STAGING/Excerpt/Applications"
-cat > "$STAGING/Excerpt/Read me.txt" <<'INSTALL'
+cat > "$STAGING/Read me.txt" <<'INSTALL'
 EXCERPT — FREE, OPEN-SOURCE MEETING NOTES
 
 Requires Apple silicon and macOS 26 or later.
@@ -36,6 +33,19 @@ curl -fsSL https://excerpt-rho.vercel.app/install.sh | sh
 
 Your notes stay on this Mac. There is no account or subscription.
 INSTALL
-hdiutil create -volname "Excerpt" -srcfolder "$STAGING/Excerpt" -ov -format UDZO "build/Excerpt.dmg"
+
+# The window's layout (background, size, icon positions) lives in dmg/. dmgbuild
+# writes it straight into the image's .DS_Store, so no Finder scripting is involved
+# and the result is the same on every machine.
+VENV=build/dmgbuild-venv
+if [ ! -x "$VENV/bin/dmgbuild" ]; then
+  python3 -m venv "$VENV"
+  "$VENV/bin/pip" install --quiet "dmgbuild==1.6.7"
+fi
+tiffutil -cathidpicheck dmg/background.png dmg/background@2x.png -out "$STAGING/background.tiff" 2>/dev/null
+rm -f build/Excerpt.dmg
+"$VENV/bin/dmgbuild" -s dmg/dmg-settings.py \
+  -D app="$APP" -D readme="$STAGING/Read me.txt" -D background="$STAGING/background.tiff" \
+  "Excerpt" build/Excerpt.dmg
 hdiutil verify "build/Excerpt.dmg"
 echo "Ready: $(pwd)/build/Excerpt.dmg"
