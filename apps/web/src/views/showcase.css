@@ -1,0 +1,392 @@
+/* ── The showcase film ─────────────────────────────────────────────────────────
+   Everything inside the stage is sized in em, and the stage's em is a fixed
+   fraction of the frame's width — so each scene is laid out once, at one design
+   size (62.5em wide), and scales like footage rather than reflowing. Phones get a
+   taller frame and a second design size (30em), with the layouts that need it
+   restacked below. */
+
+/* ── Tabs with a clock in them ──────────────────────────────────────────────── */
+.dm-tabs button { position: relative; overflow: hidden; }
+.dm-tabs button > span { position: relative; }
+.dm-tab-short { display: none; }
+.dm-progress {
+  position: absolute; inset: 0; pointer-events: none;
+  background: rgba(20, 23, 15, .11); transform: scaleX(0); transform-origin: left;
+  animation: dm-progress linear both;
+}
+@keyframes dm-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Paused — by the button, or because the frame has scrolled away — is paused
+   everywhere at once, so the scene and its progress bar never disagree. */
+.dm[data-paused] :is(*, *::before, *::after) { animation-play-state: paused !important; }
+
+.dm-bar-end { display: flex; align-items: center; gap: 12px; }
+.dm-pause {
+  display: grid; place-items: center; width: 24px; height: 24px; padding: 0;
+  border: 1px solid var(--edge); border-radius: 50%; background: none; color: var(--dim);
+  transition: color .2s, border-color .2s;
+}
+.dm-pause:hover { color: var(--ink); border-color: var(--dim); }
+.dm-pause svg { width: 9px; height: 9px; fill: currentColor; }
+.lp-frame-clock { display: inline-flex; align-items: center; gap: 7px; min-width: 4.5em; justify-content: flex-end; font-variant-numeric: tabular-nums; }
+.dm-rec { width: 6px; height: 6px; border-radius: 50%; background: var(--paper); animation: dm-blink 1.6s ease-in-out infinite; }
+@keyframes dm-blink { 50% { opacity: .25; } }
+.lp-frame-bar .lp-label, .dm-figcaption { animation: dm-fade .5s both; }
+
+/* ── The stage ──────────────────────────────────────────────────────────────── */
+.dm-media { container-type: inline-size; overflow: hidden; }
+.dm-stage {
+  position: absolute; inset: 0; overflow: hidden;
+  font-family: var(--sans); font-size: 16px; font-size: calc(100cqw / 62.5); line-height: 1.4;
+}
+.dm-stage kbd {
+  display: inline-grid; place-items: center; min-width: 1.6em; padding: .1em .35em;
+  font: 500 .95em/1.3 var(--sans); color: var(--ink);
+  background: rgba(241, 240, 221, .1); border: 1px solid rgba(241, 240, 221, .18); border-radius: .3em;
+}
+
+/* Generic motion. `dm-life` exists from its delay to delay + duration (both set
+   inline); `dm-in` arrives at its delay and stays. */
+.dm-life { animation: dm-life linear both; }
+.dm-in { animation: dm-in .55s var(--ease-out, ease-out) both; }
+@keyframes dm-life {
+  0% { opacity: 0; transform: translateY(.35em); }
+  9% { opacity: 1; transform: none; }
+  91% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes dm-in { from { opacity: 0; transform: translateY(.6em); } }
+@keyframes dm-fade { from { opacity: 0; } }
+
+/* ── The Mac the meeting is on ──────────────────────────────────────────────── */
+.dm-desk {
+  position: absolute; inset: 0; color: var(--ink);
+  background:
+    radial-gradient(80% 70% at 18% 8%, #2B3122 0%, transparent 70%),
+    radial-gradient(70% 60% at 90% 100%, #2A2019 0%, transparent 70%),
+    #10110E;
+  animation: dm-fade .5s both;
+}
+.dm-menubar {
+  position: absolute; inset: 0 0 auto; z-index: 8; padding: 0 2.2em;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: .68em; height: 2.5em; color: #D9D8C7;
+  background: rgba(14, 15, 12, .72); backdrop-filter: blur(8px);
+}
+.dm-menubar-app, .dm-menubar-status { display: flex; align-items: center; gap: 1.6em; }
+.dm-menubar-app b { font-weight: 600; }
+.dm-menubar-e { position: relative; display: inline-flex; align-items: center; gap: .5em; }
+.dm-listen { display: inline-flex; align-items: center; gap: .16em; height: 1em; }
+.dm-listen i { width: .16em; height: 100%; border-radius: 1em; background: currentColor; transform-origin: center; animation: dm-listen .9s ease-in-out infinite; }
+.dm-listen i:nth-child(2) { animation-delay: -.3s; }
+.dm-listen i:nth-child(3) { animation-delay: -.55s; }
+.dm-listen i:nth-child(4) { animation-delay: -.15s; }
+@keyframes dm-listen { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+.dm-ping {
+  position: absolute; left: -.5em; top: 50%; width: 3em; height: 3em; margin-top: -1.5em;
+  border-radius: 50%; border: 2px solid var(--paper); opacity: 0;
+  animation: dm-ping .9s ease-out both;
+}
+@keyframes dm-ping { from { opacity: 1; transform: scale(.3); } to { opacity: 0; transform: scale(1.4); } }
+
+.dm-toast {
+  position: absolute; top: 2.5em; right: 1em; z-index: 9;
+  display: flex; align-items: center; gap: .6em; padding: .55em .8em;
+  font-size: .72em; color: var(--ink);
+  background: rgba(30, 33, 26, .94); border: 1px solid rgba(241, 240, 221, .12); border-radius: .7em;
+  box-shadow: 0 1em 2.4em -1em rgba(0, 0, 0, .8);
+}
+
+/* ── The meeting window ─────────────────────────────────────────────────────── */
+.dm-call {
+  position: absolute; top: 2.6em; left: 3.2em; right: 3.2em; bottom: 1.8em;
+  display: flex; flex-direction: column;
+  box-shadow: 0 2.5em 5em -2em rgba(0, 0, 0, .9);
+  animation: dm-in .7s var(--ease-out, ease-out) both;
+}
+.dm-call-bar {
+  display: flex; align-items: center; justify-content: space-between; height: 2.9em; padding: 0 1.1em;
+  font-size: .7em; color: var(--dim); background: #1E211A;
+  border: 1px solid #2C3024; border-bottom: 0; border-radius: .8em .8em 0 0;
+}
+.dm-lights { display: flex; gap: .45em; width: 6em; }
+.dm-lights i { width: .85em; height: .85em; border-radius: 50%; background: #3A3E31; }
+.dm-call-count { width: 6em; text-align: right; }
+.dm-call-body {
+  flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 11em; gap: .6em; padding: .6em;
+  background: #0A0B09; border: 1px solid #2C3024; border-top: 0; border-radius: 0 0 .8em .8em;
+}
+.dm-share { position: relative; border-radius: .45em; }
+.dm-people { display: flex; flex-direction: column; gap: .6em; }
+.dm-person { position: relative; flex: 1; display: grid; place-items: center; border-radius: .45em; }
+.dm-tone-a { background: linear-gradient(160deg, #3C4A33, #1D2419); }
+.dm-tone-b { background: linear-gradient(160deg, #4A3A2F, #231B16); }
+.dm-tone-c { background: linear-gradient(160deg, #2F3A44, #181E24); }
+.dm-avatar {
+  display: grid; place-items: center; width: 2.9em; height: 2.9em; border-radius: 50%;
+  font-size: .9em; font-weight: 600; color: var(--ink); background: rgba(241, 240, 221, .12);
+}
+.dm-name { position: absolute; left: .7em; bottom: .55em; font-size: .62em; color: #D9D8C7; }
+.dm-speaking {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: inset 0 0 0 .14em #A8C08A, 0 0 1.4em -.2em rgba(168, 192, 138, .55);
+  animation: dm-life linear both;
+}
+
+/* The slide on the shared screen — also the thumbnail, and the transcript figure. */
+.dm-slide {
+  position: absolute; inset: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center; gap: .8em; padding: 0 9%;
+  background: #F4F3E6; color: #24281F; border-radius: .45em;
+}
+.dm-slide-kicker { font: .6em/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: #6A705E; }
+.dm-slide strong { margin-bottom: .3em; font: 600 1.35em/1.2 var(--sans); letter-spacing: -.02em; }
+.dm-slide-row { display: flex; align-items: center; gap: .9em; font-size: .75em; }
+.dm-slide-row span { flex: 0 0 7.5em; }
+.dm-slide-row i { display: block; height: 1.25em; background: #91A478; transform-origin: left; }
+.dm-grow { animation: dm-grow .9s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes dm-grow { from { transform: scaleX(0); } }
+
+/* Film-style subtitles: two lines, each on its own plate, over the meeting. */
+.dm-captions {
+  position: absolute; left: 0; right: 0; bottom: 2.4em; z-index: 2;
+  display: grid; justify-items: center; pointer-events: none;
+}
+.dm-caption { grid-area: 1 / 1; margin: 0; text-align: center; }
+.dm-caption-line {
+  display: table; margin: 0 auto .18em; padding: .12em .55em;
+  font: 500 1.42em/1.35 var(--sans); letter-spacing: -.01em; color: #FBFAEF;
+  background: rgba(8, 9, 7, .8); border-radius: .2em;
+}
+.dm-word { animation: dm-word .38s ease-out both; }
+@keyframes dm-word { from { opacity: 0; filter: blur(.12em); } }
+
+/* ── Capture ────────────────────────────────────────────────────────────────── */
+.dm-keys {
+  position: absolute; top: 4.4em; left: 0; right: 0; z-index: 9; width: fit-content; margin: 0 auto;
+  display: flex; align-items: center; gap: .45em; padding: .55em .7em .55em .6em;
+  font-size: .9em; color: var(--ink);
+  background: rgba(24, 26, 21, .92); border: 1px solid rgba(241, 240, 221, .14); border-radius: .8em;
+  box-shadow: 0 1.2em 2.6em -1em rgba(0, 0, 0, .8);
+}
+.dm-keys span { margin-left: .4em; font-size: .85em; color: var(--dim); }
+.dm-keys kbd { animation: dm-press .3s ease-out both; }
+@keyframes dm-press {
+  0% { transform: none; }
+  45% { transform: translateY(.14em); background: rgba(241, 240, 221, .32); }
+  100% { transform: none; background: rgba(241, 240, 221, .2); }
+}
+
+/* The selection: a rectangle drawn out over the slide, and everything outside it dimmed. */
+.dm-marquee {
+  position: absolute; left: 4%; top: 6%; width: 92%; height: 88%; z-index: 7;
+  border: 1px solid #fff; box-shadow: 0 0 0 200em rgba(0, 0, 0, .52);
+  animation: dm-marquee 1.45s 1.1s cubic-bezier(.55, 0, .25, 1) both, dm-gone .01s 2.8s forwards;
+}
+@keyframes dm-marquee { 0% { opacity: 0; width: 0; height: 0; } 6% { opacity: 1; width: 0; height: 0; } }
+@keyframes dm-gone { to { opacity: 0; visibility: hidden; } }
+.dm-crosshair {
+  position: absolute; right: -.7em; bottom: -.7em; width: 1.4em; height: 1.4em;
+  background:
+    linear-gradient(#fff, #fff) center / 1px 100% no-repeat,
+    linear-gradient(#fff, #fff) center / 100% 1px no-repeat;
+}
+.dm-marquee-size {
+  position: absolute; right: 0; top: calc(100% + .5em); padding: .15em .4em;
+  font: .6em/1.4 var(--mono); color: #fff; background: rgba(0, 0, 0, .7); border-radius: .25em;
+}
+.dm-flash {
+  position: absolute; inset: 0; z-index: 10; background: #fff; opacity: 0; pointer-events: none;
+  animation: dm-flash .55s 2.7s ease-out both;
+}
+@keyframes dm-flash { 0% { opacity: 0; } 22% { opacity: .75; } 100% { opacity: 0; } }
+/* The captured copy lifts off the slide and shrinks into the menu bar. */
+.dm-fly {
+  position: absolute; inset: 0; z-index: 8;
+  transform-origin: 100% 0; border-radius: .45em; overflow: hidden;
+  animation: dm-fly 1s 2.85s cubic-bezier(.5, 0, .2, 1) both;
+}
+@keyframes dm-fly {
+  0% { opacity: 0; }
+  1% { opacity: 1; transform: none; box-shadow: 0 0 0 .15em #fff; }
+  28% { transform: scale(.9); box-shadow: 0 1.5em 3em -.5em rgba(0, 0, 0, .8), 0 0 0 .15em #fff; }
+  100% { opacity: 0; transform: translate(34%, -118%) scale(.07); }
+}
+
+/* The meeting clock: speech in lanes, and the screen pinned where it happened. */
+.dm-clock {
+  position: absolute; left: 7em; right: 7em; bottom: 2em; z-index: 9;
+  padding: 1.3em 1.6em 1.4em; color: #24281F; background: #F4F3E6; border-radius: .9em;
+  box-shadow: 0 0 0 200em rgba(8, 9, 7, .55), 0 2em 4em -1em #000;
+  animation: dm-rise .85s 5.1s cubic-bezier(.2, .8, .2, 1) both;
+}
+@keyframes dm-rise { from { opacity: 0; transform: translateY(40%); } }
+.dm-clock-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .6em; }
+.dm-clock-head .lp-label { font-size: .62em; color: #6A705E; }
+.dm-clock-head > span:last-child { font: .62em var(--mono); color: #6A705E; }
+.dm-clock-grid { display: grid; grid-template-columns: 7em 1fr; grid-template-rows: 5.6em 1.7em 1.7em; align-items: center; }
+.dm-clock-grid em { font: normal .66em var(--sans); color: #59604F; }
+.dm-ruler { position: relative; align-self: stretch; border-bottom: 1px solid #D8D8C5; }
+.dm-ruler span {
+  position: absolute; bottom: 0; padding: 0 0 .35em .35em; border-left: 1px solid #C9CAB6;
+  font: .55em/1 var(--mono); color: #7C7E70; height: 1.9em; display: flex; align-items: flex-end;
+}
+.dm-lane { position: relative; height: 100%; border-bottom: 1px dashed #E0DFCB; }
+.dm-seg {
+  position: absolute; top: 22%; height: 56%; border-radius: .3em; background: #91A478;
+  animation: dm-hl .5s ease-out both;
+}
+.dm-seg-quiet { background: #CFD1BC; animation: none; }
+@keyframes dm-hl { from { background: #CFD1BC; } }
+.dm-pin-track { position: relative; align-self: stretch; pointer-events: none; }
+.dm-pin { position: absolute; top: 0; bottom: 0; animation: dm-drop .7s 5.75s cubic-bezier(.3, 1.35, .5, 1) both; }
+@keyframes dm-drop { from { opacity: 0; transform: translateY(-1.8em); } }
+.dm-pin > i { position: absolute; left: -1px; top: 4.7em; bottom: -.2em; width: 2px; background: #24281F; }
+.dm-pin > i::after { content: ''; position: absolute; left: -.28em; bottom: -.2em; width: .6em; height: .6em; border-radius: 50%; background: #24281F; }
+.dm-thumb {
+  position: absolute; top: 0; left: 0; width: 7.8em; height: 4.6em; transform: translateX(-50%);
+  border-radius: .35em; overflow: hidden; border: 2px solid #24281F; box-shadow: 0 .6em 1.2em -.5em rgba(0, 0, 0, .4);
+}
+.dm-thumb .dm-slide { font-size: .3em; border-radius: 0; }
+.dm-quotes { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; margin-top: 1em; padding-left: 7em; }
+.dm-quotes p {
+  margin: 0; padding: .6em .8em; font-size: .72em; line-height: 1.45; color: #343A2F;
+  background: #EAE9D6; border-radius: .5em; animation: dm-in .5s ease-out both;
+}
+.dm-quotes small { display: block; margin-bottom: .2em; font: .82em var(--mono); color: #6A705E; }
+
+/* ── After the meeting ──────────────────────────────────────────────────────── */
+.dm-paper {
+  position: absolute; inset: 0; display: grid; grid-template-columns: 13.5em 1fr;
+  color: #24281F; background: #F4F3E6; animation: dm-fade .5s both;
+}
+.dm-side {
+  display: flex; flex-direction: column; gap: .35em; padding: 1.6em 1em;
+  background: #EAE9D6; border-right: 1px solid #D8D8C5; font-size: .78em;
+}
+.dm-side-mark { margin: 0 .5em 1.6em; font-size: 1.1em; }
+.dm-side .lp-label { margin: 0 .6em .5em; font-size: .75em; color: #7C7E70; }
+.dm-side > span:not(.dm-side-mark):not(.lp-label) { display: flex; flex-direction: column; padding: .55em .7em; border-radius: .45em; color: #3E4437; }
+.dm-side > span small { font-size: .82em; color: #7C7E70; }
+.dm-side .is-on { background: #F4F3E6; color: #24281F; font-weight: 500; }
+
+.dm-doc { position: relative; min-width: 0; padding: 2.2em 3.2em; overflow: hidden; }
+.dm-doc-top { display: flex; justify-content: space-between; font: .62em var(--mono); color: #59604F; }
+.dm-doc h3 { margin: .7em 0 .7em; font: 400 2.3em/1.1 var(--serif); letter-spacing: -.02em; color: #24281F; }
+.dm-doc-tabs { display: flex; gap: 1.9em; margin-bottom: 1.5em; border-bottom: 1px solid #D8D8C5; font-size: .8em; }
+.dm-doc-tab { position: relative; padding: .7em 0; font-weight: 600; }
+.dm-doc-tab::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #24281F; transform-origin: left;
+}
+/* Base styles are the end of the scene: Notes chosen. */
+.dm-doc-tab-t { color: #7C7E70; animation: dm-tab-off .3s 4.45s both; }
+.dm-doc-tab-t::after { transform: scaleX(0); animation: dm-under-off .35s 4.45s both; }
+.dm-doc-tab-n { color: #24281F; animation: dm-tab-on .3s 4.45s both; }
+.dm-doc-tab-n::after { animation: dm-under-on .4s 4.5s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes dm-tab-off { from { color: #24281F; } }
+@keyframes dm-tab-on { from { color: #7C7E70; } }
+@keyframes dm-under-off { from { transform: scaleX(1); } }
+@keyframes dm-under-on { from { transform: scaleX(0); } }
+
+.dm-panes { display: grid; }
+.dm-pane { grid-area: 1 / 1; min-width: 0; }
+.dm-pane small { display: block; font: .62em var(--mono); color: #59604F; }
+.dm-pane p { margin: .3em 0 1.1em; font-size: .9em; line-height: 1.55; color: #343A2F; }
+.dm-doc-shot { position: relative; height: 8.4em; width: 19em; margin: 0 0 1.1em; }
+.dm-doc-shot .dm-slide { bottom: 1.5em; font-size: .52em; border: 1px solid #D8D8C5; }
+.dm-doc-shot figcaption { position: absolute; left: 0; bottom: 0; font: .58em var(--mono); color: #59604F; }
+
+.dm-pane-blank { display: flex; flex-direction: column; align-items: flex-start; gap: .4em; }
+.dm-pane-blank p { color: #7C7E70; }
+.dm-write {
+  position: relative; display: inline-flex; padding: .55em 1.1em; border-radius: 99em;
+  font-size: .82em; font-weight: 500; color: #F4F3E6; background: #24281F;
+  animation: dm-click .3s 5.45s ease-out both;
+}
+@keyframes dm-click { 50% { transform: scale(.94); background: #3E4437; } }
+
+.dm-pane-writing i {
+  display: block; height: .72em; margin: .6em 0; border-radius: .3em;
+  background: linear-gradient(90deg, #DDDCC6 0%, #EFEEDD 50%, #DDDCC6 100%) 0 0 / 200% 100%;
+  animation: dm-shimmer 1.1s linear infinite;
+}
+.dm-pane-writing small { margin-bottom: 1em; }
+@keyframes dm-shimmer { to { background-position: -200% 0; } }
+
+/* Notes on the left; the source they came from opens in a column of its own. */
+.dm-pane-notes { display: grid; grid-template-columns: minmax(0, 1fr) 15em; column-gap: 2.4em; align-content: start; }
+.dm-pane-notes > :not(.dm-popover) { grid-column: 1; }
+.dm-pane-notes h4 { margin: .5em 0 .15em; font: 400 1.4em/1.2 var(--serif); letter-spacing: -.01em; }
+.dm-pane-notes > small { margin-bottom: .4em; }
+.dm-pane-notes p { margin-bottom: .45em; }
+.dm-source {
+  position: relative; justify-self: start; display: inline-block; margin-bottom: .6em; padding: .3em .55em;
+  font: .6em var(--mono); color: #3E4437; background: #DCDCC5; border-radius: .3em;
+}
+.dm-source:first-of-type { animation: dm-in .55s 8.5s ease-out both, dm-hover .3s 10.35s both; }
+@keyframes dm-hover { from { background: #EAE9D6; } }
+.dm-popover {
+  grid-column: 2; grid-row: 4 / 8; align-self: start; position: relative;
+  padding: .85em 1em; font: .8em/1.5 var(--sans); color: #F1F0DD; background: #24281F; border-radius: .55em;
+  box-shadow: 0 1.2em 2.4em -1em rgba(0, 0, 0, .55);
+  animation: dm-in .45s 10.45s ease-out both;
+}
+.dm-pane .dm-popover small { margin-bottom: .3em; font-size: .78em; color: #A8AA9B; }
+
+/* The pointer: arrives beside its target, clicks, and goes — or stays, to hover. */
+.dm-cursor { position: absolute; left: 55%; top: 60%; z-index: 5; width: 1.15em; pointer-events: none; animation: dm-cursor linear both; }
+.dm-source .dm-cursor { font-size: 1.65em; }
+.dm-doc-tab .dm-cursor, .dm-write .dm-cursor { font-size: 1.2em; }
+.dm-cursor svg { display: block; width: 100%; fill: #111; stroke: #fff; stroke-width: 1.3; stroke-linejoin: round; filter: drop-shadow(0 .15em .2em rgba(0, 0, 0, .3)); }
+.dm-cursor-stay { animation: dm-cursor-in .8s cubic-bezier(.3, .7, .3, 1) both; }
+@keyframes dm-cursor {
+  0% { opacity: 0; transform: translate(4em, 2.6em); }
+  12% { opacity: 1; }
+  44% { transform: none; }
+  50% { transform: scale(.82); }
+  58% { transform: none; }
+  84% { opacity: 1; }
+  100% { opacity: 0; transform: none; }
+}
+@keyframes dm-cursor-in { from { opacity: 0; transform: translate(4em, 2.6em); } }
+.dm-ripple {
+  position: absolute; left: -.5em; top: -.5em; width: 1.1em; height: 1.1em; border-radius: 50%;
+  border: 2px solid rgba(36, 40, 31, .5); opacity: 0; animation: dm-ripple .55s ease-out both;
+}
+@keyframes dm-ripple { from { opacity: 1; transform: scale(.2); } to { opacity: 0; transform: scale(2); } }
+
+/* ── Phones: a taller frame, laid out again at 30em ─────────────────────────── */
+@media (max-width: 620px) {
+  .dm-tab-long { display: none; }
+  .dm-tab-short { display: inline; }
+  .lp-frame-media.dm-media { aspect-ratio: 4 / 5; }
+  .dm-stage { font-size: calc(100cqw / 30); }
+
+  .dm-menubar-app span, .dm-menubar-status > span:last-child { display: none; }
+  .dm-call { left: .9em; right: .9em; top: 2.5em; bottom: .9em; }
+  .dm-call-body { grid-template-columns: 1fr; grid-template-rows: 1fr 5.2em; }
+  .dm-people { flex-direction: row; }
+  .dm-avatar { width: 2.3em; height: 2.3em; }
+  .dm-captions { bottom: 7.2em; }
+  .dm-caption-line { font-size: 1.1em; }
+  .dm-keys { top: 3.6em; }
+
+  .dm-clock { left: .9em; right: .9em; bottom: 1em; padding: 1em; }
+  .dm-clock-grid { grid-template-columns: 5.2em 1fr; }
+  .dm-quotes { grid-template-columns: 1fr; gap: .5em; padding-left: 0; }
+
+  .dm-paper { grid-template-columns: 1fr; }
+  .dm-side { display: none; }
+  .dm-doc { padding: 2.4em 1.6em; }
+  .dm-doc h3 { font-size: 2em; }
+  .dm-doc-shot { width: 100%; }
+  .dm-pane-notes { grid-template-columns: 1fr; }
+  .dm-popover { grid-column: 1; grid-row: 8; margin-top: .8em; }
+}
+
+/* Reduced motion: every animation is already off (landing.css). What exists only
+   mid-scene goes too, leaving each scene's last frame. */
+@media (prefers-reduced-motion: reduce) {
+  .dm-transient { display: none !important; }
+  .dm-pause { display: none; }
+}

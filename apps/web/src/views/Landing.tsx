@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Wordmark } from './Wordmark';
 import './landing.css';
+import { Showcase } from './Showcase';
 
 const SOURCE = 'https://github.com/treycodex/excerpt';
 /** Always the newest release's disk image; the file keeps one name across releases. */
@@ -27,34 +28,6 @@ const INSTALL = [
 
    Every claim on this page is one the product can keep. The sections that say
    what Excerpt does *not* do are not hedging; they are the argument. */
-
-/** The three things the hero can show. Tabs switch the frame, nothing else. */
-type Shot = {
-  id: string; tab: string; chrome: string; caption: string;
-  src?: string; alt?: string; height?: number; video?: boolean;
-};
-
-const SHOTS: readonly [Shot, Shot, Shot] = [
-  {
-    id: 'review',
-    tab: 'The transcript',
-    chrome: 'EXAMPLE MEETING · TRANSCRIPT & SCREENSHOTS',
-    caption: 'Captured screens sit on the meeting clock, with the speech from either side of them.',
-  },
-  {
-    id: 'notes',
-    tab: 'The notes',
-    chrome: 'EXAMPLE MEETING · OPTIONAL NOTES',
-    caption: 'Write notes when you want them. Edit the wording and follow a source back to the transcript.',
-  },
-  {
-    id: 'subtitles',
-    tab: 'The subtitles',
-    chrome: 'LIVE · TWO LINES · BROKEN ON PHRASE',
-    caption: 'Film-style subtitles while the review happens, so you can watch the work.',
-    video: true,
-  },
-];
 
 /** The job, in the order it happens. */
 const STEPS = [
@@ -123,7 +96,6 @@ function ProductPreview({ view }: { view: 'transcript' | 'notes' }) {
 }
 
 export function Landing({ onStart }: { onStart: () => void }) {
-  const [shot, setShot] = useState(0);
   const [stuck, setStuck] = useState(false);
   useReveal();
 
@@ -137,8 +109,6 @@ export function Landing({ onStart }: { onStart: () => void }) {
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({
     behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
   });
-
-  const active = SHOTS[shot] ?? SHOTS[0];
 
   return (
     <div className="lp">
@@ -187,33 +157,9 @@ export function Landing({ onStart }: { onStart: () => void }) {
         </div>
       </header>
 
-      {/* One frame, three things it can hold. The tabs change the picture and the
-          line under it, and nothing else on the page moves. */}
-      <section className="lp-showcase" aria-label="Excerpt in use">
-        <div className="lp-tabs" role="tablist" aria-label="What to show">
-          {SHOTS.map((s, i) => (
-            <button key={s.id} role="tab" id={`tab-${s.id}`} aria-selected={i === shot}
-              aria-controls="lp-frame" className={i === shot ? 'is-on' : undefined}
-              onClick={() => setShot(i)}>{s.tab}</button>
-          ))}
-        </div>
-
-        <div className="lp-glow" aria-hidden />
-        <figure className="lp-frame" id="lp-frame" role="tabpanel" aria-labelledby={`tab-${active.id}`}>
-          <div className="lp-frame-bar">
-            <span className="lp-frame-mark"><Wordmark markOnly /></span>
-            <span className="lp-label">{active.chrome}</span>
-            <span className="lp-frame-clock">0:41</span>
-          </div>
-          <div className="lp-frame-media">
-            {active.video
-              ? <ProductFilm />
-              : <ProductPreview view={active.id === 'notes' ? 'notes' : 'transcript'} />}
-            <span className="lp-brackets" aria-hidden><i /><i /><i /><i /></span>
-          </div>
-          <figcaption>{active.caption}</figcaption>
-        </figure>
-      </section>
+      {/* One frame, three things it can hold — played as a film, in the order a
+          meeting has them. The tabs jump between scenes; nothing else moves. */}
+      <Showcase />
 
       <section className="lp-section cs-reveal" id="how-it-works">
         <div className="lp-head">
