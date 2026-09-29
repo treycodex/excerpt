@@ -11,8 +11,28 @@ remain native to the Mac app.
 
 ## Install
 
+Excerpt requires macOS 26 or later on Apple silicon. There are two ways to install it,
+and the step-by-step version is at
+[excerpt-rho.vercel.app/#/install](https://excerpt-rho.vercel.app/#/install).
+
+### From Terminal
+
+```sh
+curl -fsSL https://excerpt-rho.vercel.app/install.sh | sh
+```
+
+This downloads the latest release, checks that the app is signed with Excerpt's
+certificate, copies it into Applications, and opens it. macOS shows no malware warning,
+because its first-open check applies only to files marked as downloaded, and curl does
+not mark them. The script changes no security setting and will not replace Excerpt
+while it is running. Read it first:
+[`apps/web/public/install.sh`](apps/web/public/install.sh). Run the same line again to
+update.
+
+### From the download
+
 [Download Excerpt.dmg](https://github.com/treycodex/excerpt/releases/latest/download/Excerpt.dmg)
-from the latest release. It requires macOS 26 or later on Apple silicon.
+from the latest release.
 
 1. Open `Excerpt.dmg` and drag **Excerpt** onto **Applications**.
 2. Open Excerpt from Applications. macOS says Apple could not verify that Excerpt is
@@ -27,12 +47,15 @@ recording and speech-model permissions.
 ### The app is unsigned
 
 Excerpt is signed with a local certificate, not an Apple Developer ID, and is not
-notarized by Apple. That is why macOS blocks the first launch. On current macOS,
+notarized by Apple. That is why macOS blocks the first launch of a browser download
+(the Terminal install above avoids it). A new download is checked again, so expect
+**Open Anyway** again when updating this way. On current macOS,
 right-clicking the app and choosing **Open** no longer gets past this; use **Open
 Anyway** as above. The button stays in Privacy & Security for about an hour after the
 blocked attempt; if it has gone, open Excerpt again.
 
-If you prefer the Terminal, this clears the download flag instead of steps 2–3:
+If you have already dragged it into Applications, this clears the download flag instead
+of steps 2–3:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Excerpt.app

@@ -44,8 +44,10 @@ word lists. A second language means writing its grammar. It is not a setting.
 Since 28 September 2026 the landing page and README link to `Excerpt.dmg` on the
 latest GitHub release, and all three install surfaces (page, README, the DMG's
 `Read me.txt`) explain **Open Anyway** in Privacy & Security — right-click Open no
-longer bypasses Gatekeeper. Still unsigned by Apple, per the standing decision;
-Developer ID and notarization would remove the step. See `apps/mac/DISTRIBUTION.md`.
+longer bypasses Gatekeeper. Since 29 September there is also a Terminal install
+(`install.sh`, on the site's `#/install` page) that never meets the prompt. Still
+unsigned by Apple, per the standing decision; Developer ID and notarization would
+remove the step for browser downloads. See `apps/mac/DISTRIBUTION.md`.
 
 ## 5. Extracted items outlive the screen that showed them
 

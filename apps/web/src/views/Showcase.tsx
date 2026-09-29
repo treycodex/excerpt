@@ -276,8 +276,8 @@ const TURNS: readonly Turn[] = [
     { at: 5.5, lines: ['So the product moves', 'into the first three seconds?'] },
   ] },
   { who: 2, at: 7.7, until: 11.5, final: true, cues: [
-    { at: 7.7, lines: ['Yes — I’ll send a revised cut'] },
-    { at: 8.8, lines: ['Yes — I’ll send a revised cut', 'on Thursday.'] },
+    { at: 7.7, lines: ['Yes. I’ll send a revised cut'] },
+    { at: 8.8, lines: ['Yes. I’ll send a revised cut', 'on Thursday.'] },
   ] },
 ];
 
