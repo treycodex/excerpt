@@ -4,6 +4,9 @@ Excerpt is a desktop Mac app for reading movie-style captions during a meeting,
 capturing useful screen moments, and leaving with a transcript that keeps the
 conversation and screenshots together. Notes are optional.
 
+**[Watch the 54-second demo](https://excerpt-rho.vercel.app/media/excerpt-demo.mp4)**:
+real footage of the app, from setup to notes (the meeting in it is scripted).
+
 The app works locally without an account or browser capture. Notes are written only
 when you ask: on this Mac with Apple Intelligence, or with OpenAI using your own
 Keychain key if you choose that in Settings. Speech transcription and meeting files
@@ -65,7 +68,14 @@ Or build it yourself from this repository (see [Development](#development)).
 
 ## Meeting controls
 
-Start from the menu, library, or ⌘⇧R. Starting leaves the meeting window closed; use
+When Zoom, Teams, Meet, FaceTime, Slack, Discord or a browser call starts using the
+microphone, Excerpt asks whether to start a transcript, and when the call lets go of
+the microphone it asks whether to end the meeting. It never starts or stops on its
+own; **Notice meetings** in the menu turns the question off. A browser can hold the
+microphone for a while after a call ends (Meet's closing page does), and the end
+question waits for it.
+
+Or start from the menu, library, or ⌘⇧R. Starting leaves the meeting window closed; use
 **Open live meeting** to follow the transcript or write your own notes. Ending saves
 the transcript and opens it, with screenshots at the moments they were captured.
 Correct any passage there; the original wording is kept. The **Notes** tab offers
