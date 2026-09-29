@@ -4,21 +4,19 @@ import './landing.css';
 import { DOWNLOAD, INSTALL_COMMAND, INSTALL_SCRIPT, REQUIRES, SOURCE, UNQUARANTINE_COMMAND } from './site';
 
 /* ── Installing ────────────────────────────────────────────────────────────────
-   Excerpt is not notarized, so there are two honest ways in, and the page offers
-   both at the same weight: one line in Terminal, which macOS never stops because
-   curl does not mark what it downloads, or the disk image, which macOS stops once
-   until it is allowed in Privacy & Security. Neither is dressed up as the other. */
+   Explain the two installation paths plainly, including the macOS approval
+   needed for a browser download and what the Terminal script verifies. */
 
 /** What the Terminal line does, in the order install.sh does it. */
 const SCRIPT_STEPS = [
   ['01', 'Checks this Mac.',
-    'Apple silicon and macOS 26 or later. On any other Mac it stops before downloading anything.'],
+    'The installer stops unless you have an Apple silicon Mac running macOS 26 or later.'],
   ['02', 'Downloads the latest release.',
-    'The same Excerpt.dmg the Download button gets, from the project’s GitHub releases.'],
+    'It gets the same Excerpt.dmg as the Download button, from GitHub Releases.'],
   ['03', 'Checks the signature.',
-    'The app has to be signed with the certificate every Excerpt release is signed with. If it is not, nothing is installed.'],
+    'It checks the app against Excerpt’s pinned signing certificate. A mismatch stops the install.'],
   ['04', 'Installs and opens it.',
-    'Copies Excerpt into Applications and opens it. If your account cannot write to that folder, it uses the Applications folder in your home folder instead.'],
+    'It copies Excerpt into Applications and opens it. If needed, it uses the Applications folder in your home folder.'],
 ] as const;
 
 /** The disk-image path. macOS wording is quoted exactly, because people match on it. */
@@ -56,12 +54,11 @@ export function CommandLine({ command, label }: { command: string; label: string
 export function InstallMethods({ guide = false }: { guide?: boolean }) {
   return <div className="lp-install">
     <article className="lp-card lp-install-card">
-      <span className="lp-label">From Terminal · no prompt</span>
-      <h3>Paste one line.</h3>
+      <span className="lp-label">Terminal installer</span>
+      <h3>Read it, then run it.</h3>
       <p>
-        It downloads the latest release, checks that it is signed by Excerpt, and puts it in
-        Applications. macOS does not stop it, because its first-open check only applies to files a
-        browser downloads.
+        The script downloads the latest release, checks its signature, and installs the app.
+        Read the script before running the command.
       </p>
       <CommandLine command={INSTALL_COMMAND} label="Terminal install command" />
       <p className="lp-install-meta">
@@ -69,11 +66,11 @@ export function InstallMethods({ guide = false }: { guide?: boolean }) {
       </p>
     </article>
     <article className="lp-card lp-install-card lp-card-outline">
-      <span className="lp-label">From the download · allow once</span>
-      <h3>Download, then allow it.</h3>
+      <span className="lp-label">Disk image</span>
+      <h3>Download the app.</h3>
       <p>
-        Drag Excerpt into Applications. The first time you open it, macOS warns that it could not verify it.
-        Choose Done, then Open Anyway in System Settings → Privacy & Security.
+        Drag Excerpt into Applications. Because it is not notarized, macOS asks you to approve
+        the first launch in System Settings → Privacy & Security.
       </p>
       <a className="lp-solid lp-full" href={DOWNLOAD}>Download Excerpt.dmg <span aria-hidden>↓</span></a>
       {guide && <p className="lp-install-meta"><a className="lp-link" href="#/install">Step by step, with what each screen says →</a></p>}
@@ -101,8 +98,8 @@ export function InstallPage() {
           <span className="lp-label lp-label-ember">[ Install ]</span>
           <h1>Install Excerpt <em>for Mac.</em></h1>
           <p>
-            Free, and it requires {REQUIRES}. There are two ways to install it: one line in Terminal, or the
-            disk image and one trip to System Settings.
+            Excerpt is free and requires {REQUIRES}. Choose the disk image or the Terminal installer.
+            The steps for each are below.
           </p>
         </div>
         <InstallMethods />
@@ -111,10 +108,10 @@ export function InstallPage() {
       <section className="lp-section" id="terminal">
         <div className="lp-head">
           <span className="lp-label">[ From Terminal ]</span>
-          <h2>What the one line <em>does.</em></h2>
+          <h2>What the script <em>does.</em></h2>
           <p>
-            It runs <a className="lp-link" href={INSTALL_SCRIPT} target="_blank" rel="noreferrer">install.sh</a>,
-            a short script you can read before you run it. Run it again later to update.
+            The command runs <a className="lp-link" href={INSTALL_SCRIPT} target="_blank" rel="noreferrer">install.sh</a>.
+            Read it first. Run it again later to update Excerpt.
           </p>
         </div>
         <div className="lp-cards lp-cards-4">
@@ -127,18 +124,18 @@ export function InstallPage() {
           ))}
         </div>
         <p className="lp-note">
-          It will not replace Excerpt while it is running, so a meeting in progress is never cut off. It changes no
-          security setting and installs nothing else. macOS does not show its warning because it only checks files
-          marked as downloaded, and curl does not mark them. The signature check is the script’s own: it confirms the app
-          is the one Excerpt published, which is not the same as Apple reviewing it.
+          The script will not replace Excerpt while it is running. Terminal downloads do not carry the
+          quarantine mark a browser adds, so macOS does not show its usual first-open warning. The
+          script checks the app’s signature instead; that is not Apple notarization. Only run a script
+          you trust and have reviewed.
         </p>
       </section>
 
       <section className="lp-section" id="download">
         <div className="lp-head">
           <span className="lp-label">[ From the download ]</span>
-          <h2>Opening it <em>the first time.</em></h2>
-          <p>A browser marks what it downloads, so macOS stops Excerpt the first time it opens. Allowing it takes three steps, once.</p>
+          <h2>Open the download <em>once.</em></h2>
+          <p>macOS asks you to approve the first launch of this unnotarized app. Follow these steps after downloading the disk image.</p>
         </div>
         <div className="lp-cards lp-cards-3">
           {DOWNLOAD_STEPS.map(([n, title, body]) => (
@@ -154,7 +151,7 @@ export function InstallPage() {
           choosing Open no longer skips this check on current macOS.
         </p>
         <div className="lp-install-alt">
-          <p>Already dragged it into Applications? Instead of steps 2 and 3, this clears the download mark:</p>
+          <p>You can also clear the download mark manually, but that skips the macOS approval described above:</p>
           <CommandLine command={UNQUARANTINE_COMMAND} label="Command that clears the download mark" />
         </div>
       </section>
@@ -164,24 +161,22 @@ export function InstallPage() {
           <article className="lp-card lp-card-quiet">
             <h3>Why macOS warns.</h3>
             <p>
-              Excerpt is signed with its own certificate, not an Apple Developer ID, and has not been notarized by
-              Apple, which needs a paid developer account. So macOS cannot vouch for it, and says so. The code is
-              open for anyone to check.
+              Excerpt uses a local signing certificate, not an Apple Developer ID, and has not been notarized.
+              macOS cannot verify it through Apple’s usual process. The source code is available to inspect.
             </p>
           </article>
           <article className="lp-card lp-card-quiet">
             <h3>Updating.</h3>
             <p>
-              Quit Excerpt and run the Terminal line again. A new download from the browser is checked again, so
-              expect the Open Anyway step again. Either way, meetings stay in
-              ~/Library/Application Support/Excerpt, and permissions carry over because every release is signed
-              with the same certificate.
+              Quit Excerpt, then run the Terminal installer again or download the latest disk image.
+              A browser download needs macOS approval again. Your meetings stay in
+              ~/Library/Application Support/Excerpt.
             </p>
           </article>
           <article className="lp-card lp-card-quiet">
             <h3>Build it yourself.</h3>
             <p>
-              Excerpt is MIT licensed. Build the Mac app from source and it never meets the download check at all.
+              Excerpt is MIT licensed. You can inspect the code and build the Mac app yourself.
             </p>
             <a className="lp-outline lp-full" href={`${SOURCE}#development`} target="_blank" rel="noreferrer">Build from source ↗</a>
           </article>

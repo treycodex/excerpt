@@ -40,25 +40,25 @@ const REEL: readonly [IconName, string][] = [
 
 /** The job, in the order it happens. */
 const STEPS: readonly [IconName, string, string, string][] = [
-  ['viewfinder', 'Capture what is on screen.',
-    'Press ⌘⇧S to grab part of the screen: a report, an ad, a deck. It lands on the meeting timeline at the moment you took it.',
+  ['viewfinder', 'Save what’s on screen.',
+    'Press ⌘⇧S to capture a slide, design, or report. Excerpt places it on the meeting timeline when you take it.',
     '⌘⇧S · saved on your Mac'],
-  ['strip', 'Keep the talk beside it.',
-    'What people said just before and just after sits right next to the picture. It shows what was said around that moment. It does not claim the words describe the image.',
+  ['strip', 'Keep the words around it.',
+    'See what was said before and after each capture, right beside the image. Excerpt shows the context without guessing what the image means.',
     'Placed on the meeting timeline'],
-  ['clapper', 'Come back to it later.',
-    'End the meeting and the transcript opens. Fix a misheard line, write your own notes, or choose Write notes for a short version. Export it all when you are done.',
+  ['clapper', 'Find it again later.',
+    'Open the transcript after the meeting. Correct a line, write your own notes, or generate a short version. Export the record when you need it.',
     'Yours to keep'],
 ];
 
 /** Who shows work on a shared screen, and what each of them needs afterwards. */
 const PEOPLE: readonly [IconName, string, string][] = [
-  ['camera', 'Creative leads', 'Keep each piece of feedback next to the cut it was about, so the next round starts from what was actually said.'],
-  ['storyboard', 'Designers', 'Capture the frame, the layout or the landing page that got a comment, with the comment right beside it.'],
-  ['projector', 'Media planners and buyers', 'Save the report view that was on screen, and the reasoning behind the budget change you agreed.'],
-  ['chart', 'Performance marketers', 'Keep a picture of the numbers that were shown, how the team read them, and the test you decided to run.'],
-  ['megaphone', 'Account leads', 'Client questions, caveats and approvals, each one sitting next to the slide it was about.'],
-  ['chair', 'Strategists', 'Why the next round is needed, in the words that decided it, ready to put in the brief.'],
+  ['camera', 'Creative leads', 'Keep feedback beside the cut it was about, ready for the next round.'],
+  ['storyboard', 'Designers', 'Capture the frame or layout under discussion, with the conversation beside it.'],
+  ['projector', 'Media planners and buyers', 'Save the report view and the reasoning behind a budget decision.'],
+  ['chart', 'Performance marketers', 'Keep the numbers shown on screen beside the test the team agreed to run.'],
+  ['megaphone', 'Account leads', 'Find client questions, caveats, and approvals next to the relevant slide.'],
+  ['chair', 'Strategists', 'Return to the words behind a decision when it is time to write the brief.'],
 ];
 
 const KEPT: readonly [IconName, string, string][] = [
@@ -78,23 +78,24 @@ const LIMITS: readonly [IconName, string, string][] = [
 ];
 
 const INCLUDED = [
-  'Every feature, from the first day',
-  'No account to create',
-  'No subscription to cancel',
-  'Transcripts stay on your Mac',
-  'Updates: run the install line again',
-  'MIT licensed on GitHub',
+  'Every feature included',
+  'No account or subscription',
+  'Meetings saved on your Mac',
+  'Markdown and HTML export',
+  'MIT-licensed source code',
 ] as const;
 
 const FAQ: readonly [string, string][] = [
   ['What is Excerpt?',
-    'A free Mac app for meetings where work is shown on screen. It puts live subtitles over the call, saves the screenshots you capture, and gives you a transcript with those screenshots in place when the meeting ends.'],
+    'A free, open-source Mac app for meetings. It shows live captions, saves the parts of the screen you choose, and puts those captures beside the transcript afterward.'],
+  ['How is it different from Granola or Tactiq?',
+    'Excerpt takes a smaller, Mac-first approach: live captions, screen captures, a locally saved transcript, and optional notes. It does not try to match every feature or team workflow in Granola or Tactiq.'],
   ['Does it record audio?',
     'No. It turns speech into text as the meeting happens and keeps only the text. No audio file is saved.'],
   ['Which meeting apps does it work with?',
     'Any of them. Excerpt listens to your Mac’s sound and your microphone, so there is nothing to add to Zoom, Google Meet or Teams, and no bot joins the call.'],
   ['Where are my meetings stored?',
-    'In Excerpt’s own folder on your Mac. There is no account, no server and no browser storage.'],
+    'In Excerpt’s folder on your Mac. You do not need an account or browser storage.'],
   ['Does anything leave my Mac?',
     'Only if you ask. Transcription runs on your Mac. If you choose Write notes with OpenAI, the transcript text and screenshot captions go to OpenAI on your own key. The screenshot images stay on your Mac.'],
   ['Do I need an OpenAI key?',
@@ -102,7 +103,7 @@ const FAQ: readonly [string, string][] = [
   ['Can other people see the subtitles?',
     'They can if the subtitles are on the screen you share. Captions can appear in screen recordings and screen shares, so check your meeting app’s preview, or turn them off with ⌘⇧C.'],
   ['Why does macOS warn me the first time?',
-    'Excerpt is not notarized by Apple, which needs a paid developer account. Install with the Terminal line to skip the warning, or choose Open Anyway once in System Settings.'],
+    'Excerpt is locally signed but not notarized by Apple. A browser download needs one approval in System Settings. The install guide explains both the download and Terminal options.'],
   ['What do I need to run it?',
     'A Mac with Apple silicon on macOS 26 or later. Setup installs Apple’s speech model before your first meeting.'],
   ['Is it really free?',
@@ -166,12 +167,12 @@ export function Landing({ onStart }: { onStart: () => void }) {
           <span aria-hidden>↓</span>
         </a>
 
-        <p className="lp-eyebrow lp-rise" style={beat(1)}><Icon name="clapper" /> Meeting memory for creative and media agencies</p>
+        <p className="lp-eyebrow lp-rise" style={beat(1)}><Icon name="clapper" /> An open-source Mac alternative to Granola and Tactiq</p>
         <h1 className="lp-rise" style={beat(2)}><span>The screen.</span> <span>The speech.</span><br /><em>The meeting, kept together.</em></h1>
         <p className="lp-lead lp-rise" style={beat(3)}>
-          Excerpt puts live subtitles on your calls, saves the screens you capture, and hands you a full
-          transcript with those screenshots in place when the meeting ends. Notes are there when you want
-          them. Free, open source, and it runs on your Mac.
+          Excerpt adds live captions to meetings, saves the moments you capture on screen, and keeps
+          them beside the transcript afterward. Add your own notes or generate them later.
+          Free, with no account or subscription.
         </p>
 
         <div className="lp-cta lp-rise" style={beat(4)}>
@@ -179,17 +180,17 @@ export function Landing({ onStart }: { onStart: () => void }) {
           <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the demo</button>
         </div>
         <div className="lp-hero-cmd lp-rise" style={beat(5)}>
-          <span className="lp-label">Or install with one line in Terminal. No security prompt.</span>
+          <span className="lp-label">Prefer Terminal? Read the script, then install with one line.</span>
           <CommandLine command={INSTALL_COMMAND} label="Terminal install command" />
         </div>
 
         <ul className="lp-trustrow lp-rise" style={beat(6)} aria-label="At a glance">
           <li><Icon name="ticket" /> Free, no account</li>
-          <li><Icon name="seat" /> Stays on your Mac</li>
+          <li><Icon name="seat" /> Meetings saved on your Mac</li>
           <li><Icon name="laptop" /> macOS 26 or later, Apple silicon</li>
         </ul>
         <p className="lp-fineprint lp-rise" style={beat(7)}>
-          The download asks you to allow Excerpt once in System Settings. The Terminal line does not. <a className="lp-inline" href="#/install">Install guide</a>
+          Excerpt is locally signed but not notarized by Apple. Browser downloads need one approval in System Settings. <a className="lp-inline" href="#/install">Install guide</a>
         </p>
       </header>
 
@@ -202,7 +203,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <div className="lp-head">
           <span className="lp-label lp-label-ember">[ How it works ]</span>
           <h2>Three scenes. <em>One record.</em></h2>
-          <p>What a campaign review looks like with Excerpt running. The last scene is the point: a week later, the decision still has the report it was made about sitting next to it.</p>
+          <p>A screenshot misses what people said. A transcript misses what they saw. Excerpt keeps both on one timeline.</p>
         </div>
         <div className="lp-steps">
           <div className="lp-steps-track" aria-hidden><i /></div>
@@ -219,16 +220,16 @@ export function Landing({ onStart }: { onStart: () => void }) {
           ))}
         </div>
         <p className="lp-note">
-          Excerpt keeps a report as a picture and the conversation as text. It does not read numbers off a screen,
-          check a metric, import spreadsheets or PDFs, or connect to an ad platform.
+          Screen captures are pictures, not analyzed reports. Excerpt does not read numbers from them,
+          check metrics, import spreadsheets or PDFs, or connect to ad platforms.
         </p>
       </section>
 
       <section className="lp-section lp-centred cs-reveal" id="features">
         <div className="lp-head">
           <span className="lp-label lp-label-ember">[ Features ]</span>
-          <h2>Made for the review. <em>Kept for later.</em></h2>
-          <p>The shortcuts and tools you will actually reach for while work is on screen, and the ones you need when the call is over.</p>
+          <h2>Useful in the meeting. <em>Useful after.</em></h2>
+          <p>Captions and quick screen capture while you talk. An editable transcript and notes when you are done.</p>
         </div>
         <Bento />
       </section>
@@ -238,13 +239,13 @@ export function Landing({ onStart }: { onStart: () => void }) {
           <span className="lp-label lp-label-ember">[ After the review ]</span>
           <h2>The transcript first.<br /><em>Notes when you want them.</em></h2>
           <p>
-            Your meeting opens as a transcript, with each screenshot where it was taken. Read it, fix a
-            misheard line, or add an image. Nothing is generated until you ask.
+            Open a meeting to see the full transcript, with each capture where it happened.
+            Correct a misheard line or add an image. Nothing is generated until you ask.
           </p>
           <p>
-            The Notes tab gives you a blank page, or a Write notes button for a shorter version. Every
-            generated note links back to the passage it came from, and stays editable. Your own writing is
-            kept if you write notes again.
+            Start with a blank notes page, or choose Write notes for a shorter version.
+            Generated notes link to their source in the transcript. They stay editable, and your
+            writing remains if you generate notes again.
           </p>
           <div className="lp-split-actions">
             <button className="lp-outline" onClick={onStart}>See it in the demo <span aria-hidden>↗</span></button>
@@ -269,8 +270,8 @@ export function Landing({ onStart }: { onStart: () => void }) {
       <section className="lp-section lp-centred cs-reveal" id="who">
         <div className="lp-head">
           <span className="lp-label lp-label-ember">[ Who it’s for ]</span>
-          <h2>For everyone <em>in the review.</em></h2>
-          <p>Anyone who shows work on a shared screen, and has to act on the feedback afterwards.</p>
+          <h2>For work shown <em>on screen.</em></h2>
+          <p>When a meeting turns on a slide, a design, or a report, keep that moment with the conversation.</p>
         </div>
         <div className="lp-cards lp-cards-3">
           {PEOPLE.map(([icon, title, body], i) => (
@@ -286,8 +287,8 @@ export function Landing({ onStart }: { onStart: () => void }) {
       <section className="lp-section lp-centred cs-reveal" aria-labelledby="subs-title">
         <div className="lp-head">
           <span className="lp-label lp-label-ember">[ During the review ]</span>
-          <h2 id="subs-title">While it happens, <em>subtitles.</em></h2>
-          <p>Two lines of captions follow the conversation over your meeting window. Pick their look and position, or hide them. The transcript keeps going either way.</p>
+          <h2 id="subs-title">See the words <em>as they happen.</em></h2>
+          <p>Live captions sit over your meeting window. Pick their look and position, or hide them. The transcript keeps going.</p>
         </div>
         <div className="lp-film-wrap">
           <div className="lp-glow" aria-hidden />
@@ -306,7 +307,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <div className="lp-head">
           <span className="lp-label lp-label-ember">[ The fine print ]</span>
           <h2>What it <em>won’t do.</em></h2>
-          <p>Better to know now than to find out later. A tool that asks you to check the source should be clear about what cannot be checked.</p>
+          <p>Excerpt keeps the record. It does not pretend to understand everything in it.</p>
         </div>
         <div className="lp-cards lp-cards-4">
           {LIMITS.map(([icon, title, body], i) => (
@@ -322,8 +323,8 @@ export function Landing({ onStart }: { onStart: () => void }) {
       <section className="lp-paper cs-reveal" id="pricing">
         <div className="lp-paper-head">
           <span className="lp-label lp-label-ink">[ Pricing ]</span>
-          <h2>One price.<br /><em>Nothing to pay.</em></h2>
-          <p>No trial, no tiers, no subscription. Download it and it is yours.</p>
+          <h2>Free to use.<br /><em>Open to inspect.</em></h2>
+          <p>No trial, account, or paid tier. Download the app or build it from the MIT-licensed source.</p>
         </div>
         <div className="lp-price">
           <article className="lp-ticket">
@@ -331,7 +332,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
               <span className="lp-ticket-kicker"><Icon name="ticket" /> Admit one</span>
               <h3>Excerpt for Mac</h3>
               <div className="lp-ticket-price"><span>$</span>0</div>
-              <p className="lp-ticket-sub">Free. MIT licensed. Every feature included.</p>
+              <p className="lp-ticket-sub">The whole app is free. The source is MIT licensed.</p>
               <ul>
                 {INCLUDED.map((line, i) => <li key={line} style={beat(i)}><Icon name="check" /> {line}</li>)}
               </ul>
@@ -346,22 +347,22 @@ export function Landing({ onStart }: { onStart: () => void }) {
             <article className="lp-card lp-card-paper">
               <IconTile name="mic" className="ci-tile-ink" />
               <div>
-                <h3>Transcription stays local.</h3>
-                <p>Apple’s speech tools turn speech into text on your Mac. Finish setup and install the speech model before your first meeting.</p>
+                <h3>Transcription runs on your Mac.</h3>
+                <p>Apple’s speech tools turn audio into text on-device. Install the speech model during setup before your first meeting.</p>
               </div>
             </article>
             <article className="lp-card lp-card-paper">
               <IconTile name="spark" className="ci-tile-ink" />
               <div>
                 <h3>Notes are optional.</h3>
-                <p>Choose Write notes to use Apple Intelligence on your Mac, or OpenAI with your own key. OpenAI gets the transcript text and screenshot captions, and bills you directly. Screenshot images stay on your Mac.</p>
+                <p>Write them yourself, use Apple Intelligence on your Mac, or choose OpenAI with your own key. OpenAI receives transcript text and screenshot captions and bills you directly. Screenshot images stay on your Mac.</p>
               </div>
             </article>
             <article className="lp-card lp-card-paper">
               <IconTile name="reel" className="ci-tile-ink" />
               <div>
                 <h3>Open to inspect.</h3>
-                <p>The capture, transcription, notes and editor code are all on GitHub. Fork it, audit it, or build the app yourself.</p>
+                <p>Read the code for capture, transcription, notes, and the editor. Fork it, audit it, or build the app yourself.</p>
                 <a className="lp-paper-link" href={SOURCE} target="_blank" rel="noreferrer">Explore the source ↗</a>
               </div>
             </article>
@@ -372,8 +373,8 @@ export function Landing({ onStart }: { onStart: () => void }) {
       <section className="lp-section lp-centred cs-reveal" id="install">
         <div className="lp-head">
           <span className="lp-label lp-label-ember">[ Install ]</span>
-          <h2>Two ways <em>in.</em></h2>
-          <p>Excerpt is signed, but it is not notarized by Apple, since that needs a paid developer account. So macOS warns you the first time you open a browser download. Install from Terminal and you will not see the warning, or download it and allow it once.</p>
+          <h2>Choose how <em>to install.</em></h2>
+          <p>Download the disk image, or read and run the Terminal installer. Excerpt is not notarized, so a browser download needs one approval in macOS.</p>
         </div>
         <InstallMethods guide />
         <p className="lp-note">
@@ -385,8 +386,8 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <div className="lp-faq">
           <div className="lp-head">
             <span className="lp-label lp-label-ember">[ FAQ ]</span>
-            <h2>Questions, <em>answered.</em></h2>
-            <p>The things people usually ask before they install. Something missing? <a className="lp-link" href={`${SOURCE}/issues`} target="_blank" rel="noreferrer">Ask on GitHub ↗</a></p>
+            <h2>Before you <em>install.</em></h2>
+            <p>Answers about privacy, compatibility, and what Excerpt saves. Something missing? <a className="lp-link" href={`${SOURCE}/issues`} target="_blank" rel="noreferrer">Ask on GitHub ↗</a></p>
           </div>
           <div className="lp-faq-list">
             {FAQ.map(([q, a], i) => (
@@ -401,8 +402,8 @@ export function Landing({ onStart }: { onStart: () => void }) {
 
       <section className="lp-final cs-reveal">
         <Icon name="reel" className="lp-final-reel" />
-        <span className="lp-label lp-label-ember">For your next campaign review</span>
-        <h2>Keep the work, the numbers,<br /><em>and the conversation.</em></h2>
+        <span className="lp-label lp-label-ember">For your next meeting</span>
+        <h2>Keep the screen<br /><em>with the conversation.</em></h2>
         <div className="lp-cta lp-cta-centred">
           <a className="lp-solid lp-lg" href={DOWNLOAD}>Download for Mac <span aria-hidden>↓</span></a>
           <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the demo</button>
@@ -414,7 +415,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <div className="lp-footer-cols">
           <div className="lp-footer-brand">
             <a href="#/" aria-label="Excerpt home"><Wordmark /></a>
-            <p>Meeting memory for creative and media agencies. Free, open source, and stored on your own Mac.</p>
+            <p>Live captions, screen captures, and a local transcript. Free and open source for Mac.</p>
           </div>
           <div>
             <span className="lp-label">Product</span>
@@ -485,7 +486,7 @@ function Bento() {
         </div>
         <div className="bt-copy">
           <h3><Icon name="subtitles" /> Live subtitles <kbd>⌘⇧C</kbd></h3>
-          <p>Two-line, film-style captions over your meeting window. Choose the look and the position, or hide them. The transcript keeps recording either way.</p>
+          <p>Two-line captions over your meeting window. Move them, change their look, or hide them. The transcript keeps going.</p>
         </div>
       </article>
 
@@ -500,7 +501,7 @@ function Bento() {
         </div>
         <div className="bt-copy">
           <h3><Icon name="viewfinder" /> Capture moment <kbd>⌘⇧S</kbd></h3>
-          <p>Grab any part of the screen. You can also paste or drop an image in.</p>
+          <p>Capture part of the screen and place it on the meeting timeline. You can also paste or drop an image.</p>
         </div>
       </article>
 
@@ -511,7 +512,7 @@ function Bento() {
         </div>
         <div className="bt-copy">
           <h3><Icon name="rewind" /> Catch up <kbd>⌘⇧J</kbd></h3>
-          <p>Missed something? Read the last 30, 60 or 90 seconds, then jump back to live.</p>
+          <p>Read the last 30, 60, or 90 seconds of speech, then jump back to live.</p>
         </div>
       </article>
 
@@ -526,7 +527,7 @@ function Bento() {
         </div>
         <div className="bt-copy">
           <h3><Icon name="playhead" /> Notes that show their source</h3>
-          <p>Choose Write notes for a shorter version. Every note links to the passage it came from. Write them with Apple Intelligence on your Mac, or with your own OpenAI key.</p>
+          <p>Generate a shorter version with Apple Intelligence or your own OpenAI key. Each note links back to its transcript passage.</p>
         </div>
       </article>
 
@@ -537,7 +538,7 @@ function Bento() {
         </div>
         <div className="bt-copy">
           <h3><Icon name="retake" /> Fix a misheard line</h3>
-          <p>Correct a word in the transcript. The original wording stays in its history.</p>
+          <p>Correct a word without losing the original wording.</p>
         </div>
       </article>
 
@@ -562,7 +563,7 @@ function Bento() {
         </div>
         <div className="bt-copy">
           <h3><Icon name="record" /> Start from anywhere <kbd>⌘⇧R</kbd></h3>
-          <p>Start from the menu bar, the library or the shortcut. Excerpt stays out of your way.</p>
+          <p>Start from the menu bar, library, or keyboard shortcut.</p>
         </div>
       </article>
     </div>
