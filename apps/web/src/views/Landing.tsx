@@ -163,11 +163,18 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <div className="lp-beam" aria-hidden />
         <a className="lp-pill lp-rise" style={beat(0)} href={BUILD_GAMES} target="_blank" rel="noreferrer">
           <img className="lp-games-icon" src="/build-games-favicon.svg" alt="" width="24" height="24" />
-          A submission for The Build Games
+          <span>A submission for The Build Games</span>
           <span aria-hidden>↗</span>
         </a>
 
-        <p className="lp-eyebrow lp-rise" style={beat(1)}><Icon name="clapper" /> An open-source Mac alternative to Granola and Tactiq</p>
+        <p className="lp-eyebrow lp-rise" style={beat(1)}>
+          <span className="lp-eyebrow-intro"><Icon name="clapper" /> An open-source Mac alternative to</span>
+          <span className="lp-alternatives">
+            <span className="lp-alternative"><img src="/granola-favicon.png" alt="" width="18" height="18" />Granola</span>
+            <span>and</span>
+            <span className="lp-alternative"><img src="/tactiq-favicon.png" alt="" width="18" height="18" />Tactiq</span>
+          </span>
+        </p>
         <h1 className="lp-rise" style={beat(2)}><span>The full picture.</span><br /><em>Not just the transcript.</em></h1>
         <p className="lp-lead lp-rise" style={beat(3)}>
           Excerpt adds live captions to meetings, saves the moments you capture on screen, and keeps
@@ -182,7 +189,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <figure className="lp-demo-preview lp-rise" style={beat(5)}>
           <button className="lp-demo-play" type="button" onClick={onStart} aria-label="Watch the 54-second Excerpt video demo">
             <img src="/media/excerpt-demo-preview.jpg" alt="" width="1920" height="1080" fetchPriority="high" />
-            <span className="lp-demo-play-icon" aria-hidden>▶</span>
+            <span className="lp-demo-cta"><span className="lp-demo-play-icon" aria-hidden>▶</span><span>Watch the demo</span></span>
             <span className="lp-demo-duration" aria-hidden>0:54</span>
           </button>
           <figcaption>Real app footage · Scripted meeting with synthetic voices</figcaption>
