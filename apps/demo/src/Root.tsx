@@ -1,10 +1,11 @@
-import { AbsoluteFill, Composition, Sequence } from 'remotion';
+import { AbsoluteFill, Audio, Composition, Sequence, staticFile } from 'remotion';
 import { C, FPS, H, W } from './brand/tokens';
 import { loadBrandFonts } from './brand/fonts';
-import { OVERLAP, Shell } from './components/Transition';
+import { Shell } from './components/Transition';
 import { FootageScene } from './scenes/FootageScene';
 import { CloseScene, InstallScene, OpenScene, ProblemScene } from './scenes/MotionScenes';
-import { SCENES, secondsOf, validate, type Scene } from './timeline';
+import { SCENES, validate, type Scene } from './timeline';
+import { layout } from './schedule.ts';
 
 loadBrandFonts();
 validate(SCENES);
@@ -19,20 +20,11 @@ function Body({ scene }: { scene: Scene }) {
   }
 }
 
-/** Scenes overlap by OVERLAP frames so each transition has both sides on screen. */
-function layout(scenes: Scene[]) {
-  let at = 0;
-  return scenes.map((scene, i) => {
-    const frames = Math.round(secondsOf(scene) * FPS);
-    const from = at;
-    at += frames - (i < scenes.length - 1 && scene.exit !== 'cut' ? OVERLAP : 0);
-    return { scene, from, frames };
-  });
-}
-
 export function Demo({ scenes = SCENES }: { scenes?: Scene[] }) {
   return (
     <AbsoluteFill style={{ background: C.ground }}>
+      {/* Music and effects in one track, timed to this same cut by scripts/score.mjs. */}
+      <Audio src={staticFile('audio/soundtrack.wav')} />
       {layout(scenes).map(({ scene, from, frames }) => (
         <Sequence key={scene.id} from={from} durationInFrames={frames} name={scene.id}>
           <Shell duration={frames} enter={scene.enter} exit={scene.exit}>

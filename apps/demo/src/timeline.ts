@@ -1,7 +1,8 @@
 import type { IconName } from '@excerpt/ui';
-import { sceneTime, type CameraKey, type Click, type Clip, type Highlight } from './components/Footage';
+import type { CameraKey, Click, Highlight } from './components/Footage';
+import { sceneTime, type Clip } from './clips.ts';
 import type { Keys } from './components/Overlays';
-import type { Move } from './components/Transition';
+import type { Move } from './schedule.ts';
 
 /**
  * The cut, as data. Footage scenes last exactly as long as their clips (speed
@@ -93,11 +94,6 @@ export const SCENES: Scene[] = [
   },
   { id: 'close', kind: 'close', seconds: 4.6, enter: 'zoom', exit: 'cut' },
 ];
-
-export function secondsOf(scene: Scene): number {
-  if (scene.kind !== 'footage') return scene.seconds;
-  return scene.clips.reduce((sum, c) => sum + (c.to - c.from) / (c.rate ?? 1), 0);
-}
 
 /** Checks the data against itself, so a bad edit fails the render instead of a frame. */
 export function validate(scenes: Scene[]) {

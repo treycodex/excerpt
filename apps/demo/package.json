@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "studio": "remotion studio src/index.ts",
-    "render": "remotion render src/index.ts Demo out/excerpt-demo.mp4 --codec h264 --crf 18",
+    "studio": "node scripts/score.mjs && remotion studio src/index.ts",
+    "render": "node scripts/score.mjs && remotion render src/index.ts Demo out/excerpt-demo.mp4 --codec h264 --crf 17 --audio-codec aac --audio-bitrate 256k",
     "render:web": "node scripts/encode-web.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "score": "node scripts/score.mjs"
   },
   "dependencies": {
     "@excerpt/ui": "workspace:*",

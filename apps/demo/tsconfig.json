@@ -2,6 +2,6 @@
   "extends": "../../tsconfig.base.json",
   // Remotion's loader reads this file raw and does not follow `extends`, so the JSX
   // runtime has to be stated here as well.
-  "compilerOptions": { "noEmit": true, "jsx": "react-jsx" },
+  "compilerOptions": { "noEmit": true, "jsx": "react-jsx", "allowImportingTsExtensions": true },
   "include": ["src"]
 }
