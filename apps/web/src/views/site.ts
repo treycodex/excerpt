@@ -1,3 +1,4 @@
+export const BUILD_GAMES = 'https://canivibecodeit.com/thebuildgames';
 export const SITE = 'https://excerpt-rho.vercel.app';
 export const SOURCE = 'https://github.com/treycodex/excerpt';
 /** Always the newest release's disk image; the file keeps one name across releases. */
