@@ -162,8 +162,8 @@ export function Landing({ onStart }: { onStart: () => void }) {
       <header className="lp-hero">
         <div className="lp-beam" aria-hidden />
         <a className="lp-pill lp-rise" style={beat(0)} href={BUILD_GAMES} target="_blank" rel="noreferrer">
-          <span className="lp-pill-new">SUBMISSION</span>
-          The Build Games
+          <img className="lp-games-icon" src="/build-games-favicon.svg" alt="" width="24" height="24" />
+          A submission for The Build Games
           <span aria-hidden>↗</span>
         </a>
 
@@ -181,15 +181,9 @@ export function Landing({ onStart }: { onStart: () => void }) {
         </div>
         <figure className="lp-demo-preview lp-rise" style={beat(5)}>
           <button className="lp-demo-play" type="button" onClick={onStart} aria-label="Watch the 54-second Excerpt video demo">
-            <span className="lp-demo-copy">
-              <span className="lp-demo-kicker">Excerpt in action</span>
-              <strong>A meeting.<br />The full picture.</strong>
-              <span className="lp-demo-description">Captions, captures, and the context worth keeping.</span>
-              <span className="lp-demo-watch"><span className="lp-demo-play-icon" aria-hidden>▶</span> Watch the film <span className="lp-demo-duration">0:54</span></span>
-            </span>
-            <span className="lp-demo-still">
-              <img src="/media/excerpt-demo-preview.jpg" alt="" width="1920" height="1080" fetchPriority="high" />
-            </span>
+            <img src="/media/excerpt-demo-preview.jpg" alt="" width="1920" height="1080" fetchPriority="high" />
+            <span className="lp-demo-play-icon" aria-hidden>▶</span>
+            <span className="lp-demo-duration" aria-hidden>0:54</span>
           </button>
           <figcaption>Real app footage · Scripted meeting with synthetic voices</figcaption>
         </figure>
