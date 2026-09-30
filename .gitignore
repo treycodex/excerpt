@@ -40,3 +40,4 @@ apps/demo/scripts/park-pointer
 apps/demo/scripts/wait-mic
 apps/demo/assets/meeting.wav
 apps/demo/assets/meeting.cues.tsv
+apps/demo/public/audio/

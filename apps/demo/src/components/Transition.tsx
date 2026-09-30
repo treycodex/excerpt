@@ -3,9 +3,8 @@ import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } fr
 import { C } from '../brand/tokens';
 import { Kinetic, SNAP } from './Kinetic';
 
-export type Move = 'whip' | 'zoom' | 'wipe' | 'cut';
-/** Frames two neighbouring scenes overlap while one hands over to the next. */
-export const OVERLAP = 10;
+import { OVERLAP, type Move } from '../schedule.ts';
+export { OVERLAP, type Move };
 
 /**
  * A scene's way in and out. Scenes overlap by OVERLAP frames, so while one leaves

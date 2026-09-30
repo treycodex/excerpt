@@ -6,19 +6,9 @@ import { Brackets } from './primitives';
 
 /** The Mac's screen in points; the recordings are 2× (3420 × 2224). */
 export const SCREEN = { w: 1710, h: 1112 } as const;
-/** A piece of a take: source seconds [from, to), played at `rate`. */
-export type Clip = { from: number; to: number; rate?: number };
+import { sceneTime, type Clip } from '../clips.ts';
+export { sceneTime, type Clip };
 
-/** Where source time `s` lands in the scene, or null if it was cut. */
-export function sceneTime(clips: Clip[], s: number): number | null {
-  let start = 0;
-  for (const c of clips) {
-    const rate = c.rate ?? 1;
-    if (s >= c.from && s < c.to) return start + (s - c.from) / rate;
-    start += (c.to - c.from) / rate;
-  }
-  return null;
-}
 /** The picture fills the frame: the stamps carry the narration, there is no subtitle band. */
 export const VIEW = { x: 0, y: 0, w: W, h: H } as const;
 
