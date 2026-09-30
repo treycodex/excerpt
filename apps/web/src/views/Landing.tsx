@@ -4,7 +4,7 @@ import './landing.css';
 import { Showcase } from './Showcase';
 import { CommandLine, InstallMethods } from './Install';
 import { Icon, IconTile, type IconName } from '@excerpt/ui';
-import { DOWNLOAD, INSTALL_COMMAND, REQUIRES, SOURCE } from './site';
+import { BUILD_GAMES, DOWNLOAD, INSTALL_COMMAND, REQUIRES, SOURCE } from './site';
 
 /* ── The page ──────────────────────────────────────────────────────────────────
    A modern product page in Excerpt's own material: near-black ground, paper
@@ -161,14 +161,21 @@ export function Landing({ onStart }: { onStart: () => void }) {
 
       <header className="lp-hero">
         <div className="lp-beam" aria-hidden />
-        <a className="lp-pill lp-rise" style={beat(0)} href={DOWNLOAD}>
-          <span className="lp-pill-new">NEW</span>
-          Excerpt for Mac is out, and it’s free
-          <span aria-hidden>↓</span>
+        <a className="lp-pill lp-rise" style={beat(0)} href={BUILD_GAMES} target="_blank" rel="noreferrer">
+          <img className="lp-games-icon" src="/build-games-favicon.svg" alt="" width="24" height="24" />
+          <span>A submission for The Build Games</span>
+          <span aria-hidden>↗</span>
         </a>
 
-        <p className="lp-eyebrow lp-rise" style={beat(1)}><Icon name="clapper" /> An open-source Mac alternative to Granola and Tactiq</p>
-        <h1 className="lp-rise" style={beat(2)}><span>The screen.</span> <span>The speech.</span><br /><em>The meeting, kept together.</em></h1>
+        <p className="lp-eyebrow lp-rise" style={beat(1)}>
+          <span className="lp-eyebrow-intro"><Icon name="clapper" /> An open-source Mac alternative to</span>
+          <span className="lp-alternatives">
+            <span className="lp-alternative"><img src="/granola-favicon.png" alt="" width="18" height="18" />Granola</span>
+            <span>and</span>
+            <span className="lp-alternative"><img src="/tactiq-favicon.png" alt="" width="18" height="18" />Tactiq</span>
+          </span>
+        </p>
+        <h1 className="lp-rise" style={beat(2)}><span>The full picture.</span><br /><em>Not just the transcript.</em></h1>
         <p className="lp-lead lp-rise" style={beat(3)}>
           Excerpt adds live captions to meetings, saves the moments you capture on screen, and keeps
           them beside the transcript afterward. Add your own notes or generate them later.
@@ -177,8 +184,16 @@ export function Landing({ onStart }: { onStart: () => void }) {
 
         <div className="lp-cta lp-rise" style={beat(4)}>
           <a className="lp-solid lp-lg" href={DOWNLOAD}>Download for Mac <span aria-hidden>↓</span></a>
-          <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the demo</button>
+          <button className="lp-outline lp-lg" onClick={onStart}><span aria-hidden>▷</span> Watch the 54-second demo</button>
         </div>
+        <figure className="lp-demo-preview lp-rise" style={beat(5)}>
+          <button className="lp-demo-play" type="button" onClick={onStart} aria-label="Watch the 54-second Excerpt video demo">
+            <img src="/media/excerpt-demo-preview.jpg" alt="" width="1920" height="1080" fetchPriority="high" />
+            <span className="lp-demo-cta"><span className="lp-demo-play-icon" aria-hidden>▶</span><span>Watch the demo</span></span>
+            <span className="lp-demo-duration" aria-hidden>0:54</span>
+          </button>
+          <figcaption>Real app footage · Scripted meeting with synthetic voices</figcaption>
+        </figure>
         <div className="lp-hero-cmd lp-rise" style={beat(5)}>
           <span className="lp-label">Prefer Terminal? Read the script, then install with one line.</span>
           <CommandLine command={INSTALL_COMMAND} label="Terminal install command" />
@@ -441,7 +456,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <div className="lp-wordmark" aria-hidden>excerpt<span>✳</span></div>
         <div className="lp-footer-base">
           <span>© {new Date().getFullYear()} Excerpt · MIT</span>
-          <span>Built for The Build Games.</span>
+          <a className="lp-inline" href={BUILD_GAMES} target="_blank" rel="noreferrer">A submission for The Build Games ↗</a>
           <span>Free and open source.</span>
         </div>
       </footer>

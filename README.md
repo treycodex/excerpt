@@ -1,5 +1,9 @@
 # Excerpt
 
+**The full picture.** Not just the transcript.
+
+A submission for [The Build Games](https://canivibecodeit.com/thebuildgames).
+
 Excerpt is a desktop Mac app for reading movie-style captions during a meeting,
 capturing useful screen moments, and leaving with a transcript that keeps the
 conversation and screenshots together. Notes are optional.
